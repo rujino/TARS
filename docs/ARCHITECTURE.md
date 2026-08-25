@@ -57,5 +57,8 @@ TARS 프로젝트는 **"오브젝트 스토리지(지식 원본) + RDBMS(메타�
    - 고정된 도구 스키마만 캐싱하여 75% 비용 절감 및 지연 시간 최소화.
 4. **Self-Evolving Knowledge Loop**:
    - 비동기 백그라운드 지식 추출을 통한 지속적인 OKF 파일 자동 생성 및 자가 학습.
-5. **On-Device TTS & Standard Security**:
+5. **음성 우선 능동 대화 & 스마트 세션 라이프사이클 (Voice-First Session Architecture)**:
+   - **App-Launch Greeting**: 앱 실행 즉시 시간대/이전 맥락/OKF 지식을 결합해 1~2문장의 능동 오프닝을 먼저 발화하고 마이크 리스닝 모드로 즉시 전환.
+   - **Dual-Layer Memory**: 단기 작업 기억(Session/Context Window)은 시간 경과/주제 전환에 따라 기민하게 분기/초기화하고, 장기 기억은 비동기 OKF 파일로 영구 보존하여 세션 단절 없는 연속성 보장.
+6. **On-Device TTS & Standard Security**:
    - 온디바이스 TTS로 서버 부하 0% 달성 및 Nginx + Let's Encrypt 정식 SSL/TLS 보안 통신.

@@ -426,12 +426,28 @@
     });
 
     // Chat Input Auto-Grow & Keyboard Submit
+    let isComposing = false;
+
+    dom.chatInput.addEventListener('compositionstart', () => {
+      isComposing = true;
+    });
+
+    dom.chatInput.addEventListener('compositionend', () => {
+      // Safari/macOS IME edge case: delay clearing flag to avoid duplicate submission
+      setTimeout(() => {
+        isComposing = false;
+      }, 20);
+    });
+
     dom.chatInput.addEventListener('input', () => {
       dom.chatInput.style.height = 'auto';
       dom.chatInput.style.height = `${Math.min(dom.chatInput.scrollHeight, 120)}px`;
     });
 
     dom.chatInput.addEventListener('keydown', (e) => {
+      if (e.isComposing || isComposing || e.keyCode === 229) {
+        return;
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSendMessage();
