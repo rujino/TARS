@@ -1,0 +1,102 @@
+"""Async SQLAlchemy database engine, session factory, and FastAPI session dependency."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from typing import Any
+
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from tars.config import get_settings
+from tars.db.base import Base
+
+_engine: AsyncEngine | None = None
+_sessionmaker: async_sessionmaker[AsyncSession] | None = None
+
+
+def _enable_sqlite_foreign_keys(dbapi_connection: Any, connection_record: Any) -> None:
+    """Enforce SQLite foreign key constraints for all new connections."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON;")
+    cursor.close()
+
+
+def get_engine() -> AsyncEngine:
+    """Get or create singleton AsyncEngine instance."""
+    global _engine
+    if _engine is None:
+        settings = get_settings()
+        is_sqlite = settings.database_url.startswith("sqlite")
+
+        _engine = create_async_engine(
+            settings.database_url,
+            echo=settings.db_echo,
+            future=True,
+        )
+
+        if is_sqlite:
+            # Register SQLite PRAGMA foreign_keys=ON on sync engine connection event
+            event.listen(_engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
+
+    return _engine
+
+
+def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    """Get or create singleton async_sessionmaker instance."""
+    global _sessionmaker
+    if _sessionmaker is None:
+        engine = get_engine()
+        _sessionmaker = async_sessionmaker(
+            bind=engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+    return _sessionmaker
+
+
+get_session_factory = get_sessionmaker
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """FastAPI dependency yielding an AsyncSession with automatic transaction handling."""
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def init_db(engine: AsyncEngine | None = None) -> None:
+    """Create all database tables (for development/testing lifespan)."""
+    target_engine = engine or get_engine()
+    async with target_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+async def close_db() -> None:
+    """Dispose of the database engine (for lifespan shutdown)."""
+    global _engine, _sessionmaker
+    if _engine is not None:
+        await _engine.dispose()
+        _engine = None
+        _sessionmaker = None
+
+
+__all__ = [
+    "close_db",
+    "get_db",
+    "get_engine",
+    "get_session_factory",
+    "get_sessionmaker",
+    "init_db",
+]

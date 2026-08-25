@@ -12,7 +12,7 @@ TARS 프로젝트의 기술 스택은 **"오브젝트 스토리지 + RDBMS + OKF
 | **OKF (Open Knowledge Format)**  | **표준화된 지식 규격**           | YAML Frontmatter + Markdown 2계층 구조로 지식 유형, 태그, 관계망을 표준화하여 LLM의 맥락 이해도 극대화                                                     |
 | **Object / File Storage**        | **지식 원본 영속 스토리지**        | - 로컬/개발: `/storage/users/{user_id}/wikis/*.md`<br>`- 클라우드/운영: S3/MinIO 호환 오브젝트 스토리지`<br>`➡️ DB 부하 제로, 데이터 영구 보존, Git/옵시디언 호환` |
 | **PostgreSQL**                   | **메타데이터 &amp; 인증 RDBMS** | 회원 정보, JWT 인증, 사용자별 파일 경로(`file_path`), 생성/수정일 메타데이터 관리                                                                       |
-| **SQLAlchemy 2.0 &amp; Alembic** | 비동기 ORM &amp; 마이그레이션     | 비동기 FastAPI와 완벽히 호환되는 현대적 DB 추상화 및 버전 관리                                                                                      |
+| **SQLAlchemy 2.0 & Alembic** | 비동기 ORM & 마이그레이션 | 비동기 FastAPI와 완벽히 호환되는 현대적 DB 추상화 및 버전 관리.<br>`- MVP 단계: 빠른 개발을 위해 Base.metadata.create_all 사용 (Alembic 파일 미생성)`<br>`- 운영 단계: Alembic 마이그레이션 도입 예정 (NAMING_CONVENTION 및 표준 제약조건 준수 필수)` |
 
 
 ---
