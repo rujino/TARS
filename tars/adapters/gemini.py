@@ -29,7 +29,7 @@ class GeminiAdapter(BaseLLMAdapter):
     def __init__(
         self,
         api_key: str | None = None,
-        model_name: str = "gemini-2.0-flash",
+        model_name: str = "gemini-3.7-flash",
         temperature: float = 0.7,
         max_output_tokens: int | None = None,
         enable_caching: bool = True,
