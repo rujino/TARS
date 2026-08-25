@@ -179,7 +179,10 @@ def test_serialize_okf_document_roundtrip(sample_okf_doc: OKFDocument) -> None:
     assert reparsed_doc.tags == sample_okf_doc.tags
     assert reparsed_doc.importance == sample_okf_doc.importance
     assert reparsed_doc.frontmatter.source == sample_okf_doc.frontmatter.source
-    assert reparsed_doc.frontmatter.relations.related_to == sample_okf_doc.frontmatter.relations.related_to
+    assert (
+        reparsed_doc.frontmatter.relations.related_to
+        == sample_okf_doc.frontmatter.relations.related_to
+    )
     assert reparsed_doc.body.strip() == sample_okf_doc.body.strip()
 
 
@@ -198,13 +201,15 @@ def test_serialize_canonical_key_ordering() -> None:
         created_at=datetime(2026, 8, 23, 12, 0, 0, tzinfo=UTC),
         updated_at=datetime(2026, 8, 23, 12, 0, 0, tzinfo=UTC),
     )
-    doc = OKFDocument(frontmatter=frontmatter, body="# Rule Content\nDo not violate.")
+    doc = OKFDocument(metadata=frontmatter, content="# Rule Content\nDo not violate.")
     serialized = serialize_okf_document(doc)
 
     lines = serialized.splitlines()
     assert lines[0] == "---"
     # Verify core keys are present in expected relative order
-    keys_found = [line.split(":")[0].strip() for line in lines if ":" in line and not line.startswith(" ")]
+    keys_found = [
+        line.split(":")[0].strip() for line in lines if ":" in line and not line.startswith(" ")
+    ]
     assert "okf_version" in keys_found
     assert "id" in keys_found
     assert "type" in keys_found
@@ -230,7 +235,14 @@ def test_okf_id_slug_validation() -> None:
         assert fm.id == valid_slug
 
     # Invalid slugs (spaces, slashes, special characters, empty)
-    for invalid_slug in ["bad id with spaces", "path/traversal", "../escape", "bad@id", "", "a" * 129]:
+    for invalid_slug in [
+        "bad id with spaces",
+        "path/traversal",
+        "../escape",
+        "bad@id",
+        "",
+        "a" * 129,
+    ]:
         with pytest.raises((ValueError, ValidationError)):
             OKFFrontmatter(
                 id=invalid_slug,

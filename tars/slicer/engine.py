@@ -196,8 +196,7 @@ def format_knowledge_context_markdown(docs: Sequence[OKFDocument]) -> str:
     for doc in docs:
         meta = doc.metadata
         blocks.append(
-            f"### [{meta.type.value.upper()}] {meta.title} (id: {meta.id})\n"
-            f"{doc.content.strip()}\n"
+            f"### [{meta.type.value.upper()}] {meta.title} (id: {meta.id})\n{doc.content.strip()}\n"
         )
     return "\n".join(blocks)
 

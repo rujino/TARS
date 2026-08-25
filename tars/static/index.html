@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#08080a">
+  <meta name="description" content="TARS - Tactical Autonomous Robotic System with real-time streaming and on-device TTS">
+  
+  <!-- iOS Safari PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TARS">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  
+  <!-- PWA Web App Manifest -->
+  <link rel="manifest" href="/manifest.json">
+  
+  <title>TARS // Tactical Autonomous Robotic System</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="hud-scanline"></div>
+
+  <div id="app" class="hud-container">
+    <!-- TARS HUD Header -->
+    <header class="hud-header">
+      <div class="header-left">
+        <div class="tars-logo">
+          <span>TARS</span>
+          <span class="tars-badge">v2.4</span>
+        </div>
+        <div class="status-indicator">
+          <span id="status-dot" class="status-dot"></span>
+          <span id="status-text">OFFLINE</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <span id="mode-badge" class="mode-badge" style="display: none;">[ MODE: COMPANION ]</span>
+      </div>
+
+      <div class="header-right">
+        <button id="btn-tts" class="hud-btn active" style="display: none;" title="Toggle Web Speech TTS">🔊 TTS ON</button>
+        <button id="btn-config" class="hud-btn" style="display: none;" title="Configure Persona">⚙️ CONFIG</button>
+        <button id="btn-logout" class="hud-btn danger" style="display: none;" title="Log Out">🚪 LOGOUT</button>
+      </div>
+    </header>
+
+    <!-- Auth View (Login / Signup) -->
+    <main class="view active" id="auth-view">
+      <div class="auth-container">
+        <div class="auth-card">
+          <div class="auth-header">
+            <h1>TARS // ACCESS</h1>
+            <p>TACTICAL AUTONOMOUS ROBOTIC SYSTEM</p>
+          </div>
+
+          <div class="auth-tabs">
+            <div id="tab-login" class="auth-tab active">LOG IN</div>
+            <div id="tab-signup" class="auth-tab">REGISTER</div>
+          </div>
+
+          <div id="auth-error" class="auth-error"></div>
+
+          <!-- Login Form -->
+          <form id="form-login" class="auth-form">
+            <div class="form-group">
+              <label for="login-username">OPERATOR ID / USERNAME</label>
+              <input type="text" id="login-username" class="hud-input" placeholder="cooper" required autocomplete="username">
+            </div>
+            <div class="form-group">
+              <label for="login-password">SECURITY CLEARANCE / PASSWORD</label>
+              <input type="password" id="login-password" class="hud-input" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="hud-btn primary" style="justify-content: center; height: 42px; font-weight: 700; margin-top: 6px;">
+              [ ACCESS SYSTEM ]
+            </button>
+          </form>
+
+          <!-- Signup Form -->
+          <form id="form-signup" class="auth-form" style="display: none;">
+            <div class="form-group">
+              <label for="signup-username">OPERATOR ID</label>
+              <input type="text" id="signup-username" class="hud-input" placeholder="cooper" required autocomplete="username">
+            </div>
+            <div class="form-group">
+              <label for="signup-email">COMMS RELAY / EMAIL</label>
+              <input type="email" id="signup-email" class="hud-input" placeholder="cooper@endurance.mission" required autocomplete="email">
+            </div>
+            <div class="form-group">
+              <label for="signup-password">SECURITY PASSPHRASE</label>
+              <input type="password" id="signup-password" class="hud-input" placeholder="••••••••" required autocomplete="new-password">
+            </div>
+            <button type="submit" class="hud-btn primary" style="justify-content: center; height: 42px; font-weight: 700; margin-top: 6px;">
+              [ INITIALIZE PROFILE ]
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <!-- Chat & Persona Control View -->
+    <main class="view" id="chat-view">
+      <div class="chat-layout">
+        <!-- Sidebar / Persona Controller -->
+        <aside class="hud-sidebar" id="sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-title">OPERATOR PROFILE</div>
+            <div id="user-display-name" style="font-weight: 700; color: var(--tars-cyan); font-size: 13px;">Cooper</div>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="sidebar-title">TARS PERSONA PARAMETERS</div>
+            
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">HUMOR LEVEL</span>
+                <span id="humor-val" class="slider-value">90%</span>
+              </div>
+              <input type="range" id="humor-slider" class="hud-slider" min="0" max="100" value="90">
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">HONESTY LEVEL</span>
+                <span id="honesty-val" class="slider-value">95%</span>
+              </div>
+              <input type="range" id="honesty-slider" class="hud-slider" min="0" max="100" value="95">
+            </div>
+
+            <div class="sidebar-title" style="margin-top: 8px;">OPERATING MODE</div>
+            <div class="mode-selector">
+              <div id="mode-companion" class="mode-option active">COMPANION</div>
+              <div id="mode-work" class="mode-option">WORK</div>
+            </div>
+
+            <button id="btn-reset-config" class="hud-btn" style="margin-top: 12px; width: 100%; justify-content: center;">
+              ↺ RESET DEFAULTS
+            </button>
+          </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <section class="chat-main" id="chat-panel">
+          <div class="messages-container" id="messages-container">
+            <div class="message-item tars">
+              <div class="message-header"><span>TARS // AI</span></div>
+              <div class="message-bubble">
+                <p><strong>TARS Tactical Interface Online.</strong> Humor parameter set to 90%, Honesty parameter set to 95%. Ready for instructions, Cooper.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-input-wrapper">
+            <textarea id="chat-input" class="chat-input" placeholder="Enter tactical directive or query..." rows="1"></textarea>
+            <button id="send-btn" class="send-btn">TRANSMIT</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Client Scripts -->
+  <script src="/static/js/vendor/marked.min.js"></script>
+  <script src="/static/js/vendor/purify.min.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/tts.js"></script>
+  <script src="/static/js/chat.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

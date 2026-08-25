@@ -34,6 +34,12 @@ class Settings(BaseSettings):
         description="Root directory for multi-tenant file storage",
     )
 
+    # Static files settings
+    static_dir: Path = Field(
+        default_factory=lambda: Path(__file__).resolve().parent / "static",
+        description="Root directory for static assets and PWA client",
+    )
+
     # Database settings
     database_url: str = Field(
         default="sqlite+aiosqlite:///./tars.db",
@@ -65,11 +71,17 @@ class Settings(BaseSettings):
 
     # External LLM / SLM Endpoints
     gemini_api_key: str = Field(default="", description="Google Gemini API key")
+    gemini_model_name: str = Field(
+        default="gemini-2.0-flash", description="Google Gemini model identifier"
+    )
     llamacpp_base_url: str = Field(
         default="http://localhost:8080/v1", description="Local llama.cpp OpenAI-compatible base URL"
     )
     llamacpp_model_name: str = Field(
         default="default", description="Model name or alias for local llama.cpp server"
+    )
+    llamacpp_timeout_ms: int = Field(
+        default=3000, ge=100, le=60000, description="Timeout in ms for local SLM streaming/generation"
     )
 
     # Dynamic Slicer Settings

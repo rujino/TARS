@@ -48,7 +48,7 @@ def build_doc(
             related_to=related_to or [],
         ),
     )
-    return OKFDocument(frontmatter=fm, body=body)
+    return OKFDocument(metadata=fm, content=body)
 
 
 # ============================================================================
@@ -95,9 +95,30 @@ async def test_slicer_tag_and_keyword_relevance_matching() -> None:
 async def test_slicer_importance_weighting_hierarchy() -> None:
     """Verify that higher importance level (CRITICAL > HIGH > MEDIUM > LOW) ranks documents higher when other factors are equal."""
     docs = [
-        build_doc("low_rule", "Low Priority Rule", OKFType.RULE, OKFImportance.LOW, ["rule"], "Low priority rule body"),
-        build_doc("critical_rule", "Critical Security Rule", OKFType.RULE, OKFImportance.CRITICAL, ["rule"], "Critical security rule body"),
-        build_doc("medium_rule", "Medium Rule", OKFType.RULE, OKFImportance.MEDIUM, ["rule"], "Medium rule body"),
+        build_doc(
+            "low_rule",
+            "Low Priority Rule",
+            OKFType.RULE,
+            OKFImportance.LOW,
+            ["rule"],
+            "Low priority rule body",
+        ),
+        build_doc(
+            "critical_rule",
+            "Critical Security Rule",
+            OKFType.RULE,
+            OKFImportance.CRITICAL,
+            ["rule"],
+            "Critical security rule body",
+        ),
+        build_doc(
+            "medium_rule",
+            "Medium Rule",
+            OKFType.RULE,
+            OKFImportance.MEDIUM,
+            ["rule"],
+            "Medium rule body",
+        ),
     ]
 
     slicer = DynamicSlicerEngine()

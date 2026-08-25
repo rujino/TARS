@@ -166,24 +166,32 @@ def test_websocket_multi_turn_in_single_connection(
 
             with client.websocket_connect(f"/api/v1/chat/ws?token={test_user_token}") as ws:
                 # --- Turn 1 ---
-                ws.send_json({"type": "chat_message", "session_id": "multi_ws", "content": "Turn 1"})
+                ws.send_json(
+                    {"type": "chat_message", "session_id": "multi_ws", "content": "Turn 1"}
+                )
                 frames_turn1 = []
                 while True:
                     f = ws.receive_json()
                     frames_turn1.append(f)
                     if (f.get("type") or f.get("event")) == "stream_end":
                         break
-                assert any((f.get("type") or f.get("event")) == "stream_start" for f in frames_turn1)
+                assert any(
+                    (f.get("type") or f.get("event")) == "stream_start" for f in frames_turn1
+                )
 
                 # --- Turn 2 ---
-                ws.send_json({"type": "chat_message", "session_id": "multi_ws", "content": "Turn 2"})
+                ws.send_json(
+                    {"type": "chat_message", "session_id": "multi_ws", "content": "Turn 2"}
+                )
                 frames_turn2 = []
                 while True:
                     f = ws.receive_json()
                     frames_turn2.append(f)
                     if (f.get("type") or f.get("event")) == "stream_end":
                         break
-                assert any((f.get("type") or f.get("event")) == "stream_start" for f in frames_turn2)
+                assert any(
+                    (f.get("type") or f.get("event")) == "stream_start" for f in frames_turn2
+                )
 
 
 # ============================================================================

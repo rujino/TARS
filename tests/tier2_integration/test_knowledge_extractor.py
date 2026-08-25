@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -35,7 +36,7 @@ from tars.storage.manager import FileStorageManager
 
 def test_knowledge_extraction_result_schema_valid() -> None:
     """Verify KnowledgeExtractionResult parses valid JSON extraction structure."""
-    payload = {
+    payload: dict[str, Any] = {
         "should_extract": True,
         "is_conflict_or_update": False,
         "target_existing_id": None,
@@ -59,7 +60,7 @@ def test_knowledge_extraction_result_schema_valid() -> None:
 
 def test_knowledge_extraction_result_negative_intent() -> None:
     """Verify negative extraction schema when no valuable knowledge is present."""
-    payload = {
+    payload: dict[str, Any] = {
         "should_extract": False,
         "is_conflict_or_update": False,
         "target_existing_id": None,
@@ -115,7 +116,9 @@ async def test_extractor_extracts_and_syncs_new_rule(
     )
 
     turns: list[BaseMessage] = [
-        HumanMessage(content="TARS, remember to always verify docking clamp pressure before ignition."),
+        HumanMessage(
+            content="TARS, remember to always verify docking clamp pressure before ignition."
+        ),
         AIMessage(content="Copy that, Cooper. Docking protocol safety rule registered."),
     ]
 
@@ -268,7 +271,9 @@ async def test_extractor_conflict_resolution_and_update(
 
     updated_docs = await worker.extract_and_sync(
         user_id="user_test_alpha",
-        conversation_turns=[HumanMessage(content="Actually our team meeting moved to Wednesday at 4pm.")],
+        conversation_turns=[
+            HumanMessage(content="Actually our team meeting moved to Wednesday at 4pm.")
+        ],
         db_session=db_session,
     )
 

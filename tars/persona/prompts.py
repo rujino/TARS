@@ -147,7 +147,9 @@ def render_knowledge_context(context_docs: Sequence[OKFDocument] | None) -> str:
         meta: Any = getattr(doc, "metadata", None) or getattr(doc, "frontmatter", None)
         doc_id = getattr(meta, "id", "unknown_id")
         doc_type = getattr(getattr(meta, "type", None), "value", getattr(meta, "type", "concept"))
-        importance = getattr(getattr(meta, "importance", None), "value", getattr(meta, "importance", "medium"))
+        importance = getattr(
+            getattr(meta, "importance", None), "value", getattr(meta, "importance", "medium")
+        )
         title = getattr(meta, "title", "Untitled")
         body_content = getattr(doc, "content", None) or getattr(doc, "body", "")
 

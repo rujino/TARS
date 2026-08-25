@@ -413,9 +413,7 @@ class TestStorageManagerSecurityAndStress:
         assert len(tmp_files) == 0, f"Found leaked temp files: {tmp_files}"
 
     @pytest.mark.asyncio
-    async def test_concurrent_writes_to_distinct_files(
-        self, storage: FileStorageManager
-    ) -> None:
+    async def test_concurrent_writes_to_distinct_files(self, storage: FileStorageManager) -> None:
         """50 concurrent writes to DISTINCT files for the same user."""
         user_id = "stress_user_2"
         num_docs = 50
@@ -481,9 +479,7 @@ class TestDynamicSlicerAdversarial:
         return DynamicSlicerEngine(token_counter=HeuristicTokenCounter(), weights=SlicerWeights())
 
     @pytest.mark.asyncio
-    async def test_cyclic_relation_graph_3_node_ring(
-        self, slicer: DynamicSlicerEngine
-    ) -> None:
+    async def test_cyclic_relation_graph_3_node_ring(self, slicer: DynamicSlicerEngine) -> None:
         """3-node cycle: A -> B -> C -> A. Slicer must expand relations without infinite loop."""
         doc_a = OKFDocument(
             metadata=OKFMetadata(
@@ -532,9 +528,7 @@ class TestDynamicSlicerAdversarial:
         assert len(selected_ids) == len(set(selected_ids))
 
     @pytest.mark.asyncio
-    async def test_10_node_circular_ring_graph(
-        self, slicer: DynamicSlicerEngine
-    ) -> None:
+    async def test_10_node_circular_ring_graph(self, slicer: DynamicSlicerEngine) -> None:
         """10-node cycle: N0 -> N1 -> N2 -> ... -> N9 -> N0."""
         n = 10
         docs = [

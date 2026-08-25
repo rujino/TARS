@@ -23,7 +23,9 @@ class ToolCallData(BaseModel):
 
     id: str = Field(..., description="Unique tool call identifier")
     name: str = Field(..., description="Tool name to execute")
-    arguments: dict[str, Any] = Field(default_factory=dict, description="JSON arguments for the tool")
+    arguments: dict[str, Any] = Field(
+        default_factory=dict, description="JSON arguments for the tool"
+    )
 
 
 class TokenUsage(BaseModel):
@@ -67,9 +69,13 @@ class LLMStreamChunk(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     delta_content: str = Field(default="", description="Incremental text token delta")
-    tool_call_chunks: list[ToolCallData] = Field(default_factory=list, description="Incremental tool call fragments")
+    tool_call_chunks: list[ToolCallData] = Field(
+        default_factory=list, description="Incremental tool call fragments"
+    )
     is_final: bool = Field(default=False, description="Flag indicating final stream chunk")
-    usage: TokenUsage | None = Field(default=None, description="Token usage (usually on final chunk)")
+    usage: TokenUsage | None = Field(
+        default=None, description="Token usage (usually on final chunk)"
+    )
 
 
 class BaseLLMAdapter(ABC):

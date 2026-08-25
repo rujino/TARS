@@ -54,6 +54,7 @@ from tars.storage.reconciliation import (
 # Helper Factories
 # ============================================================================
 
+
 def make_doc(
     doc_id: str,
     title: str = "Test Doc",
@@ -83,6 +84,7 @@ def make_doc(
 # ============================================================================
 # 1. OUT-OF-SYNC STATES & EDGE CASE STRESS TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_reconciliation_out_of_band_disk_addition(
@@ -131,10 +133,14 @@ Direct disk write test content.
 
     # Query DB to verify all records exist with exact hashes
     records = (
-        await async_db_session.execute(
-            select(UserWikiIndex).where(UserWikiIndex.user_id == test_user.id)
+        (
+            await async_db_session.execute(
+                select(UserWikiIndex).where(UserWikiIndex.user_id == test_user.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(records) == 3
     record_map = {r.okf_id: r for r in records}
     assert "oob_doc_1" in record_map
@@ -150,7 +156,11 @@ async def test_reconciliation_hash_mismatch_and_body_mutation(
     test_user: User,
 ) -> None:
     """Verify that changing markdown body on disk updates hash and metadata in DB."""
-    doc = make_doc("mod_doc_01", title="Original Title", body="Original Body Line 1\n--- Horizontal line\nLine 2")
+    doc = make_doc(
+        "mod_doc_01",
+        title="Original Title",
+        body="Original Body Line 1\n--- Horizontal line\nLine 2",
+    )
     await test_storage_manager.save_okf_file(user_id=test_user.id, doc=doc)
 
     engine = StorageDBReconciliationEngine(storage_manager=test_storage_manager)
@@ -160,7 +170,9 @@ async def test_reconciliation_hash_mismatch_and_body_mutation(
     # Record original hash from DB
     rec1 = (
         await async_db_session.execute(
-            select(UserWikiIndex).where(UserWikiIndex.user_id == test_user.id, UserWikiIndex.okf_id == "mod_doc_01")
+            select(UserWikiIndex).where(
+                UserWikiIndex.user_id == test_user.id, UserWikiIndex.okf_id == "mod_doc_01"
+            )
         )
     ).scalar_one()
     orig_hash = rec1.file_hash
@@ -242,7 +254,9 @@ async def test_reconciliation_corrupted_files_and_graceful_fault_tolerance(
     (user_dir / "notes.txt").write_text("Should be ignored.", encoding="utf-8")
 
     # 6. Hidden temp file (starts with .)
-    (user_dir / ".tmp.draft.md").write_text("Should be skipped by hidden file filter.", encoding="utf-8")
+    (user_dir / ".tmp.draft.md").write_text(
+        "Should be skipped by hidden file filter.", encoding="utf-8"
+    )
 
     engine = StorageDBReconciliationEngine(storage_manager=test_storage_manager)
     result = await engine.reconcile_user(session=async_db_session, user_id=test_user.id)
@@ -255,10 +269,14 @@ async def test_reconciliation_corrupted_files_and_graceful_fault_tolerance(
 
     # Valid doc must be in DB
     records = (
-        await async_db_session.execute(
-            select(UserWikiIndex).where(UserWikiIndex.user_id == test_user.id)
+        (
+            await async_db_session.execute(
+                select(UserWikiIndex).where(UserWikiIndex.user_id == test_user.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(records) == 1
     assert records[0].okf_id == "valid_doc"
 
@@ -314,7 +332,9 @@ async def test_verify_user_integrity_dry_run_audit(
     # Mutate doc_mismatch on disk
     user_dir = test_storage_manager.get_user_wikis_dir(test_user.id)
     mutated_doc_mismatch = make_doc("doc_mismatch", "Mismatch Doc", body="MODIFIED BODY TEXT")
-    (user_dir / "doc_mismatch.md").write_text(serialize_okf_document(mutated_doc_mismatch), encoding="utf-8")
+    (user_dir / "doc_mismatch.md").write_text(
+        serialize_okf_document(mutated_doc_mismatch), encoding="utf-8"
+    )
 
     # Run dry-run audit
     violations = await engine.verify_user_integrity(user_id=test_user.id, session=async_db_session)
@@ -332,16 +352,21 @@ async def test_verify_user_integrity_dry_run_audit(
 
     # Verify dry-run did NOT change DB state
     db_records_after = (
-        await async_db_session.execute(
-            select(UserWikiIndex).where(UserWikiIndex.user_id == test_user.id)
+        (
+            await async_db_session.execute(
+                select(UserWikiIndex).where(UserWikiIndex.user_id == test_user.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(db_records_after) == 3  # synced, mismatch, db_only
 
 
 # ============================================================================
 # 2. MULTI-TENANT ISOLATION & SECURITY STRESS TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_multi_tenant_same_okf_id_collision(
@@ -361,7 +386,9 @@ async def test_multi_tenant_same_okf_id_collision(
 
     # Save document with SAME okf_id 'common_guide' for all 3 users with different titles
     for i, u in enumerate(users, 1):
-        doc = make_doc("common_guide", title=f"User {i} Custom Guide", body=f"Private notes for user {i}")
+        doc = make_doc(
+            "common_guide", title=f"User {i} Custom Guide", body=f"Private notes for user {i}"
+        )
         await test_storage_manager.save_okf_file(user_id=u.id, doc=doc)
         res = await engine.reconcile_user(session=async_db_session, user_id=u.id)
         assert res.created_count == 1
@@ -436,7 +463,13 @@ async def test_sqlite_foreign_key_cascade_deletion() -> None:
     user_id = str(uuid.uuid4())
     async with session_factory() as session:
         user = User(id=user_id, username="cooper", hashed_password="pwd")
-        settings = TARSSettings(id=str(uuid.uuid4()), user_id=user_id, humor_level=0.9, honesty_level=0.95, mode="companion")
+        settings = TARSSettings(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            humor_level=0.9,
+            honesty_level=0.95,
+            mode="companion",
+        )
         wiki = UserWikiIndex(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -459,8 +492,16 @@ async def test_sqlite_foreign_key_cascade_deletion() -> None:
 
     # Verify records exist before delete
     async with session_factory() as session:
-        w_before = (await session.execute(select(UserWikiIndex).where(UserWikiIndex.user_id == user_id))).scalars().all()
-        s_before = (await session.execute(select(TARSSettings).where(TARSSettings.user_id == user_id))).scalars().all()
+        w_before = (
+            (await session.execute(select(UserWikiIndex).where(UserWikiIndex.user_id == user_id)))
+            .scalars()
+            .all()
+        )
+        s_before = (
+            (await session.execute(select(TARSSettings).where(TARSSettings.user_id == user_id)))
+            .scalars()
+            .all()
+        )
         assert len(w_before) == 1
         assert len(s_before) == 1
 
@@ -471,8 +512,16 @@ async def test_sqlite_foreign_key_cascade_deletion() -> None:
 
     # Verify orphaned records are automatically cascaded in DB
     async with session_factory() as session:
-        w_after = (await session.execute(select(UserWikiIndex).where(UserWikiIndex.user_id == user_id))).scalars().all()
-        s_after = (await session.execute(select(TARSSettings).where(TARSSettings.user_id == user_id))).scalars().all()
+        w_after = (
+            (await session.execute(select(UserWikiIndex).where(UserWikiIndex.user_id == user_id)))
+            .scalars()
+            .all()
+        )
+        s_after = (
+            (await session.execute(select(TARSSettings).where(TARSSettings.user_id == user_id)))
+            .scalars()
+            .all()
+        )
         assert len(w_after) == 0
         assert len(s_after) == 0
 
@@ -550,6 +599,7 @@ async def test_concurrent_multi_user_reconciliation_stress(
 # 3. TRANSACTION ROLLBACK & ATOMICITY TESTS
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_reconciliation_transaction_rollback_on_session_error(
     async_db_session: AsyncSession,
@@ -571,10 +621,14 @@ async def test_reconciliation_transaction_rollback_on_session_error(
 
     # Verify nothing was committed to DB
     records = (
-        await async_db_session.execute(
-            select(UserWikiIndex).where(UserWikiIndex.user_id == user_id)
+        (
+            await async_db_session.execute(
+                select(UserWikiIndex).where(UserWikiIndex.user_id == user_id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(records) == 0
     assert len(records) == 0
 
@@ -636,6 +690,7 @@ async def test_get_db_fastapi_dependency_rollback_on_exception(
 # ============================================================================
 # 4. SINGLE DOCUMENT FAST SYNC & DELETION TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_sync_single_document_and_delete_fast_path(
@@ -704,6 +759,7 @@ async def test_sync_single_document_and_delete_fast_path(
 # ============================================================================
 # 5. DATA TYPES & ORM CONSTRAINTS TESTS
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_unique_constraint_violation_user_okf_id(

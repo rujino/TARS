@@ -238,7 +238,9 @@ async def api_client(
             yield session
 
     app.dependency_overrides[get_db_session] = override_get_db
-    app.dependency_overrides[get_storage_manager] = lambda: FileStorageManager(base_dir=temp_storage_root)
+    app.dependency_overrides[get_storage_manager] = lambda: FileStorageManager(
+        base_dir=temp_storage_root
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -292,12 +294,14 @@ class MockLLMAdapter(BaseLLMAdapter):
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """Simulate real-time token chunk streaming."""
-        self.call_history.append({
-            "method": "astream",
-            "messages": list(messages),
-            "system_prompt": system_prompt,
-            "kwargs": kwargs,
-        })
+        self.call_history.append(
+            {
+                "method": "astream",
+                "messages": list(messages),
+                "system_prompt": system_prompt,
+                "kwargs": kwargs,
+            }
+        )
         if self.should_fail:
             raise RuntimeError("Simulated SLM streaming error")
         if self.simulated_delay > 0:
@@ -320,18 +324,23 @@ class MockLLMAdapter(BaseLLMAdapter):
         **kwargs: Any,
     ) -> str:
         """Simulate full text response generation."""
-        self.call_history.append({
-            "method": "agenerate",
-            "messages": list(messages),
-            "system_prompt": system_prompt,
-            "kwargs": kwargs,
-        })
+        self.call_history.append(
+            {
+                "method": "agenerate",
+                "messages": list(messages),
+                "system_prompt": system_prompt,
+                "kwargs": kwargs,
+            }
+        )
         if self.should_fail:
             raise RuntimeError("Simulated SLM generation error")
         if self.simulated_delay > 0:
             await asyncio.sleep(self.simulated_delay)
 
-        resp = self.canned_response or self.default_responses[self._response_idx % len(self.default_responses)]
+        resp = (
+            self.canned_response
+            or self.default_responses[self._response_idx % len(self.default_responses)]
+        )
         self._response_idx += 1
         return resp
 

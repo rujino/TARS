@@ -174,10 +174,12 @@ async def chat_websocket_endpoint(
             try:
                 data = json.loads(raw_data)
             except Exception:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Malformed JSON payload received",
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Malformed JSON payload received",
+                    }
+                )
                 continue
 
             frame_type = data.get("type", "chat_message")
@@ -206,10 +208,12 @@ async def chat_websocket_endpoint(
             )
 
             # 1. Send stream_start frame
-            await websocket.send_json({
-                "type": "stream_start",
-                "session_id": session_id,
-            })
+            await websocket.send_json(
+                {
+                    "type": "stream_start",
+                    "session_id": session_id,
+                }
+            )
 
             accumulated_text: list[str] = []
             messages = [HumanMessage(content=user_content)]
@@ -221,26 +225,32 @@ async def chat_websocket_endpoint(
                 ):
                     accumulated_text.append(chunk)
                     # 2. Send token frame
-                    await websocket.send_json({
-                        "type": "token",
-                        "content": chunk,
-                        "delta": chunk,
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "token",
+                            "content": chunk,
+                            "delta": chunk,
+                        }
+                    )
             except Exception as stream_err:
                 logger.error("WebSocket stream error: %s", stream_err, exc_info=True)
-                await websocket.send_json({
-                    "type": "error",
-                    "message": str(stream_err),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": str(stream_err),
+                    }
+                )
                 continue
 
             # 3. Send stream_end frame
             full_response = "".join(accumulated_text)
-            await websocket.send_json({
-                "type": "stream_end",
-                "session_id": session_id,
-                "content": full_response,
-            })
+            await websocket.send_json(
+                {
+                    "type": "stream_end",
+                    "session_id": session_id,
+                    "content": full_response,
+                }
+            )
 
     except WebSocketDisconnect:
         logger.info("WebSocket connection closed for user %s", user_id)

@@ -19,6 +19,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, ConfigDict, Field
 
 from tars.adapters.base import BaseLLMAdapter
+from tars.config import get_settings
 
 logger = logging.getLogger("tars.adapters.router")
 
@@ -37,7 +38,9 @@ class RoutingDecision(BaseModel):
 
     target_engine: LLMEngineType = Field(..., description="Selected LLM execution engine")
     reason: str = Field(..., description="Rationale for routing decision")
-    is_fallback: bool = Field(default=False, description="True if decision is a fallback from unhealthy SLM")
+    is_fallback: bool = Field(
+        default=False, description="True if decision is a fallback from unhealthy SLM"
+    )
 
 
 # Regex patterns for intent classification
@@ -52,7 +55,8 @@ COMPLEX_REASONING_PATTERNS = re.compile(
 CASUAL_CHAT_PATTERNS = re.compile(
     r"\b(hello|hi|hey|greetings|good\s+morning|good\s+evening|good\s+afternoon|"
     r"how\s+are\s+you|how\'s\s+it\s+going|what\'s\s+up|who\s+are\s+you|tell\s+me\s+a\s+joke|"
-    r"joke|status\s+report|standing\s+by|quick\s+hello|ready|thank\s+you|thanks)\b",
+    r"joke|status\s+report|standing\s+by|quick\s+hello|ready|thank\s+you|thanks|"
+    r"안녕|안녕하세요|반가워|하이|고마워|감사합니다|상태\s*보고|농담\s*해봐|너\s*누구야)\b",
     re.IGNORECASE,
 )
 
@@ -64,12 +68,17 @@ class HybridLLMRouter:
         self,
         gemini_adapter: BaseLLMAdapter,
         slm_adapter: BaseLLMAdapter,
-        slm_timeout_ms: int = 500,
+        slm_timeout_ms: int | None = None,
     ) -> None:
         self.gemini_adapter = gemini_adapter
         self.slm_adapter = slm_adapter
-        self.slm_timeout_ms = slm_timeout_ms
-        self.slm_timeout_sec = slm_timeout_ms / 1000.0
+        timeout = (
+            slm_timeout_ms
+            if slm_timeout_ms is not None
+            else get_settings().llamacpp_timeout_ms
+        )
+        self.slm_timeout_ms = timeout
+        self.slm_timeout_sec = timeout / 1000.0
 
     async def evaluate_routing(
         self,
@@ -92,9 +101,7 @@ class HybridLLMRouter:
             )
 
         # Extract latest user message content
-        user_texts: list[str] = [
-            str(m.content) for m in messages if isinstance(m, HumanMessage)
-        ]
+        user_texts: list[str] = [str(m.content) for m in messages if isinstance(m, HumanMessage)]
         last_text = user_texts[-1] if user_texts else str(messages[-1].content)
 
         # 1. Complex reasoning / tool execution check -> Gemini
@@ -145,7 +152,6 @@ class HybridLLMRouter:
                     system_prompt=system_prompt,
                     **kwargs,
                 )
-                yielded_any = False
                 while True:
                     try:
                         chunk = await asyncio.wait_for(
@@ -153,13 +159,13 @@ class HybridLLMRouter:
                             timeout=self.slm_timeout_sec,
                         )
                         yield chunk
-                        yielded_any = True
                     except StopAsyncIteration:
                         break
                 return
             except Exception as slm_err:
+                err_detail = f"{type(slm_err).__name__}: {slm_err}" if str(slm_err) else type(slm_err).__name__
                 logger.warning(
-                    "SLM streaming failed or timed out (%s). Falling back to Gemini.", slm_err
+                    "SLM streaming failed or timed out (%s). Falling back to Gemini.", err_detail
                 )
                 async for chunk in self.gemini_adapter.astream(
                     messages=messages,
@@ -194,7 +200,8 @@ class HybridLLMRouter:
                     timeout=self.slm_timeout_sec,
                 )
             except Exception as slm_err:
-                logger.warning("SLM generation failed (%s). Falling back to Gemini.", slm_err)
+                err_detail = f"{type(slm_err).__name__}: {slm_err}" if str(slm_err) else type(slm_err).__name__
+                logger.warning("SLM generation failed (%s). Falling back to Gemini.", err_detail)
                 return await self.gemini_adapter.agenerate(
                     messages, system_prompt=system_prompt, **kwargs
                 )

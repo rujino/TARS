@@ -38,7 +38,9 @@ from tars.storage.reconciliation import (
 # ============================================================================
 
 
-def create_sample_okf(doc_id: str, title: str, content: str, importance: OKFImportance = OKFImportance.MEDIUM) -> OKFDocument:
+def create_sample_okf(
+    doc_id: str, title: str, content: str, importance: OKFImportance = OKFImportance.MEDIUM
+) -> OKFDocument:
     fm = OKFFrontmatter(
         id=doc_id,
         type=OKFType.RULE,
@@ -47,7 +49,7 @@ def create_sample_okf(doc_id: str, title: str, content: str, importance: OKFImpo
         importance=importance,
         source=OKFSource.MANUAL,
     )
-    return OKFDocument(frontmatter=fm, body=content)
+    return OKFDocument(metadata=fm, content=content)
 
 
 # ============================================================================

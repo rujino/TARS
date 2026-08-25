@@ -68,15 +68,28 @@ class KnowledgeExtractionResult(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    should_extract: bool = Field(default=False, description="True if valuable knowledge was identified")
-    is_conflict_or_update: bool = Field(default=False, description="True if this updates/contradicts an existing wiki")
-    target_existing_id: str | None = Field(default=None, description="Existing OKF ID to overwrite if updating")
-    doc_id: str | None = Field(default=None, description="Suggested unique slug ID for the OKF document")
-    type: str = Field(default="concept", description="OKF document type (rule, preference, fact, concept, procedure)")
+    should_extract: bool = Field(
+        default=False, description="True if valuable knowledge was identified"
+    )
+    is_conflict_or_update: bool = Field(
+        default=False, description="True if this updates/contradicts an existing wiki"
+    )
+    target_existing_id: str | None = Field(
+        default=None, description="Existing OKF ID to overwrite if updating"
+    )
+    doc_id: str | None = Field(
+        default=None, description="Suggested unique slug ID for the OKF document"
+    )
+    type: str = Field(
+        default="concept",
+        description="OKF document type (rule, preference, fact, concept, procedure)",
+    )
     title: str = Field(default="", description="Human-readable title")
     category: str | None = Field(default=None, description="Category partition")
     tags: list[str] = Field(default_factory=list, description="Descriptive search tags")
-    importance: str = Field(default="medium", description="Importance level (low, medium, high, critical)")
+    importance: str = Field(
+        default="medium", description="Importance level (low, medium, high, critical)"
+    )
     content: str = Field(default="", description="Markdown body content")
     relations: dict[str, list[str]] = Field(
         default_factory=_default_relations,
@@ -122,12 +135,6 @@ class SelfEvolvingKnowledgeWorker:
         """
         if not user_id or not conversation_turns:
             return []
-
-        # Format conversation for extraction LLM
-        formatted_dialogue = "\n".join(
-            f"{getattr(msg, 'type', 'message').upper()}: {msg.content}"
-            for msg in conversation_turns
-        )
 
         try:
             llm_response = await self.extractor_llm.agenerate(
@@ -189,7 +196,9 @@ class SelfEvolvingKnowledgeWorker:
 
         # 1. Save to physical file storage
         await self.storage_manager.save_okf_file(user_id=user_id, doc=doc)
-        logger.info("Persisted auto-extracted OKF document '%s' for user '%s'", effective_id, user_id)
+        logger.info(
+            "Persisted auto-extracted OKF document '%s' for user '%s'", effective_id, user_id
+        )
 
         # 2. Sync with database index if session provided
         if db_session is not None:
