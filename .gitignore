@@ -266,3 +266,9 @@ $RECYCLE.BIN/
 
 # .agents
 .agents
+
+# TARS Local Data & Storage
+*.db
+*.db-journal
+tars.db
+storage/
