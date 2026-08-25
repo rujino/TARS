@@ -50,7 +50,11 @@
 
 ### 3.4. LangGraph &amp; 도구 생태계 (LangGraph &amp; Tools)
 
-- **A2A 오케스트레이션**: SLM과 Gemini, Tool 실행기가 상태를 공유하는 커스텀 그래프.
+- **A2A 계층형 오케스트레이션**:
+  - **사용자 대화 응답 (100%)**: Google Gemini 전담 (TARS 고유 페르소나 및 지식 융합 발화).
+  - **경량 내부 추론**: 로컬 SLM(llama.cpp) 전담 (빠른 의도 분류, 단순 쿼리 전처리, 키워드 추출).
+  - **심층 내부 추론**: Google Gemini 전담 (다단계 계획, 복잡한 지식 자가 추출 및 충돌 해결, 툴 파싱).
+  - **무중단 회로 차단기 (Circuit Breaker)**: 로컬 SLM 장애/지연 시 경량 내부 작업도 Gemini로 즉시 Fallback.
 - **정적 툴 CAG**: 대형 툴 JSON 스키마만 캐싱하여 75% 비용 절감 및 속도 극대화.
 - **확장형 도구**: MCP 서버 연동, Google Calendar/Gmail, Apple iCloud 어댑터.
 
@@ -66,7 +70,7 @@
 - **Phase 1: Mac 개발 환경 세팅 &amp; DB/Storage + OKF Engine + LangGraph Core 프로토타입**
   - `uv` 기반 FastAPI + SQLAlchemy(SQLite) + File Storage + OKF Engine + LangGraph 뼈대 구성.
   - User 스키마, `user_wikis` 메타데이터 스키마 모델링 및 JWT 인증.
-  - 로컬 `llama.cpp` + Google Gemini 노드 연결 및 TARS 시스템 프롬프트(Humor 90%) 주입.
+  - 로컬 `llama.cpp` (내부 경량 추론 노드) + Google Gemini (사용자 응답 생성 노드) 연결 및 TARS 시스템 프롬프트(Humor 90%) 주입.
 - **Phase 2: 비동기 텍스트 스트리밍 &amp; On-Device TTS 웹 클라이언트(PWA)**
   - WebSocket/SSE 실시간 토큰 스트리밍.
   - 아이폰 브라우저에서 로그인 후 대화 텍스트 수신 즉시 Web Speech API로 TARS 톤 음성 발화 구현.

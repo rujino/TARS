@@ -17,7 +17,7 @@
 - **Acceleration**: **정적 툴 스키마 CAG** (75% 비용 절감 & 저지연)
 - **Agent Orchestration**: **LangGraph (A2A 커스텀 상태 머신)**
 - **Tool Ecosystem**: **MCP (Model Context Protocol)** + Native Python `@tool` + Google/iCloud 어댑터
-- **Hybrid LLM Engine**: **Google Gemini API** + **`llama.cpp`** (Windows 로컬 GPU)
+- **Hybrid LLM Engine**: **Google Gemini API** (사용자 대화 응답 100% 전담) + **`llama.cpp`** (로컬 GPU 기반 내부 경량 추론 & 전처리 전담)
 - **Observability**: **Langfuse** (실시간 트레이싱 및 디버깅)
 - **Backend Server**: FastAPI + Nginx + Let's Encrypt SSL
 - **Edge Client (iPhone)**: PWA Web / iOS App + **On-Device TTS (음성 합성)**

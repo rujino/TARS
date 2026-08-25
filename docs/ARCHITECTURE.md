@@ -28,13 +28,14 @@ TARS 프로젝트는 **"오브젝트 스토리지(지식 원본) + RDBMS(메타�
  │     └─ 대화 맥락과 관련된 OKF 문서 원문을 추출하여 프롬프트에 동적 주입     │
  │                                                                              │
  │   [ 4. LangGraph Orchestration (A2A StateGraph) ]                            │
- │     ├─ SLM Node (llama.cpp) : 빠른 의도 분류 & 단순 일상 대화                │
+ │     ├─ SLM Node (llama.cpp) : 내부 경량 추론 (빠른 의도 분류, 단순 전처리, 키워드 추출 등 / 사용자 대화 직접 생성 금지)
  │     ├─ Tool Node            : MCP / Google / iCloud 도구 실행                │
  │     └─ Gemini Node          : [정적 CAG 툴 스키마] + [동적 OKF 문서 원문]    │
- │                               ➔ 초고속 고품질 TARS 답변 생성                 │
+ │                               ├─ 사용자 대화 응답(User-Facing Response) 100% 전담 (고품질 TARS 페르소나 발화) │
+ │                               └─ 복잡한 심층 내부 추론 (다단계 계획, 지식 충돌 해결, 툴 인자 파싱/합성) │
  │                                                                              │
  │   [ 5. Background Extractor (비동기 지식 자가 진화) ]                        │
- │     └─ 대화 속 중요 정보 감지 ➔ 새 OKF 파일 생성 ➔ 스토리지/DB 자동 저장    │
+ │     └─ 대화 속 중요 정보 감지(Gemini 심층 분석) ➔ 새 OKF 파일 생성 ➔ 스토리지/DB 자동 저장 │
  │                                                                              │
  │   [ 6. Observability: Langfuse ] (대화 및 툴 호출 전과정 트레이싱)           │
  └──────────────────────────────────────────────────────────────────────────────┘

@@ -15,12 +15,13 @@ TARS Phase 1 Core MVP is structured as a segregated "Trinity Knowledge Layer" + 
                                            v
 +-----------------------------------------------------------------------------------+
 |                        LangGraph StateGraph Orchestrator                          |
-|  [Dynamic Slicer Context] -> [TARS Persona System Prompt] -> [Hybrid LLM Router]  |
-|                                                                |          |       |
-|                                       +------------------------+          |       |
-|                                       v                                   v       |
-|                          [Google Gemini Adapter]              [llama.cpp Adapter] |
-|                          (Cloud High Intelligence)            (Local SLM Engine)  |
+|  [Dynamic Slicer Context] -> [TARS Persona System Prompt]                         |
+|                                     |                                             |
+|        +----------------------------+----------------------------+                |
+|        v (Internal Tasks Only)                                   v (User Dialogue)|
+|  [llama.cpp Adapter (Local SLM)]                      [Google Gemini Adapter]     |
+|  - Intent classification / Query pre-processing       - User-Facing Response 100% |
+|  - Entity extraction & internal reasoning only        - High intelligence & tools |
 +-----------------------------------------------------------------------------------+
                                            | (User turn completed)
                                            v
@@ -57,8 +58,8 @@ TARS Phase 1 Core MVP is structured as a segregated "Trinity Knowledge Layer" + 
 | F5 | Storage-DB Reconciliation Engine | Bidirectional sync & hash integrity check between markdown files and DB metadata index | M1 | R1, docs/ARCHITECTURE.md |
 | F6 | OKF Dynamic Slicer | Multi-factor scoring (importance, tags, relations, context) & token budget dynamic prompt injection | M1 | R1, docs/PRD.md |
 | F7 | TARS Persona System Prompt Engine | Dry wit (Humor 90%), extreme honesty (95%), companion/work modes, anti-sycophancy rules | M2 | R2, docs/PRD.md |
-| F8 | Hybrid LLM Adapter Interface | Unified `BaseLLMAdapter` with `GeminiAdapter` and `LlamaCppAdapter` implementations | M2 | R2, docs/TECH_STACK.md |
-| F9 | Hybrid Routing & 500ms Fallback | Smart intent routing + health-probe circuit breaker fallback from local SLM to Gemini | M2 | R2, docs/ARCHITECTURE.md |
+| F8 | Hybrid LLM Adapter Interface | Unified `BaseLLMAdapter` with `GeminiAdapter` (User-Facing 100% & Deep Reasoning) and `LlamaCppAdapter` (Lightweight Internal Tasks) | M2 | R2, docs/TECH_STACK.md |
+| F9 | Tiered Internal Reasoning & 500ms Fallback | Smart tiered internal routing (SLM for fast pre-processing, Gemini for deep reasoning & user dialogue) with health-probe fallback | M2 | R2, docs/ARCHITECTURE.md |
 | F10 | LangGraph StateGraph Pipeline | Complete state machine (`TARSState`, context injection, prompt composition, LLM streaming, memory preservation) | M2 | R2, docs/TECH_STACK.md |
 | F11 | Prompt & Static Tool Schema Caching | Static CAG prompt / tool schema caching for cost and latency reduction | M2 | R2, docs/TECH_STACK.md |
 | F12 | Self-Evolving Knowledge Extractor Worker | Async background task extracting facts/preferences/rules from conversation turns | M3 | R3, docs/PRD.md |
