@@ -1,125 +1,52 @@
-# TARS Test Infrastructure & Quality Assurance Specification (`TEST_INFRA.md`)
+# E2E Test Infra: TARS Phase 3
 
-## 1. Overview & Testing Philosophy
+## Test Philosophy
+- Opaque-box, requirement-driven, and robust against regressions.
+- All testing runs in the `uv` virtual environment with `pytest`.
+- Full coverage across 4 Tiers:
+  - Tier 1: Unit & Feature Coverage (>=5 per feature)
+  - Tier 2: Boundary & Corner Cases (>=5 per feature)
+  - Tier 3: Cross-Feature Integration (Session + Tool + OKF)
+  - Tier 4: Real-World End-to-End Application Scenarios
 
-The TARS testing framework is engineered to guarantee **zero data loss, multi-tenant isolation, strict type safety, and real-time streaming reliability** across the entire Phase 1 Core MVP stack.
+## Feature Inventory & Test Mapping
+| # | Feature | Requirement | Tier 1 Unit | Tier 2 Boundary | Tier 3 Cross-Feature | Tier 4 Scenario |
+|---|---------|-------------|:-----------:|:---------------:|:--------------------:|:---------------:|
+| 1 | ChatSession & Message Models | R1 | 5 | 5 | ✓ | ✓ |
+| 2 | Time Decay Routing (15m/2h) | R1 | 5 | 5 | ✓ | ✓ |
+| 3 | Topic Shift & Natural Reset | R1 | 5 | 5 | ✓ | ✓ |
+| 4 | Proactive Greeting Endpoint | R1 | 5 | 5 | ✓ | ✓ |
+| 5 | Tool Base & Registry | R2 | 5 | 5 | ✓ | ✓ |
+| 6 | Static Tool CAG Manager | R2 | 5 | 5 | ✓ | ✓ |
+| 7 | MCP Client & Tool Adapter | R2 | 5 | 5 | ✓ | ✓ |
+| 8 | Google Workspace Adapters | R2 | 5 | 5 | ✓ | ✓ |
+| 9 | LangGraph ReAct & Fallback | R2 | 5 | 5 | ✓ | ✓ |
+| 10 | 5-Factor Dynamic OKF Slicing | R3 | 5 | 5 | ✓ | ✓ |
+| 11 | DB Fast Pre-filtering | R3 | 5 | 5 | ✓ | ✓ |
+| 12 | Background Self-Evolution Loop | R3 | 5 | 5 | ✓ | ✓ |
+| 13 | Real-time Knowledge Feedback | R3 | 5 | 5 | ✓ | ✓ |
 
-The test infrastructure is structured into **4 distinct tiers**, progressing from isolated unit logic to end-to-end multi-tenant workflows.
+## Test Architecture & Directory Layout
+- `tests/tier1_unit/`:
+  - `test_smart_session_models.py`
+  - `test_time_decay_routing.py`
+  - `test_topic_shift_and_reset.py`
+  - `test_tool_registry_and_cag.py`
+  - `test_google_workspace_adapters.py`
+  - `test_mcp_client_adapter.py`
+  - `test_dynamic_slicer_5factor.py`
+- `tests/tier2_integration/`:
+  - `test_langgraph_tool_react_loop.py`
+  - `test_tool_error_graceful_fallback.py`
+  - `test_knowledge_extractor_background.py`
+  - `test_db_prefiltering_slicer.py`
+- `tests/tier3_e2e_api/`:
+  - `test_greeting_api.py`
+  - `test_chat_session_lifecycle_api.py`
+- `tests/tier4_application/`:
+  - `test_full_conversation_loop.py` (Extended for Phase 3 Session + Tools + Auto-evolution)
 
-```
-+------------------------------------------------------------------------------------+
-| Tier 4: Application Workflows (Multi-Tenant Isolation, Full Conversation Loops)   |
-+------------------------------------------------------------------------------------+
-                                          |
-+------------------------------------------------------------------------------------+
-| Tier 3: E2E API & Streaming Tests (FastAPI REST, WebSocket, SSE Token Streams)     |
-+------------------------------------------------------------------------------------+
-                                          |
-+------------------------------------------------------------------------------------+
-| Tier 2: Integration Tests (Hybrid LLM Adapters, LangGraph StateGraph, Extractor)  |
-+------------------------------------------------------------------------------------+
-                                          |
-+------------------------------------------------------------------------------------+
-| Tier 1: Core Unit Tests (OKF Engine, Storage Manager, DB Reconciler, Slicer, etc.) |
-+------------------------------------------------------------------------------------+
-```
-
----
-
-## 2. Test Tiers & Scope Breakdown
-
-| Tier | Directory | Target Features | Scope & Focus |
-|:---|:---|:---|:---|
-| **Tier 1: Unit** | `tests/tier1_unit/` | F1, F2, F3, F4, F5, F6, F7 | - OKF YAML Frontmatter parsing, validation, and canonical serialization<br>- Multi-tenant storage path sandbox & atomic write protection<br>- SQLAlchemy 2.0 Async model constraints and Storage-DB reconciliation<br>- Multi-factor dynamic slicing score formula and token packing<br>- TARS Persona system prompt generation & parameter matrices |
-| **Tier 2: Integration** | `tests/tier2_integration/` | F8, F9, F10, F11, F12, F13 | - BaseLLMAdapter implementations (`GeminiAdapter`, `LlamaCppAdapter`)<br>- Intent routing, 500ms SLM health probe, circuit breaker fallback<br>- LangGraph `StateGraph` node transitions & memory reducer<br>- Background `SelfEvolvingKnowledgeWorker` extraction and sync |
-| **Tier 3: E2E API** | `tests/tier3_e2e_api/` | F14, F15, F16, F17, F18 | - JWT user authentication, password hashing (bcrypt), DI security<br>- TARS Persona settings API (`GET`, `PATCH`, `POST /reset`)<br>- WebSocket bidirectional streaming (`/api/v1/chat/ws`) with ping/pong & lifecycle<br>- SSE real-time token stream endpoint (`POST /api/v1/chat/stream`) |
-| **Tier 4: Application** | `tests/tier4_application/` | F19, F20 | - Multi-turn conversational self-evolving knowledge extraction loops<br>- Cross-tenant file & database isolation verification<br>- Adversarial fuzzing, path traversal penetration, and malformed payload resilience |
-
----
-
-## 3. Fixture Architecture (`tests/conftest.py`)
-
-All tests share a centralized, async-native fixture catalog located in `tests/conftest.py`:
-
-```
-tests/conftest.py
-├── Database Fixtures
-│   ├── async_db_engine       # In-memory SQLite async engine (aiosqlite)
-│   └── async_db_session      # Isolated AsyncSession per test with rollback/cleanup
-├── Storage Fixtures
-│   ├── temp_storage_dir      # Isolated temporary directory (pytest tmp_path)
-│   └── test_storage_manager  # Pre-configured FileStorageManager instance
-├── Mock LLM Adapters
-│   ├── mock_gemini_adapter   # Mock adapter simulating Gemini 2.0 streaming & tool calls
-│   └── mock_llamacpp_adapter # Mock adapter simulating local SLM latency & health checks
-├── Authentication & User
-│   ├── test_user             # Pre-seeded User instance with default TARS settings
-│   └── auth_headers          # Pre-generated JWT Bearer Authorization headers
-└── Sample OKF Data Fixtures
-    ├── sample_okf_text_valid # Standard YAML Frontmatter + Markdown content
-    └── sample_okf_doc        # Valid parsed OKFDocument instance
-```
-
----
-
-## 4. Test Execution Guide
-
-All test suites are executed via `pytest` within the project's `uv` virtual environment.
-
-### 4.1. Run Full Test Suite
-```bash
-uv run pytest
-```
-
-### 4.2. Run by Test Tier
-```bash
-# Tier 1: Core Unit Tests
-uv run pytest tests/tier1_unit -v
-
-# Tier 2: Integration Tests
-uv run pytest tests/tier2_integration -v
-
-# Tier 3: API & Streaming Tests
-uv run pytest tests/tier3_e2e_api -v
-
-# Tier 4: Application & Multi-Tenant Tests
-uv run pytest tests/tier4_application -v
-```
-
-### 4.3. Run Specific Feature Unit Tests
-```bash
-# OKF Parser & Validator (F1, F2)
-uv run pytest tests/tier1_unit/test_okf_engine.py -v
-
-# Storage Manager & Path Traversal Sandbox (F3)
-uv run pytest tests/tier1_unit/test_storage_manager.py -v
-
-# DB Models & Reconciliation Sync (F4, F5)
-uv run pytest tests/tier1_unit/test_db_reconciliation.py -v
-
-# OKF Dynamic Slicer (F6)
-uv run pytest tests/tier1_unit/test_dynamic_slicer.py -v
-
-# TARS Persona System Prompt Engine (F7)
-uv run pytest tests/tier1_unit/test_persona_prompt.py -v
-```
-
-### 4.4. Coverage & Quality Gates
-```bash
-# Generate terminal and HTML coverage report
-uv run pytest --cov=tars --cov-report=term-missing --cov-report=html
-
-# Strict static type check
-uv run mypy tars tests --strict
-```
-
----
-
-## 5. Quality Standards & Adversarial Verification
-
-1. **Independence & Isolation**: Every test creates its own in-memory database session and temporary directory to guarantee zero test order dependency.
-2. **Deterministic Output Matching**: Output assertions derive strictly from `docs/OKF_SPEC.md`, `docs/ARCHITECTURE.md`, and `docs/PRD.md`.
-3. **Adversarial Verification**:
-   - **Path Traversal Security**: Explicitly asserts rejection of `../`, absolute paths, and null bytes (`\0`).
-   - **Malformed YAML/Markdown**: Frontmatter missing delimiters or invalid types must raise explicit custom exceptions (`OKFInvalidFrontmatterError`, `OKFValidationError`).
-   - **Embedded Delimiters**: Markdown bodies containing internal `---` horizontal rules must not break frontmatter parsing.
+## Test Execution Commands
+- Full Suite: `uv run pytest tests/ -v`
+- Strict Typing: `uv run mypy --strict tars/ tests/`
+- Linting: `uv run ruff check tars/ tests/`

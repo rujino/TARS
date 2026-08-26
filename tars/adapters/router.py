@@ -18,7 +18,7 @@ from typing import Any
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from tars.adapters.base import BaseLLMAdapter
+from tars.adapters.base import BaseLLMAdapter, LLMResponse
 from tars.config import get_settings
 
 logger = logging.getLogger("tars.adapters.router")
@@ -73,9 +73,7 @@ class HybridLLMRouter:
         self.gemini_adapter = gemini_adapter
         self.slm_adapter = slm_adapter
         timeout = (
-            slm_timeout_ms
-            if slm_timeout_ms is not None
-            else get_settings().llamacpp_timeout_ms
+            slm_timeout_ms if slm_timeout_ms is not None else get_settings().llamacpp_timeout_ms
         )
         self.slm_timeout_ms = timeout
         self.slm_timeout_sec = timeout / 1000.0
@@ -163,7 +161,11 @@ class HybridLLMRouter:
                         break
                 return
             except Exception as slm_err:
-                err_detail = f"{type(slm_err).__name__}: {slm_err}" if str(slm_err) else type(slm_err).__name__
+                err_detail = (
+                    f"{type(slm_err).__name__}: {slm_err}"
+                    if str(slm_err)
+                    else type(slm_err).__name__
+                )
                 logger.warning(
                     "SLM streaming failed or timed out (%s). Falling back to Gemini.", err_detail
                 )
@@ -200,13 +202,96 @@ class HybridLLMRouter:
                     timeout=self.slm_timeout_sec,
                 )
             except Exception as slm_err:
-                err_detail = f"{type(slm_err).__name__}: {slm_err}" if str(slm_err) else type(slm_err).__name__
+                err_detail = (
+                    f"{type(slm_err).__name__}: {slm_err}"
+                    if str(slm_err)
+                    else type(slm_err).__name__
+                )
                 logger.warning("SLM generation failed (%s). Falling back to Gemini.", err_detail)
                 return await self.gemini_adapter.agenerate(
                     messages, system_prompt=system_prompt, **kwargs
                 )
 
         return await self.gemini_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs)
+
+    async def route_and_generate_response(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        force_engine: LLMEngineType | None = None,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Route query and generate structured LLMResponse with tool calls."""
+        tools = kwargs.get("tools")
+        # If tools are bound/passed, route to Gemini by default unless forced
+        effective_force = force_engine
+        if effective_force is None and tools and len(tools) > 0:
+            effective_force = LLMEngineType.GEMINI
+
+        decision = await self.evaluate_routing(messages=messages, force_engine=effective_force)
+
+        if decision.target_engine == LLMEngineType.SLM:
+            try:
+                if hasattr(self.slm_adapter, "agenerate_response"):
+                    return await asyncio.wait_for(
+                        self.slm_adapter.agenerate_response(
+                            messages, system_prompt=system_prompt, **kwargs
+                        ),
+                        timeout=self.slm_timeout_sec,
+                    )
+                text = await asyncio.wait_for(
+                    self.slm_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs),
+                    timeout=self.slm_timeout_sec,
+                )
+                return LLMResponse(content=text, tool_calls=[])
+            except Exception as slm_err:
+                err_detail = (
+                    f"{type(slm_err).__name__}: {slm_err}"
+                    if str(slm_err)
+                    else type(slm_err).__name__
+                )
+                logger.warning("SLM generation failed (%s). Falling back to Gemini.", err_detail)
+
+        if hasattr(self.gemini_adapter, "agenerate_response"):
+            return await self.gemini_adapter.agenerate_response(
+                messages, system_prompt=system_prompt, **kwargs
+            )
+        text = await self.gemini_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs)
+        return LLMResponse(content=text, tool_calls=[])
+
+    async def agenerate_response(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Generate structured response (BaseLLMAdapter interface)."""
+        return await self.route_and_generate_response(
+            messages=messages, system_prompt=system_prompt, **kwargs
+        )
+
+    async def agenerate(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> str:
+        """Route query and generate complete text (BaseLLMAdapter interface)."""
+        return await self.route_and_generate(
+            messages=messages, system_prompt=system_prompt, **kwargs
+        )
+
+    async def astream(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
+        """Route query and stream tokens (BaseLLMAdapter interface)."""
+        async for chunk in self.route_and_stream(
+            messages=messages, system_prompt=system_prompt, **kwargs
+        ):
+            yield chunk
 
 
 __all__ = [

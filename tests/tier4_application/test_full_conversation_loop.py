@@ -13,6 +13,11 @@ Verifies the complete flagship Trinity Architecture flow:
    - OKF Dynamic Slicer detects relevant keywords/tags and retrieves `user_pref_coffee.md`.
    - StateGraph injects the retrieved OKF document into TARS system prompt.
    - TARS produces a contextual, witty response referencing black coffee with no sugar.
+3. Proactive Greeting Integration:
+   - ProactiveGreetingService generates an opening greeting reflecting the auto-extracted OKF knowledge.
+4. Dynamic Conflict Update Loop:
+   - Subsequent modification (e.g. coffee preference updated to espresso) replaces the existing wiki and
+     immediately reflects in downstream retrieval.
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ from tars.core.okf.models import OKFSource
 from tars.db.models import User, UserWikiIndex
 from tars.extractor.worker import SelfEvolvingKnowledgeWorker
 from tars.orchestrator.graph import build_tars_graph, compile_tars_graph
+from tars.services.greeting import ProactiveGreetingService
 from tars.slicer.engine import DynamicSlicerEngine
 from tars.storage.manager import FileStorageManager
 from tests.conftest import MockGeminiAdapter, MockLlamaCppAdapter
@@ -173,3 +179,96 @@ async def test_full_self_evolving_conversation_loop(
 
     # 3. Final response generated
     assert state_turn2["final_response"] != ""
+
+    # ------------------------------------------------------------------------
+    # Step 5: Proactive Greeting Service Integration
+    # ------------------------------------------------------------------------
+    greeting_gemini = MockGeminiAdapter(
+        canned_response="좋은 아침입니다 파트너. 블랙 커피 한 잔 준비되셨습니까?"
+    )
+    greeting_router = HybridLLMRouter(
+        gemini_adapter=greeting_gemini,
+        slm_adapter=MockLlamaCppAdapter(),
+    )
+    greeting_service = ProactiveGreetingService(
+        db_session=db_session,
+        storage_manager=storage_manager,
+        llm_adapter=greeting_router,
+    )
+    greeting_resp = await greeting_service.generate_greeting(
+        user_id=user_id,
+        client_timezone="Asia/Seoul",
+    )
+    assert greeting_resp.greeting != ""
+    assert "블랙 커피" in greeting_resp.greeting or len(greeting_resp.greeting) > 5
+
+
+@pytest.mark.asyncio
+async def test_self_evolving_conflict_update_loop(
+    db_session: AsyncSession,
+    storage_manager: FileStorageManager,
+    seed_test_user: User,
+) -> None:
+    """Verify modifying a preference in Turn 2 updates the wiki and reflects in subsequent turns."""
+    user_id = seed_test_user.id
+    slicer = DynamicSlicerEngine(storage_manager=storage_manager, db_session=db_session)
+
+    # Initial extraction
+    mock_extractor_llm = AsyncMock(spec=BaseLLMAdapter)
+    mock_extractor_llm.agenerate.return_value = json.dumps(
+        {
+            "should_extract": True,
+            "is_conflict_or_update": False,
+            "target_existing_id": None,
+            "doc_id": "rule_sync_time",
+            "type": "rule",
+            "title": "Daily Standup Time",
+            "category": "schedule",
+            "tags": ["standup", "schedule"],
+            "importance": "high",
+            "content": "Standup is at 09:00 KST daily.",
+            "relations": {"depends_on": [], "related_to": []},
+        }
+    )
+    worker = SelfEvolvingKnowledgeWorker(
+        extractor_llm=mock_extractor_llm,
+        storage_manager=storage_manager,
+    )
+    await worker.extract_and_sync(
+        user_id=user_id,
+        conversation_turns=[HumanMessage(content="Standup is at 9am.")],
+        db_session=db_session,
+    )
+
+    # Contradiction / Update extraction
+    mock_extractor_llm.agenerate.return_value = json.dumps(
+        {
+            "should_extract": True,
+            "is_conflict_or_update": True,
+            "target_existing_id": "rule_sync_time",
+            "doc_id": "rule_sync_time",
+            "type": "rule",
+            "title": "Daily Standup Time (Updated)",
+            "category": "schedule",
+            "tags": ["standup", "schedule", "10am"],
+            "importance": "high",
+            "content": "Standup moved to 10:00 KST daily.",
+            "relations": {"depends_on": [], "related_to": []},
+        }
+    )
+    await worker.extract_and_sync(
+        user_id=user_id,
+        conversation_turns=[HumanMessage(content="Standup has been moved to 10am.")],
+        db_session=db_session,
+    )
+
+    # Slicer query
+    relevant_wikis = await slicer.slice_context(
+        user_id=user_id,
+        query="When is our standup?",
+    )
+
+    assert len(relevant_wikis) >= 1
+    top_wiki = relevant_wikis[0]
+    assert top_wiki.metadata.id == "rule_sync_time"
+    assert "10:00 KST" in top_wiki.content

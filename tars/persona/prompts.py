@@ -249,9 +249,72 @@ class TARSPersonaManager:
         )
 
 
+TARS_GREETING_PROMPT_TEMPLATE = """You are TARS (Humor: {humor_percent}%, Honesty: {honesty_percent}%, Mode: {mode}).
+The user has just launched the app / entered the foreground.
+
+[SITUATIONAL CONTEXT]
+- Local Time: {time_of_day_str} ({current_time_str})
+- Time Elapsed Since Last Contact: {idle_duration_str}
+- Recent Dialogue Topic / Focus: {last_session_topic}
+{knowledge_context_section}
+
+[DIRECTIVE]
+Generate a crisp, tactical, witty 1-2 sentence proactive greeting in Korean.
+- Strictly adhere to TARS personality (dry wit, deadpan robotic delivery, sarcastic understatement, tactical discipline).
+- Treat the user as your partner ("파트너").
+- NEVER use bubbly pleasantries, emojis, fake cheerfulness, or generic assistant greetings (e.g. "안녕하세요! 무엇을 도와드릴까요?").
+- Naturally weave in the situational context, idle gap, or previous topic if relevant.
+- Return ONLY the 1-2 sentence Korean greeting string with no surrounding quotes or markdown.
+"""
+
+BRIDGE_SUMMARY_SYSTEM_PROMPT = """You are the TARS Dialogue Summarizer.
+Summarize the key context, decisions, and unresolved topics from the previous conversation turns in 1-2 concise sentences for smooth continuation.
+Do not include pleasantries or meta-commentary. Output plain text summary only.
+"""
+
+
+def build_greeting_prompt(
+    humor_level: float = 0.90,
+    honesty_level: float = 0.95,
+    mode: str = "companion",
+    time_of_day_str: str = "오후",
+    current_time_str: str = "",
+    idle_duration_str: str = "첫 접속",
+    last_session_topic: str | None = None,
+    context_docs: Sequence[OKFDocument] | None = None,
+) -> str:
+    """Build the prompt for generating a 5-factor proactive greeting."""
+    cfg = TARSPersonaConfig(humor_level=humor_level, honesty_level=honesty_level, mode=mode)  # type: ignore[arg-type]
+    humor_percent = int(round(cfg.humor_level * 100))
+    honesty_percent = int(round(cfg.honesty_level * 100))
+
+    knowledge_sec = render_knowledge_context(context_docs)
+    topic_str = last_session_topic if last_session_topic else "없음 (신규 세션)"
+
+    return TARS_GREETING_PROMPT_TEMPLATE.format(
+        mode=cfg.mode,
+        humor_percent=humor_percent,
+        honesty_percent=honesty_percent,
+        time_of_day_str=time_of_day_str,
+        current_time_str=current_time_str,
+        idle_duration_str=idle_duration_str,
+        last_session_topic=topic_str,
+        knowledge_context_section=f"\n{knowledge_sec}" if knowledge_sec else "",
+    ).strip()
+
+
+def build_bridge_summary_prompt() -> str:
+    """Return the system prompt for generating a 1-2 sentence bridge summary."""
+    return BRIDGE_SUMMARY_SYSTEM_PROMPT.strip()
+
+
 __all__ = [
+    "BRIDGE_SUMMARY_SYSTEM_PROMPT",
+    "TARS_GREETING_PROMPT_TEMPLATE",
     "TARSPersonaConfig",
     "TARSPersonaManager",
+    "build_bridge_summary_prompt",
+    "build_greeting_prompt",
     "build_tars_system_prompt",
     "generate_behavioral_instructions",
     "render_knowledge_context",

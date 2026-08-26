@@ -42,8 +42,14 @@ class GeminiAdapter(BaseLLMAdapter):
         self.max_output_tokens = max_output_tokens
         self.enable_caching = enable_caching
         self.extra_kwargs = kwargs
+        self.tools: list[dict[str, Any]] = list(kwargs.get("tools", []))
         self._cached_content_id: str | None = None
         self._client: Any = None
+
+    def bind_tools(self, tools: Sequence[dict[str, Any]]) -> GeminiAdapter:
+        """Bind tool declarations for Gemini function calling."""
+        self.tools = list(tools)
+        return self
 
     def _get_client(self) -> Any:
         """Lazy-initialize Google GenAI or LangChain client."""
@@ -138,13 +144,17 @@ class GeminiAdapter(BaseLLMAdapter):
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: client.models.generate_content(
-                model=self.model_name,
-                contents=prompt_text,
-                config=config,
-            ) if config is not None else client.models.generate_content(
-                model=self.model_name,
-                contents=prompt_text,
+            lambda: (
+                client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt_text,
+                    config=config,
+                )
+                if config is not None
+                else client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt_text,
+                )
             ),
         )
         return str(response.text)
@@ -208,13 +218,17 @@ class GeminiAdapter(BaseLLMAdapter):
         loop = asyncio.get_running_loop()
         response_stream = await loop.run_in_executor(
             None,
-            lambda: client.models.generate_content_stream(
-                model=self.model_name,
-                contents=prompt_text,
-                config=config,
-            ) if config is not None else client.models.generate_content_stream(
-                model=self.model_name,
-                contents=prompt_text,
+            lambda: (
+                client.models.generate_content_stream(
+                    model=self.model_name,
+                    contents=prompt_text,
+                    config=config,
+                )
+                if config is not None
+                else client.models.generate_content_stream(
+                    model=self.model_name,
+                    contents=prompt_text,
+                )
             ),
         )
         for chunk in response_stream:

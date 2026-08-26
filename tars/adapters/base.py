@@ -117,6 +117,25 @@ class BaseLLMAdapter(ABC):
             str: The full generated response content.
         """
 
+    async def agenerate_response(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Generate a complete LLMResponse including content and tool calls.
+
+        Args:
+            messages: Conversation message history.
+            system_prompt: Persona and knowledge context instructions.
+            **kwargs: Additional model-specific hyperparameters.
+
+        Returns:
+            LLMResponse: Structured response model.
+        """
+        text = await self.agenerate(messages, system_prompt=system_prompt, **kwargs)
+        return LLMResponse(content=text, tool_calls=[])
+
     @abstractmethod
     async def is_healthy(self) -> bool:
         """Probe the adapter endpoint to verify reachability and operational health.

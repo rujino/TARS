@@ -9,6 +9,8 @@ Verifies:
    corresponding row insertion in DB UserWikiIndex.
 5. Transient Filtering: Casual chatter, math queries, and greetings do not trigger extraction or disk writes.
 6. Conflict & Update Handling: Contradictory statements update existing OKF document while updating timestamp.
+7. Existing Knowledge Injection: Prompts receive summaries of existing user documents for accurate conflict detection.
+8. Interface Flexibility: Accepts list of BaseMessage, dicts, or strings.
 """
 
 from __future__ import annotations
@@ -156,8 +158,9 @@ async def test_extractor_extracts_and_syncs_new_rule(
 
     assert index_entry is not None
     assert index_entry.title == "Flight Readiness Protocol"
-    assert index_entry.doc_type == "rule"
+    assert index_entry.type == "rule"
     assert index_entry.importance == "high"
+    assert index_entry.source == "auto_extracted"
     assert index_entry.file_path.endswith("rule_flight_readiness_test.md")
 
 
@@ -288,3 +291,104 @@ async def test_extractor_conflict_resolution_and_update(
     )
     assert "Wednesdays at 16:00 UTC" in re_read_doc.content
     assert re_read_doc.metadata.source == OKFSource.AUTO_EXTRACTED
+
+
+@pytest.mark.asyncio
+async def test_extractor_injects_existing_knowledge_summary_into_prompt(
+    db_session: AsyncSession,
+    storage_manager: FileStorageManager,
+) -> None:
+    """Verify that existing user knowledge is injected into the LLM system prompt for conflict resolution."""
+    # Seed a record in DB
+    rec = UserWikiIndex(
+        user_id="user_existing_test",
+        okf_id="pref_drink_tea",
+        title="Favorite Tea",
+        type="preference",
+        category="beverage",
+        importance="medium",
+        tags=["tea", "earl_grey"],
+        file_path="storage/users/user_existing_test/wikis/pref_drink_tea.md",
+    )
+    db_session.add(rec)
+    await db_session.commit()
+
+    mock_llm = AsyncMock(spec=BaseLLMAdapter)
+    mock_llm.agenerate.return_value = json.dumps(
+        {
+            "should_extract": False,
+            "is_conflict_or_update": False,
+            "target_existing_id": None,
+            "doc_id": None,
+            "type": "concept",
+            "title": "",
+            "category": None,
+            "tags": [],
+            "importance": "low",
+            "content": "",
+            "relations": {"depends_on": [], "related_to": []},
+        }
+    )
+
+    worker = SelfEvolvingKnowledgeWorker(
+        extractor_llm=mock_llm,
+        storage_manager=storage_manager,
+    )
+
+    await worker.extract_and_sync(
+        user_id="user_existing_test",
+        conversation_turns=[{"role": "user", "content": "Just saying hi!"}],
+        db_session=db_session,
+    )
+
+    # Verify system prompt passed to LLM contains the summary
+    called_system_prompt = mock_llm.agenerate.call_args.kwargs.get("system_prompt", "")
+    assert "[EXISTING USER KNOWLEDGE SUMMARY]" in called_system_prompt
+    assert "pref_drink_tea" in called_system_prompt
+    assert "Favorite Tea" in called_system_prompt
+
+
+@pytest.mark.asyncio
+async def test_extractor_accepts_dict_conversation_turns(
+    db_session: AsyncSession,
+    storage_manager: FileStorageManager,
+) -> None:
+    """Verify worker handles conversation_turns passed as list of dicts (PROJECT.md contract)."""
+    canned_llm_json = json.dumps(
+        {
+            "should_extract": True,
+            "is_conflict_or_update": False,
+            "target_existing_id": None,
+            "doc_id": "pref_theme_dark",
+            "type": "preference",
+            "title": "Dark Theme Preference",
+            "category": "ui",
+            "tags": ["theme", "dark_mode"],
+            "importance": "medium",
+            "content": "User prefers dark mode UI at all times.",
+            "relations": {"depends_on": [], "related_to": []},
+        }
+    )
+
+    mock_llm = AsyncMock(spec=BaseLLMAdapter)
+    mock_llm.agenerate.return_value = canned_llm_json
+
+    worker = SelfEvolvingKnowledgeWorker(
+        extractor_llm=mock_llm,
+        storage_manager=storage_manager,
+    )
+
+    turns_dict: list[dict[str, str]] = [
+        {"role": "user", "content": "TARS, please always keep the UI in dark mode."},
+        {"role": "assistant", "content": "Dark mode preference saved."},
+    ]
+
+    docs = await worker.extract_and_sync(
+        user_id="user_dict_test",
+        conversation_turns=turns_dict,
+        db_session=db_session,
+    )
+
+    assert len(docs) == 1
+    assert docs[0].metadata.id == "pref_theme_dark"
+    assert docs[0].metadata.source == OKFSource.AUTO_EXTRACTED
