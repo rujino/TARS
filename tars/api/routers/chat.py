@@ -25,6 +25,7 @@ from tars.api.dependencies import (
     get_current_user,
     get_db_session,
     get_storage_manager,
+    get_tool_registry,
 )
 from tars.api.schemas import ChatStreamRequest
 from tars.core.security import decode_access_token
@@ -33,6 +34,7 @@ from tars.db.session import get_session_factory
 from tars.persona.prompts import TARSPersonaManager
 from tars.slicer.engine import DynamicSlicerEngine
 from tars.storage.manager import FileStorageManager
+from tars.tools.registry import ToolRegistry
 
 logger = logging.getLogger("tars.api.routers.chat")
 router = APIRouter(prefix="/chat", tags=["Chat & Streaming"])
@@ -54,6 +56,7 @@ async def chat_sse_stream(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
     storage: FileStorageManager = Depends(get_storage_manager),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> StreamingResponse:
     """Stream model response tokens using standard SSE protocol."""
     # Retrieve user persona settings
@@ -93,9 +96,11 @@ async def chat_sse_stream(
         messages = [HumanMessage(content=payload.message)]
 
         try:
+            tools_decl = tool_registry.export_gemini_declarations() if tool_registry else None
             async for token in llm_router.route_and_stream(
                 messages=messages,
                 system_prompt=system_prompt,
+                tools=tools_decl,
             ):
                 accumulated_chunks.append(token)
                 token_payload = json.dumps({"content": token, "delta": token})
@@ -130,6 +135,8 @@ async def chat_sse_stream(
 async def chat_websocket_endpoint(
     websocket: WebSocket,
     token: str | None = Query(default=None),
+    storage: FileStorageManager = Depends(get_storage_manager),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> None:
     """Bidirectional WebSocket streaming endpoint with token authentication."""
     # 1. Validate JWT Token
@@ -242,15 +249,73 @@ async def chat_websocket_endpoint(
                 )
                 continue
 
-            # 3. Send stream_end frame
-            full_response = "".join(accumulated_text)
-            await websocket.send_json(
-                {
-                    "type": "stream_end",
-                    "session_id": session_id,
-                    "content": full_response,
-                }
-            )
+                accumulated_text: list[str] = []
+                messages = list(working_memory) + [HumanMessage(content=user_content)]
+
+                try:
+                    tools_decl = (
+                        tool_registry.export_gemini_declarations() if tool_registry else None
+                    )
+                    async for chunk in llm_router.route_and_stream(
+                        messages=messages,
+                        system_prompt=system_prompt,
+                        tools=tools_decl,
+                    ):
+                        accumulated_text.append(chunk)
+                        # Send token frame
+                        await websocket.send_json(
+                            {
+                                "type": "token",
+                                "content": chunk,
+                                "delta": chunk,
+                            }
+                        )
+                except Exception as stream_err:
+                    logger.error("WebSocket stream error: %s", stream_err, exc_info=True)
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": str(stream_err),
+                        }
+                    )
+                    continue
+
+                # Record turn in DB before ending stream frame
+                full_response = "".join(accumulated_text)
+                try:
+                    await session_mgr.record_turn(
+                        session_id=active_session.id,
+                        user_id=user_id,
+                        user_content=user_content,
+                        assistant_content=full_response,
+                    )
+                except Exception as rec_err:
+                    logger.error("Failed to record turn in websocket: %s", rec_err, exc_info=True)
+
+                # Send stream_end frame
+                await websocket.send_json(
+                    {
+                        "type": "stream_end",
+                        "session_id": active_session.id,
+                        "content": full_response,
+                    }
+                )
+
+                # Non-blocking async background knowledge extraction
+                ws_turns: list[BaseMessage] = [
+                    HumanMessage(content=user_content),
+                    AIMessage(content=full_response),
+                ]
+                ws_task = asyncio.create_task(
+                    _execute_background_knowledge_extraction(
+                        user_id=user_id,
+                        conversation_turns=ws_turns,
+                        storage=storage,
+                        llm_adapter=llm_router,
+                    )
+                )
+                _background_ws_tasks.add(ws_task)
+                ws_task.add_done_callback(_background_ws_tasks.discard)
 
     except WebSocketDisconnect:
         logger.info("WebSocket connection closed for user %s", user_id)

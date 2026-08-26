@@ -48,7 +48,7 @@
 - **개인화 설정 저장**: 유저별 선호 `humor_level`, `honesty_level`, TARS 모드 저장.
 - **대화 이력 보존**: 세션별 대화 메시지 DB 저장 및 이전 대화 불러오기 지원.
 
-### 3.4. LangGraph &amp; 도구 생태계 (LangGraph &amp; Tools)
+### 3.4. LangGraph & 도구 생태계 (LangGraph & Tools)
 
 - **A2A 계층형 오케스트레이션**:
   - **사용자 대화 응답 (100%)**: Google Gemini 전담 (TARS 고유 페르소나 및 지식 융합 발화).
@@ -56,7 +56,12 @@
   - **심층 내부 추론**: Google Gemini 전담 (다단계 계획, 복잡한 지식 자가 추출 및 충돌 해결, 툴 파싱).
   - **무중단 회로 차단기 (Circuit Breaker)**: 로컬 SLM 장애/지연 시 경량 내부 작업도 Gemini로 즉시 Fallback.
 - **정적 툴 CAG**: 대형 툴 JSON 스키마만 캐싱하여 75% 비용 절감 및 속도 극대화.
-- **확장형 도구**: MCP 서버 연동, Google Calendar/Gmail, Apple iCloud 어댑터.
+- **확장형 도구 & MCP 생태계**:
+  - MCP(Model Context Protocol) 클라이언트(HTTP/SSE/stdio/Mock), Google Calendar/Gmail 어댑터 내장.
+  - **사용자별 토글형 원클릭 플러그인 허브 (User-Scoped Toggleable Tool Hub)**:
+    - 앱/웹 UI에서 사용자가 구글 캘린더, 지메일, 공용 날씨/뉴스 MCP, 사설 MCP 서버 등을 스위치 토글(ON/OFF)로 간편하게 활성화/비활성화.
+    - 내부 전송 방식(stdio 서브프로세스, 원격 HTTP/SSE, OAuth2 토큰 주입 등)을 사용자에게 완벽히 은닉화(캡슐화)하여 직관적인 UX 제공.
+    - 사용자 계정별로 활성화된 도구들만 동적으로 선별하여 세션별 `ToolRegistry`에 자동 주입.
 
 ### 3.5. 온디바이스 음성 & 보안 인프라
 
@@ -78,17 +83,17 @@
 
 ## 4. 단계별 마일스톤 (Milestones)
 
-- **Phase 1: Mac 개발 환경 세팅 & DB/Storage + OKF Engine + LangGraph Core 프로토타입**
+- **Phase 1: Mac 개발 환경 세팅 & DB/Storage + OKF Engine + LangGraph Core 프로토타입 [DONE]**
   - `uv` 기반 FastAPI + SQLAlchemy(SQLite) + File Storage + OKF Engine + LangGraph 뼈대 구성.
   - User 스키마, `user_wikis` 메타데이터 스키마 모델링 및 JWT 인증.
   - 로컬 `llama.cpp` (내부 경량 추론 노드) + Google Gemini (사용자 응답 생성 노드) 연결 및 TARS 시스템 프롬프트(Humor 90%) 주입.
-- **Phase 2: 비동기 텍스트 스트리밍 & On-Device TTS 웹 클라이언트(PWA)**
+- **Phase 2: 비동기 텍스트 스트리밍 & On-Device TTS 웹 클라이언트(PWA) [DONE]**
   - WebSocket/SSE 실시간 토큰 스트리밍.
   - 아이폰 브라우저에서 로그인 후 대화 텍스트 수신 즉시 Web Speech API로 TARS 톤 음성 발화 구현.
-- **Phase 3: OKF 동적 슬라이싱 & 정적 CAG 툴 연동 & 비동기 지식 자가 진화 & 스마트 세션 라우팅**
-  - OKF 파일 파싱/슬라이싱 및 대화 기반 OKF 파일 자동 생성 비동기 루프.
-  - 정적 툴 스키마 CAG 적용 및 MCP / Google 도구 연동.
-  - 앱 실행 시 능동 오프닝(Proactive Greeting) 엔드포인트 및 시간/주제 기반 스마트 세션 분기 엔진 구축.
+- **Phase 3: OKF 동적 슬라이싱 & 정적 CAG 툴 연동 & 비동기 지식 자가 진화 & 스마트 세션 라우팅 [DONE]**
+  - 5-Factor 점수화 기반 OKF 지식 동적 슬라이싱 및 대화 기반 OKF 파일 자동 생성 비동기 자가 진화 루프.
+  - 정적 툴 스키마 CAG 적용 및 MCP(HTTP/SSE/stdio) / Google 도구 어댑터 & ToolRegistry API 와이어링.
+  - 앱 실행 시 능동 오프닝(Proactive Greeting) 엔드포인트 및 시간/주제 기반 스마트 세션 라우팅 엔진 구축.
 - **Phase 4: 프로덕션 정공법 인프라 & 컨테이너화**
   - Docker Compose 패키징 (FastAPI + PostgreSQL + Nginx + Certbot).
   - 도메인 연동 및 SSL/TLS 보안 인증서 적용.

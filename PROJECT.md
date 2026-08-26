@@ -80,6 +80,15 @@ TARS is structured as a segregated "Trinity Knowledge Layer" + LangGraph hybrid 
 | F24 | On-Device Web Speech API TTS Engine | `window.speechSynthesis`, iOS Safari user gesture unlock, sentence queueing on `[.!?\n]`, TARS tone | M6 | Phase 2 R3 |
 | F25 | FastAPI Static Serving & PWA Packaging | `StaticFiles` root mounting, `/manifest.json`, `/sw.js`, iOS PWA meta tags, icons | M7 | Phase 2 R4 |
 | F26 | Phase 2 E2E Test Suite & Regression QA | Static serving E2E tests, PWA meta/manifest tests, 100% Phase 1 regression pass, mypy strict | M_Phase2_Final | Phase 2 R5 |
+| F27 | Smart Session Manager & Time Decay | 15m 유지, 15m-2h 브릿지 요약, 2h+ 신규 세션 분기 및 OKF 아카이빙 | M8 | Phase 3 R1 |
+| F28 | Topic Shift & Natural Language Reset | 대화 주제 급변 감지 및 자연어 리셋 명령 처리 | M8 | Phase 3 R1 |
+| F29 | Proactive Greeting Service & API | 접속 시간대/공백/맥락/OKF 기반 위트 있는 능동 오프닝 (`GET /api/v1/chat/greeting`) | M8 | Phase 3 R1 |
+| F30 | Tool Schema CAG Manager | 도구 스키마 JSON 및 프롬프트의 정적 캐싱(CAG) 최적화 | M9 | Phase 3 R2 |
+| F31 | Async MCP Client & Tool Adapter | 표준 JSON-RPC 2.0 비동기 MCP 클라이언트 및 BaseTool 어댑터 (HTTP, SSE, STDIO, Mock) | M9 | Phase 3 R2 |
+| F32 | Google Workspace Adapters & ReAct | Google Calendar, Gmail 도구 어댑터 및 LangGraph ReAct 실행 루프 | M9 | Phase 3 R2 |
+| F33 | 5-Factor OKF Dynamic Slicer Engine | Relations, Category, Importance, Recency, Context 기반 5-Factor 가중치 슬라이싱 | M10 | Phase 3 R3 |
+| F34 | User-Scoped Tool Hub & API Wiring | `ToolRegistry` 의존성 주입 프로바이더 및 사용자별 토글형 MCP 도구 확장 구조 | M10 | Phase 3 R2, R3 |
+| F35 | Phase 3 E2E Test Suite & Victory Audit | 431개 테스트 100% 통과, mypy strict 0 error, ruff 0 warning, VICTORY CONFIRMED | M_Phase3_Final | Phase 3 Final |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
@@ -93,6 +102,11 @@ TARS is structured as a segregated "Trinity Knowledge Layer" + LangGraph hybrid 
 | M6 | Dual Streaming & On-Device TTS Engines | WebSocket + SSE streaming chat client, markdown renderer, Web Speech API TTS engine with iOS unlock (F23, F24) | M5 | DONE |
 | M7 | FastAPI Static Serving & PWA Packaging | FastAPI `StaticFiles` mount, `/manifest.json`, `/sw.js`, PWA icons, iOS meta tags (F25) | M5, M6 | DONE |
 | M_Phase2_Final | Phase 2 E2E Tests & QA Verification | `tests/tier3_e2e_api/test_pwa_static_serving.py`, Tiers 1-4 full regression 100% pass, mypy strict & ruff (F26) | M5, M6, M7 | DONE |
+| M8 | Smart Session Routing & Proactive Greeting | 시간 감쇄(15m/2h), 브릿지 요약, 주제 전환 및 자연어 리셋, Greeting API (F27-F29) | M_Phase2_Final | DONE |
+| M9 | Static Tool CAG & MCP/Google Adapters | ToolCAGManager, AsyncMCPClient, Google Calendar/Gmail 어댑터, ReAct 루프 (F30-F32) | M8 | DONE |
+| M10 | 5-Factor OKF Slicing & Tool Wiring | 5-Factor 동적 슬라이서, 자가 진화 루프, ToolRegistry API DI 와이어링 (F33-F34) | M9 | DONE |
+| M_Phase3_Final | Phase 3 Full Integration & Victory Audit | 431개 전수 테스트 100% 통과, mypy strict 0 error, ruff clean, VICTORY CONFIRMED (F35) | M8, M9, M10 | DONE |
+
 
 ## Interface Contracts
 

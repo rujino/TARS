@@ -32,14 +32,15 @@ TARS 프로젝트의 기술 스택은 **"오브젝트 스토리지 + RDBMS + OKF
 
 ---
 
-## 3. 확장형 도구 &amp; MCP 생태계 (Tool &amp; MCP Ecosystem)
+## 3. 확장형 도구 & MCP 생태계 (Tool & MCP Ecosystem)
 
 
 | 기술                                 | 역할                   | 선정 이유 (Rationale)                                                     |
 | :---------------------------------- | :-------------------- | :--------------------------------------------------------------------- |
-| **MCP (Model Context Protocol)**   | **표준 확장 프로토콜 클라이언트** | Anthropic 오픈 표준 MCP Client를 내장하여 외부 MCP 서버(GitHub, DB 등)를 플러그앤플레이로 확장 |
-| **Native Tool Registry (`@tool`)** | 내부 커스텀 도구 정의         | TARS 파라미터 조절, 시스템 제어, OKF 파일 탐색 도구 직접 정의                              |
+| **MCP (Model Context Protocol)**   | **표준 확장 프로토콜 클라이언트** | Anthropic 오픈 표준 JSON-RPC 2.0 MCP Client 내장 (HTTP, SSE, STDIO, Mock 멀티 트랜스포트 지원) |
+| **Native Tool Registry (`BaseTool`)** | 통합 도구 레지스트리         | TARS 파라미터 조절, 시스템 제어, OKF 파일 탐색 및 MCP/Google 도구 통합 관리 및 Gemini 스키마 자동 변환 |
 | **External Service Adapters**      | 외부 클라우드 연동           | Google Workspace(Calendar/Gmail) 및 Apple iCloud(캘린더, 미리알림) 연동 어댑터     |
+| **Toggleable Plugin Hub**          | **원클릭 사용자 도구 관리**   | 사용자가 stdio/HTTP/토큰 등 기술 디테일을 몰라도 UI에서 토글(ON/OFF)로 도구를 추가하는 추상화 계층 |
 
 
 ---
