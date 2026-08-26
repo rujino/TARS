@@ -21,10 +21,10 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 
-
 # ==============================================================================
 # 1. Security & Path Traversal Attacks
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_path_traversal_attempts_are_blocked(api_client: AsyncClient) -> None:
@@ -51,6 +51,7 @@ async def test_path_traversal_attempts_are_blocked(api_client: AsyncClient) -> N
 # ==============================================================================
 # 2. Strict MIME Type & Content-Type Headers
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_strict_content_type_headers(api_client: AsyncClient) -> None:
@@ -102,6 +103,7 @@ async def test_strict_content_type_headers(api_client: AsyncClient) -> None:
 # 3. HTML5 & iOS Safari PWA Requirements
 # ==============================================================================
 
+
 @pytest.mark.asyncio
 async def test_html5_structure_and_ios_meta_tags(api_client: AsyncClient) -> None:
     """Verify HTML5 structure, iOS PWA meta tags, and critical DOM elements."""
@@ -110,7 +112,9 @@ async def test_html5_structure_and_ios_meta_tags(api_client: AsyncClient) -> Non
     html = resp.text
 
     # HTML5 Doctype & lang
-    assert html.lstrip().startswith("<!DOCTYPE html>") or html.lstrip().startswith("<!doctype html>")
+    assert html.lstrip().startswith("<!DOCTYPE html>") or html.lstrip().startswith(
+        "<!doctype html>"
+    )
     assert '<html lang="en">' in html
 
     # Meta tags for iOS & PWA
@@ -156,6 +160,7 @@ async def test_html5_structure_and_ios_meta_tags(api_client: AsyncClient) -> Non
 # 4. Manifest JSON Schema & Icon Resolvability
 # ==============================================================================
 
+
 @pytest.mark.asyncio
 async def test_manifest_schema_and_icons_resolvable(api_client: AsyncClient) -> None:
     """Verify Web App Manifest schema fields and that every icon URL is 200 OK."""
@@ -190,6 +195,7 @@ async def test_manifest_schema_and_icons_resolvable(api_client: AsyncClient) -> 
 # 5. Service Worker Pre-cache Assets 100% Resolvability
 # ==============================================================================
 
+
 @pytest.mark.asyncio
 async def test_service_worker_precache_assets_all_exist(api_client: AsyncClient) -> None:
     """Verify every asset listed in sw.js ASSETS_TO_CACHE returns 200 OK."""
@@ -214,13 +220,16 @@ async def test_service_worker_precache_assets_all_exist(api_client: AsyncClient)
     # Test each cached asset endpoint
     for url in asset_urls:
         resp = await api_client.get(url)
-        assert resp.status_code == 200, f"SW precache asset '{url}' returned status {resp.status_code}"
+        assert resp.status_code == 200, (
+            f"SW precache asset '{url}' returned status {resp.status_code}"
+        )
         assert len(resp.content) > 0, f"SW precache asset '{url}' returned empty body"
 
 
 # ==============================================================================
 # 6. HTTP Method Restrictions (405 Method Not Allowed)
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_http_method_restrictions_on_static_routes(api_client: AsyncClient) -> None:
@@ -232,12 +241,15 @@ async def test_http_method_restrictions_on_static_routes(api_client: AsyncClient
         for method_name in disallowed_methods:
             method = getattr(api_client, method_name)
             resp = await method(route)
-            assert resp.status_code == 405, f"{method_name.upper()} {route} returned {resp.status_code} (expected 405)"
+            assert resp.status_code == 405, (
+                f"{method_name.upper()} {route} returned {resp.status_code} (expected 405)"
+            )
 
 
 # ==============================================================================
 # 7. Non-existent Routes & 404 Handling
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_nonexistent_routes_return_404(api_client: AsyncClient) -> None:
@@ -257,6 +269,7 @@ async def test_nonexistent_routes_return_404(api_client: AsyncClient) -> None:
 # ==============================================================================
 # 8. API Router Coexistence & Conflict Check
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_api_routes_coexistence_and_behavior(api_client: AsyncClient) -> None:
@@ -290,6 +303,7 @@ async def test_api_routes_coexistence_and_behavior(api_client: AsyncClient) -> N
 # ==============================================================================
 # 9. Concurrency & Burst Stress Testing
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_concurrent_static_requests(api_client: AsyncClient) -> None:

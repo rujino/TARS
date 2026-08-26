@@ -1,224 +1,127 @@
-# Project: TARS Phase 2 Full Specification
+# Project: TARS Phase 3
 
 ## Architecture
-TARS is structured as a segregated "Trinity Knowledge Layer" + LangGraph hybrid agent state machine + FastAPI real-time token streaming backend + PWA Mobile & Desktop Web Client with On-Device Web Speech TTS:
+TARS Phase 3는 세션 생명주기 관리(Working Memory), 정적 툴 CAG 및 외부 도구(MCP/Google Workspace) 연동, 그리고 OKF 동적 지식 슬라이싱 및 비동기 자가 진화 루프를 통합하여 완성된 지능형 AI 에이전트를 구축합니다.
 
+### 1. Data & Control Flow
 ```
-+-------------------------------------------------------------------------------------------------------+
-|                                     Client Tier: PWA Web Client                                       |
-|   +--------------------------+  +--------------------------+  +-------------------------------------+ |
-|   |  TARS Interstellar Theme |  |  JWT Auth & Router State |  |  On-Device Web Speech TTS Engine    | |
-|   |  HUD / Monolith UI       |  |  (AuthView <-> ChatView) |  |  (iOS Safari Unlock, Sentence Q) | |
-|   +--------------------------+  +--------------------------+  +-------------------------------------+ |
-|                                              │                                                        |
-|                 ┌────────────────────────────┴────────────────────────────┐                           |
-|                 │ WebSocket (/api/v1/chat/ws)  │ SSE (/api/v1/chat/stream) │ (Fallback)               |
-|                 ▼                              ▼                          │                           |
-+---------------------------------------------------------------------------│---------------------------+
-                                                                            │
-+---------------------------------------------------------------------------│---------------------------+
-|                                        FastAPI Backend                    │                           |
-|   +--------------------------+  +--------------------------+  +-----------▼-----+  +----------------+ |
-|   |  JWT Auth & Users API    |  |  TARS Persona Settings   |  | SSE / WebSocket |  | Static Files   | |
-|   |  (/api/v1/auth)          |  |  (/api/v1/tars/config)   |  | (/api/v1/chat)  |  | (/, /manifest) | |
-|   +--------------------------+  +--------------------------+  +-----------------+  +----------------+ |
-+----------------------------------------------|--------------------------------------------------------+
-                                               │
-                                               v
-+-------------------------------------------------------------------------------------------------------+
-|                                 LangGraph StateGraph Orchestrator                                     |
-|  [Dynamic Slicer Context] -> [TARS Persona System Prompt]                                             |
-|                                         │                                                             |
-|            +----------------------------+----------------------------+                                |
-|            v (Internal Tasks Only)                                   v (User Dialogue)                |
-|      [llama.cpp Adapter (Local SLM)]                      [Google Gemini Adapter]                     |
-|      - Intent classification / Query pre-processing       - User-Facing Response 100%                 |
-|      - Entity extraction & internal reasoning only        - High intelligence & tools                 |
-+-------------------------------------------------------------------------------------------------------+
-                                               │ (User turn completed)
-                                               v
-+-------------------------------------------------------------------------------------------------------+
-|                          Self-Evolving Knowledge Extractor (Background Task)                          |
-|          Extracts preferences/rules/facts -> Formats OKF with source: "auto_extracted"                |
-+----------------------------------------------|--------------------------------------------------------+
-                                               │
-                        +----------------------+----------------------+
-                        v                                             v
-+-------------------------------------------+     +-----------------------------------------------------+
-|       Segregated File Storage Layer       |     |          SQLAlchemy 2.0 Async Metadata DB           |
-|       /storage/users/{user_id}/wikis/*.md | <-> |          user_wikis index, users, settings          |
-|       (Pure Markdown Source of Truth)     |     |          (Fast querying & reconciliation)           |
-+-------------------------------------------+     +-----------------------------------------------------+
+[User Request / Client]
+       │
+       ▼
+[FastAPI: /api/v1/chat/ws, /stream, /greeting]
+       │
+       ├─► [SmartSessionManager]: Time Decay (15m/2h) & Topic Shift & Reset
+       │         │
+       │         └─► (세션 종료/분기 시) ──► [Background: OKF Extractor] ──► [FileStorage & UserWikiIndex DB]
+       │
+       ├─► [DynamicSlicerEngine]: 5-Factor 점수화(Context, Importance, Type, Relations, Recency) & DB Fast Pre-filtering
+       │         │
+       │         └─► Dynamic Knowledge Slice ──┐
+       │                                        ▼
+       └─► [LangGraph StateGraph Engine] ◄── [ToolCAGManager (Static System Prompt + Tool JSON Schemas)]
+                 │
+                 ├─► [llm_node]: Function Calling / Tool Selection
+                 │         │
+                 │         ▼ (tool_calls 감지 시)
+                 ├─► [tool_node]: ToolRegistry (MCP Client & Google Workspace Adapters)
+                 │         │
+                 │         └─► (Graceful Fallback on error) ──► ReAct Loop re-entry
+                 │
+                 └─► Token Streaming & Final Response
 ```
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| F1 | OKF Parser & Serializer | Parse & serialize YAML frontmatter + markdown body conforming to `docs/OKF_SPEC.md` | M1 | R1, docs/OKF_SPEC.md |
-| F2 | OKF Pydantic Models & Validator | Validate `okf_version`, `id`, `type`, `title`, `category`, `tags`, `importance`, `source`, `relations` | M1 | R1, docs/OKF_SPEC.md |
-| F3 | Multi-Tenant File Storage Manager | User-isolated file operations (`/storage/users/{user_id}/wikis/*.md`), path traversal security, atomic write | M1 | R1, docs/ARCHITECTURE.md |
-| F4 | SQLAlchemy 2.0 Async RDBMS Schema | Async models (`User`, `TARSSettings`, `UserWikiIndex`) with SQLite/PostgreSQL compatibility | M1 | R1, docs/TECH_STACK.md |
-| F5 | Storage-DB Reconciliation Engine | Bidirectional sync & hash integrity check between markdown files and DB metadata index | M1 | R1, docs/ARCHITECTURE.md |
-| F6 | OKF Dynamic Slicer | Multi-factor scoring (importance, tags, relations, context) & token budget dynamic prompt injection | M1 | R1, docs/PRD.md |
-| F7 | TARS Persona System Prompt Engine | Dry wit (Humor 90%), extreme honesty (95%), companion/work modes, anti-sycophancy rules | M2 | R2, docs/PRD.md |
-| F8 | Hybrid LLM Adapter Interface | Unified `BaseLLMAdapter` with `GeminiAdapter` (User-Facing 100% & Deep Reasoning) and `LlamaCppAdapter` (Lightweight Internal Tasks) | M2 | R2, docs/TECH_STACK.md |
-| F9 | Tiered Internal Reasoning & 500ms Fallback | Smart tiered internal routing (SLM for fast pre-processing, Gemini for deep reasoning & user dialogue) with health-probe fallback | M2 | R2, docs/ARCHITECTURE.md |
-| F10 | LangGraph StateGraph Pipeline | Complete state machine (`TARSState`, context injection, prompt composition, LLM streaming, memory preservation) | M2 | R2, docs/TECH_STACK.md |
-| F11 | Prompt & Static Tool Schema Caching | Static CAG prompt / tool schema caching for cost and latency reduction | M2 | R2, docs/TECH_STACK.md |
-| F12 | Self-Evolving Knowledge Extractor Worker | Async background task extracting facts/preferences/rules from conversation turns | M3 | R3, docs/PRD.md |
-| F13 | Auto-Extracted OKF Persistence & Sync | Automatic formatting with `source: "auto_extracted"`, atomic `.md` persistence and DB indexing | M3 | R3, docs/OKF_SPEC.md |
-| F14 | FastAPI Modular App & Lifespan | App initialization, Lifespan DB engine setup, CORS, global error handling & DI | M4 | R4, docs/TECH_STACK.md |
-| F15 | JWT Authentication & User Routes | User signup, login, password hashing (bcrypt), JWT verification, `get_current_user` DI | M4 | R4, docs/PRD.md |
-| F16 | TARS Persona Settings REST API | `GET`, `PATCH`, `POST /reset` endpoints for `humor_level`, `honesty_level`, `mode` | M4 | R4, docs/PRD.md |
-| F17 | WebSocket Real-Time Token Streaming | `/api/v1/chat/ws` bidirectional token streaming protocol with lifecycle events | M4 | R4, docs/ARCHITECTURE.md |
-| F18 | SSE Real-Time Token Streaming | `POST /api/v1/chat/stream` Server-Sent Events token stream endpoint | M4 | R4, docs/TECH_STACK.md |
-| F19 | Strict Static Typing Configuration | 100% type annotations with Pydantic v2, TypedDict, Enum, passing `mypy --strict` | M4 | R5, pyproject.toml |
-| F20 | Phase 1 E2E Test Suite & Hardening | Full unit, integration, streaming, and adversarial test suite passing 100% | M_Final | Acceptance Criteria |
-| F21 | PWA Web Client UI & Interstellar Theme | HUD monolithic dark design, responsive CSS (375px+ / desktop), viewport-fit=cover, standalone UI | M5 | Phase 2 R1, R4 |
-| F22 | JWT Auth & Persona Controller UI | Sign up/in/out, token storage, auth route switching, humor/honesty sliders, reset API sync | M5 | Phase 2 R1 |
-| F23 | Real-Time Dual Streaming Chat Engine | WebSocket `/api/v1/chat/ws?token=` + SSE fallback, token streaming, markdown & code render | M6 | Phase 2 R2 |
-| F24 | On-Device Web Speech API TTS Engine | `window.speechSynthesis`, iOS Safari user gesture unlock, sentence queueing on `[.!?\n]`, TARS tone | M6 | Phase 2 R3 |
-| F25 | FastAPI Static Serving & PWA Packaging | `StaticFiles` root mounting, `/manifest.json`, `/sw.js`, iOS PWA meta tags, icons | M7 | Phase 2 R4 |
-| F26 | Phase 2 E2E Test Suite & Regression QA | Static serving E2E tests, PWA meta/manifest tests, 100% Phase 1 regression pass, mypy strict | M_Phase2_Final | Phase 2 R5 |
+| 1 | ChatSession & ChatMessage DB Models | 세션 및 메시지 이력 영속화 ORM 모델 | M1 | Survey 1 (R1) |
+| 2 | Time Decay Session Routing | 15분 이내(유지), 15분~2시간(Bridge Summary+분기), 2시간 초과(신규 세션) | M1 | Survey 1 (R1) |
+| 3 | Topic Shift & Natural Reset | 자연어 리셋 명령 처리 및 SLM 기반 주제 급변 감지/세션 분기 | M1 | Survey 1 (R1) |
+| 4 | Proactive Greeting Endpoint | GET /api/v1/chat/greeting (시간대, 유휴시간, 맥락, OKF 5-Factor 오프닝) | M1 | Survey 1 (R1) |
+| 5 | Tool Base & Registry | BaseTool 추상화, ToolParameter, ToolRegistry 구현 | M2 | Survey 2 (R2) |
+| 6 | Static Tool CAG Manager | 정적 시스템 지침 + 대형 도구 스키마 번들링 및 Gemini/In-Memory 캐싱 | M2 | Survey 2 (R2) |
+| 7 | MCP Client & Tool Adapter | 표준 JSON-RPC 2.0 비동기 MCP 클라이언트 및 어댑터 | M2 | Survey 2 (R2) |
+| 8 | Google Workspace Adapters | Google Calendar (3종) 및 Gmail (3종) 도구 어댑터 & Mock 모드 | M2 | Survey 2 (R2) |
+| 9 | LangGraph ReAct Loop & Graceful Fallback | TARSState 확장, tool_node 격리 실행, 에러 시 Fallback, should_continue 라우터 | M2 | Survey 2 (R2) |
+| 10 | 5-Factor Dynamic OKF Slicing | Context, Importance, Type, Relations, Recency 다중 팩터 점수화 & 토큰 예산 관리 | M3 | Survey 3 (R3) |
+| 11 | DB Index Fast Pre-filtering | UserWikiIndex 기반 1차 메타데이터 필터링 및 스토리지 I/O 최적화 | M3 | Survey 3 (R3) |
+| 12 | Background Knowledge Self-Evolution | 대화 턴/세션 종료 시 비동기 OKF Extractor 트리거 & DB 원자적 동기화 | M3 | Survey 3 (R3) |
+| 13 | Real-time Knowledge Feedback Loop | 추출된 OKF가 다음 대화 및 Proactive Greeting에 실시간 인출되는 루프 완결 | M3 | Survey 3 (R3) |
+| 14 | Comprehensive E2E & Static Analysis | Tier 1~4 테스트 100% 통과, mypy --strict, ruff check 무결성 달성 | M4 | Survey 1,2,3 (R1-R3) |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | OKF Engine & Segregated Storage | OKF parser/serializer/validator, file storage manager, async DB models & slicer (F1-F6) | none | DONE |
-| M2 | LangGraph Orchestrator & TARS Persona | TARS persona prompt, LLM adapters (Gemini/Llama), hybrid router, StateGraph (F7-F11) | M1 | DONE |
-| M3 | Self-Evolving Knowledge Extractor | Background knowledge extraction loop, auto-extracted OKF sync (F12-F13) | M1, M2 | DONE |
-| M4 | FastAPI Backend & Streaming API | FastAPI setup, JWT auth, TARS config API, WebSocket & SSE streaming, pyproject.toml (F14-F19) | M1, M2, M3 | DONE |
-| M_Final | Phase 1 Final Integration | Pass 100% Phase 1 E2E test suite (Tiers 1-4) + Tier 5 Hardening (F20) | M1-M4 | DONE |
-| M5 | PWA Client UI, Theme & Persona/Auth | Interstellar HUD theme, responsive CSS, JWT auth view, TARS persona controls, API client (F21, F22) | M4 | DONE |
-| M6 | Dual Streaming & On-Device TTS Engines | WebSocket + SSE streaming chat client, markdown renderer, Web Speech API TTS engine with iOS unlock (F23, F24) | M5 | DONE |
-| M7 | FastAPI Static Serving & PWA Packaging | FastAPI `StaticFiles` mount, `/manifest.json`, `/sw.js`, PWA icons, iOS meta tags (F25) | M5, M6 | DONE |
-| M_Phase2_Final | Phase 2 E2E Tests & QA Verification | `tests/tier3_e2e_api/test_pwa_static_serving.py`, Tiers 1-4 full regression 100% pass, mypy strict & ruff (F26) | M5, M6, M7 | DONE |
+| M1 | 스마트 세션 라우팅 & 능동 오프닝 | DB 세션/메시지 모델, Time Decay, Topic Shift, Reset, Proactive Greeting | none | DONE |
+| M2 | 정적 툴 CAG & 외부 도구(MCP/Google) 연동 | ToolRegistry, ToolCAGManager, MCP Client, Google Workspace Adapters, LangGraph ReAct | none | DONE |
+| M3 | OKF 동적 슬라이싱 & 자가 진화 루프 | 5-Factor 슬라이서, DB 사전필터링, API 백그라운드 지식 추출기 연동, 실시간 반영 | M1, M2 | DONE |
+| M4 | E2E 테스트 스위트 및 종합 검증 | 전체 단위/통합/E2E 테스트 100% 통과, mypy --strict, ruff check 무결성 | M1, M2, M3 | DONE |
 
 ## Interface Contracts
 
-### 1. PWA Web Client & Auth / Persona API (`tars/static/js/api.js`)
-```javascript
-class TARSApiClient {
-  getToken(): string | null;
-  setToken(token: string): void;
-  clearToken(): void;
-  signup(username, email, password): Promise<{ access_token: string, token_type: string, user: object }>;
-  login(username, password): Promise<{ access_token: string, token_type: string, user: object }>;
-  getMe(): Promise<object>;
-  getConfig(): Promise<{ humor_level: number, honesty_level: number, mode: string }>;
-  updateConfig(config: { humor_level?: number, honesty_level?: number, mode?: string }): Promise<object>;
-  resetConfig(): Promise<object>;
-}
-```
-
-### 2. Dual Streaming Client (`tars/static/js/chat.js`)
-```javascript
-class TARSStreamClient {
-  constructor(apiClient: TARSApiClient, callbacks: {
-    onStart: (sessionId: string) => void,
-    onToken: (chunk: string) => void,
-    onEnd: (fullText: string) => void,
-    onError: (err: string) => void,
-    onStatusChange: (status: string) => void
-  });
-  connectWebSocket(): void;
-  sendMessage(message: string, sessionId?: string): Promise<void>;
-  sendSSEMessage(message: string, sessionId?: string): Promise<void>;
-}
-```
-
-### 3. On-Device Web Speech TTS Engine (`tars/static/js/tts.js`)
-```javascript
-class TARSTTSEngine {
-  constructor();
-  setupUnlockListeners(): void; // iOS Safari User Gesture Unlock
-  setMute(mute: boolean): void;
-  stop(): void;
-  pushToken(token: string): void; // Streams & buffers tokens, splits on [.!?\n]
-  flush(): void; // Speaks remaining buffered text on stream_end
-  enqueue(text: string): void;
-  processQueue(): void;
-}
-```
-
-### 4. FastAPI Static Serving Endpoints (`tars/api/app.py`, `tars/config.py`)
+### 1. SmartSessionManager ↔ ChatRouter & GreetingService
 ```python
-# tars/config.py
-class Settings(BaseSettings):
-    ...
-    static_dir: Path = Field(
-        default_factory=lambda: Path(__file__).resolve().parent / "static"
-    )
+class SmartSessionManager:
+    async def get_or_create_session(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        requested_session_id: str | None = None,
+        incoming_message: str | None = None,
+    ) -> tuple[ChatSession, list[ChatMessage], str | None]: ...
 
-# tars/api/app.py
-@app.get("/", include_in_schema=False)
-async def serve_index() -> FileResponse: ...
+    async def record_turn(
+        self,
+        db: AsyncSession,
+        session_id: str,
+        user_id: str,
+        user_message: str,
+        assistant_message: str,
+    ) -> None: ...
+```
 
-@app.get("/manifest.json", include_in_schema=False)
-async def serve_manifest() -> FileResponse: ...
+### 2. ToolCAGManager & ToolRegistry ↔ LangGraph StateGraph
+```python
+class ToolRegistry:
+    def register_tool(self, tool: BaseTool) -> None: ...
+    def get_all_tool_definitions(self) -> list[dict[str, Any]]: ...
+    async def execute_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]: ...
 
-@app.get("/sw.js", include_in_schema=False)
-async def serve_sw() -> FileResponse: ...
+class ToolCAGManager:
+    def get_cached_system_prompt_and_tools(
+        self, base_prompt: str, tools: list[dict[str, Any]]
+    ) -> tuple[str, list[dict[str, Any]]]: ...
+```
 
-# Mounted after /api/v1 and /health:
-app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
+### 3. DynamicSlicerEngine & SelfEvolvingKnowledgeWorker ↔ Storage & API
+```python
+class DynamicSlicerEngine:
+    async def slice_context(
+        self,
+        user_id: str,
+        query: str,
+        context_messages: list[str] | None = None,
+        token_budget: int = 1500,
+        profile: str = "chat",
+        db: AsyncSession | None = None,
+    ) -> SlicedKnowledgeResult: ...
+
+class SelfEvolvingKnowledgeWorker:
+    async def extract_and_sync(
+        self,
+        user_id: str,
+        conversation_turns: list[dict[str, str]],
+        db: AsyncSession | None = None,
+    ) -> list[str]: ...
 ```
 
 ## Code Layout
-```
-/Users/jinhoryu/Workspace/SideProject/TARS/
-├── pyproject.toml
-├── README.md
-├── docs/
-│   ├── OKF_SPEC.md
-│   ├── ARCHITECTURE.md
-│   ├── PRD.md
-│   └── TECH_STACK.md
-├── tars/
-│   ├── __init__.py
-│   ├── config.py                       # Application settings (added static_dir)
-│   ├── core/                           # OKF models, parser, validator
-│   ├── db/                             # SQLAlchemy 2.0 Async models & session
-│   ├── storage/                        # Multi-tenant file storage manager
-│   ├── slicer/                         # Dynamic Knowledge Slicer
-│   ├── persona/                        # TARS Persona system prompt generator
-│   ├── adapters/                       # Gemini & llama.cpp LLM adapters
-│   ├── orchestrator/                   # LangGraph StateGraph pipeline
-│   ├── extractor/                      # Async Self-Evolving Knowledge Extractor
-│   ├── api/                            # FastAPI app, routers, dependencies, streaming
-│   │   ├── __init__.py
-│   │   ├── app.py                      # FastAPI app (includes static file routes & mount)
-│   │   ├── dependencies.py
-│   │   ├── routers/
-│   │   └── schemas/
-│   └── static/                         # [Phase 2] PWA Web Client
-│       ├── index.html                  # Single Page Interface (HUD Monolith)
-│       ├── manifest.json               # PWA Web App Manifest (Standalone)
-│       ├── sw.js                       # Service Worker (App Shell cache + API bypass)
-│       ├── css/
-│       │   ├── hud.css                 # Interstellar HUD theme & layout
-│       │   └── components.css          # Chat, modal, slider, code block styles
-│       ├── js/
-│       │   ├── app.js                  # Main entry point & SPA router
-│       │   ├── api.js                  # REST client (JWT Auth + TARS Persona Config)
-│       │   ├── chat.js                 # WebSocket & SSE dual streaming client
-│       │   ├── tts.js                  # On-Device Web Speech API engine
-│       │   └── vendor/
-│       │       ├── marked.min.js       # Offline markdown parser
-│       │       └── purify.min.js       # Offline DOMPurify
-│       └── icons/
-│           ├── icon-192.png
-│           ├── icon-512.png
-│           └── apple-touch-icon.png
-└── tests/
-    ├── conftest.py
-    ├── tier1_unit/
-    ├── tier2_integration/
-    ├── tier3_e2e_api/
-    │   ├── test_auth_api.py
-    │   ├── test_config_api.py
-    │   ├── test_websocket_streaming.py
-    │   ├── test_sse_streaming.py
-    │   └── test_pwa_static_serving.py  # [Phase 2] PWA Static Serving & iOS Meta Tests
-    └── tier4_application/
-```
+- `tars/db/models.py`: `ChatSession`, `ChatMessage` ORM 모델 추가 (M1 - DONE)
+- `tars/core/session/`: `manager.py`, `detector.py` (M1 - DONE)
+- `tars/services/greeting.py`: `ProactiveGreetingService` (M1 - DONE)
+- `tars/tools/`: `base.py`, `registry.py`, `cag.py`, `mcp/`, `google/` (M2 - DONE)
+- `tars/orchestrator/`: `state.py`, `nodes.py`, `graph.py` (M2 - DONE)
+- `tars/slicer/`: `engine.py`, `models.py` (M3 - DONE)
+- `tars/extractor/`: `worker.py`, `prompts.py` (M3 - DONE)
+- `tars/api/routers/chat.py`: 세션 바인딩, 백그라운드 태스크 연동, Greeting 엔드포인트 (M1, M3 - DONE)
+- `tars/config.py`: 설정 확장 (M2, M3 - DONE)
+- `tests/`: 단위/통합/E2E 테스트 스위트 (M1, M2, M3, M4 - DONE, 431 passed)
