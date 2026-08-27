@@ -53,7 +53,7 @@ class TARSTTSEngine {
         this.englishVoice =
           voices.find(
             (v) =>
-              v.lang.startsWith('en') && 현ㄷ
+              v.lang.startsWith('en') &&
                 (v.name.includes('Daniel') ||
                   v.name.includes('Alex') ||
                   v.name.includes('Fred') ||

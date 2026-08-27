@@ -204,7 +204,9 @@ async def chat_sse_stream(
             },
         )
 
-    # 4. Sliced OKF Knowledge Context
+    # 4. Sliced OKF Knowledge Context (5-Factor 동적 지식 슬라이싱)
+    # Context, Importance, Type, Relations, Recency 5개 팩터와 토큰 예산(1500 tokens)을 기반으로
+    # 사용자의 OKF 지식 문서 원본 중 현재 쿼리에 가장 적합한 문서를 검색 및 랭킹합니다.
     slicer = DynamicSlicerEngine(storage_manager=storage, db_session=db)
     relevant_wikis = await slicer.slice_context(
         user_id=current_user.id,
@@ -213,7 +215,7 @@ async def chat_sse_stream(
         profile=SlicerProfile.CHAT,
     )
 
-    # 5. Compose System Prompt
+    # 5. Compose System Prompt (TARS 고유 페르소나 및 OKF XML 컨텍스트 주입)
     persona_mgr = TARSPersonaManager()
     system_prompt = persona_mgr.build_system_prompt(
         humor_level=humor,
@@ -222,7 +224,11 @@ async def chat_sse_stream(
         context_docs=relevant_wikis,
     )
 
-    # 6. Stream Model Response
+    # 6. Stream Model Response (LangGraph ReAct 도구 선언 연동 및 실시간 SSE 토큰 스트리밍)
+    # [아키텍처 및 도구 연동 원리]:
+    # - tool_registry로부터 Gemini 호환 Function Calling 스키마(JSON declarations)를 추출하여 라우터에 주입합니다.
+    # - user_facing=True 플래그를 통해 사용자 대면 발화는 Google Gemini가 100% 전담하도록 보장합니다.
+    # - 향후 다단계 ReAct 도구 체이닝 확장 시, tars.orchestrator.graph.create_tars_graph()와 직접 연계할 수 있습니다.
     async def sse_event_generator() -> AsyncIterator[str]:
         # Emit stream_start event
         start_payload = json.dumps({"session_id": active_session.id}, ensure_ascii=False)
@@ -237,6 +243,7 @@ async def chat_sse_stream(
                 messages=messages,
                 system_prompt=system_prompt,
                 tools=tools_decl,
+                user_facing=True,
             ):
                 accumulated_chunks.append(token)
                 token_payload = json.dumps({"content": token, "delta": token}, ensure_ascii=False)
@@ -256,7 +263,7 @@ async def chat_sse_stream(
         # Emit done event
         yield "event: done\ndata: [DONE]\n\n"
 
-        # Record conversation turn in DB
+        # Record conversation turn in DB (대화 턴 영속화)
         try:
             await session_mgr.record_turn(
                 session_id=active_session.id,
@@ -267,7 +274,7 @@ async def chat_sse_stream(
         except Exception as rec_err:
             logger.error("Failed to record conversation turn: %s", rec_err, exc_info=True)
 
-        # Launch background knowledge extraction for continuous self-evolution
+        # Launch background knowledge extraction for continuous self-evolution (비동기 자가 진화 루프)
         turns: list[BaseMessage] = [
             HumanMessage(content=payload.message),
             AIMessage(content=full_text),
@@ -296,8 +303,21 @@ async def chat_websocket_endpoint(
     websocket: WebSocket,
     token: str | None = Query(default=None),
     storage: FileStorageManager = Depends(get_storage_manager),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> None:
-    """Bidirectional WebSocket streaming endpoint with token authentication and Smart Session routing."""
+    """양방향 실시간 WebSocket 대화 엔드포인트.
+
+    [주요 기능 및 처리 파이프라인]:
+    1. JWT 토큰 검증 및 사용자 식별 (쿼리 매개변수 ?token=...).
+    2. SmartSessionManager를 통한 세션 라이프사이클 관리:
+       - 15분 이내: 기존 세션 및 작업 기억(Working Memory) 유지.
+       - 15분~2시간: 이전 대화 1~2문장 브릿지 요약(Bridge Summary) 생성 후 신규 세션 분기.
+       - 2시간 초과: 이전 세션 아카이브 및 완전 신규 세션 생성.
+       - 자연어 리셋("TARS, 리셋해" 등) / 주제 급변 감지 시 세션 자동 분기.
+    3. DynamicSlicerEngine 기반 5-Factor 동적 OKF 지식 검색 및 주입.
+    4. ToolRegistry(Google Calendar, Gmail, MCP 등) 도구 스키마 바인딩 및 실시간 토큰 스트리밍.
+    5. 대화 완료 후 DB 턴 영속화 및 비동기 자가 진화 지식 추출 루프 실행.
+    """
     # 1. Validate JWT Token
     if not token:
         logger.warning("WebSocket rejected: missing token query param")
@@ -356,7 +376,7 @@ async def chat_websocket_endpoint(
                 continue
 
             async with session_factory() as db:
-                # Fetch persona config
+                # 1. Fetch persona config
                 stmt_settings = select(TARSSettings).where(TARSSettings.user_id == user_id)
                 res_settings = await db.execute(stmt_settings)
                 settings = res_settings.scalar_one_or_none()
@@ -365,7 +385,7 @@ async def chat_websocket_endpoint(
                 honesty = float(settings.honesty_level) if settings else 0.95
                 mode = str(settings.mode) if settings else "companion"
 
-                # Route session
+                # 2. Route session (시간 감쇄, 주제 전환, 리셋 평가)
                 session_mgr = SmartSessionManager(
                     db_session=db,
                     storage_manager=storage,
@@ -379,7 +399,7 @@ async def chat_websocket_endpoint(
                     incoming_message=user_content,
                 )
 
-                # Reset command handling
+                # 3. Reset command handling (자연어 리셋 명령 처리)
                 if routing_decision.is_reset:
                     reset_msg = (
                         "기억 장치 초기화 완료. 이전 대화는 세션 아카이브로 보관되었습니다, 파트너. 새로운 명령을 대기합니다."
@@ -414,7 +434,7 @@ async def chat_websocket_endpoint(
                     )
                     continue
 
-                # Build system prompt
+                # 4. Build system prompt with sliced OKF context
                 slicer = DynamicSlicerEngine(storage_manager=storage, db_session=db)
                 relevant_wikis = await slicer.slice_context(
                     user_id=user_id,
@@ -430,7 +450,7 @@ async def chat_websocket_endpoint(
                     context_docs=relevant_wikis,
                 )
 
-                # Send stream_start frame
+                # 5. Send stream_start frame
                 await websocket.send_json(
                     {
                         "type": "stream_start",
@@ -441,10 +461,16 @@ async def chat_websocket_endpoint(
                 accumulated_text: list[str] = []
                 messages = list(working_memory) + [HumanMessage(content=user_content)]
 
+                # 6. Stream tokens with ToolRegistry bindings
                 try:
+                    tools_decl = (
+                        tool_registry.export_gemini_declarations() if tool_registry else None
+                    )
                     async for chunk in llm_router.route_and_stream(
                         messages=messages,
                         system_prompt=system_prompt,
+                        tools=tools_decl,
+                        user_facing=True,
                     ):
                         accumulated_text.append(chunk)
                         # Send token frame
@@ -465,7 +491,7 @@ async def chat_websocket_endpoint(
                     )
                     continue
 
-                # Record turn in DB before ending stream frame
+                # 7. Record turn in DB before ending stream frame
                 full_response = "".join(accumulated_text)
                 try:
                     await session_mgr.record_turn(
@@ -477,7 +503,7 @@ async def chat_websocket_endpoint(
                 except Exception as rec_err:
                     logger.error("Failed to record turn in websocket: %s", rec_err, exc_info=True)
 
-                # Send stream_end frame
+                # 8. Send stream_end frame
                 await websocket.send_json(
                     {
                         "type": "stream_end",
@@ -486,7 +512,7 @@ async def chat_websocket_endpoint(
                     }
                 )
 
-                # Non-blocking async background knowledge extraction
+                # 9. Non-blocking async background knowledge extraction (자가 진화 루프)
                 ws_turns: list[BaseMessage] = [
                     HumanMessage(content=user_content),
                     AIMessage(content=full_response),

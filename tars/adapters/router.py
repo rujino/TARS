@@ -82,8 +82,18 @@ class HybridLLMRouter:
         self,
         messages: Sequence[BaseMessage],
         force_engine: LLMEngineType | None = None,
+        user_facing: bool = False,
     ) -> RoutingDecision:
-        """Evaluate messages to select target engine with health probe checking."""
+        """의도 분류 및 헬스 체크 기반 타깃 LLM/SLM 엔진 평가 라우팅.
+
+        [아키텍처 원칙]:
+        1. 사용자 대화 응답(User-Facing Response, user_facing=True):
+           - TARS 고유 페르소나(유머 90%, 정직 95%) 및 지식 융합을 위해 Google Gemini 100% 전담.
+        2. 내부 경량 추론(Internal Preprocessing, user_facing=False):
+           - 빠른 의도 분류, 단순 전처리, 키워드 추출 등은 로컬 SLM(llama.cpp) 전담 (초저지연, 비용 0원).
+        3. 500ms Fallback Circuit Breaker:
+           - 로컬 SLM 비정상/타임아웃 발생 시 Gemini로 즉각 자동 Fallback.
+        """
         if force_engine is not None:
             return RoutingDecision(
                 target_engine=force_engine,
@@ -95,6 +105,14 @@ class HybridLLMRouter:
             return RoutingDecision(
                 target_engine=LLMEngineType.GEMINI,
                 reason="empty_messages",
+                is_fallback=False,
+            )
+
+        # 사용자 대면 발화(User-Facing)인 경우 아키텍처 원칙에 따라 Gemini 전담
+        if user_facing:
+            return RoutingDecision(
+                target_engine=LLMEngineType.GEMINI,
+                reason="user_facing_response",
                 is_fallback=False,
             )
 
@@ -138,10 +156,13 @@ class HybridLLMRouter:
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
         force_engine: LLMEngineType | None = None,
+        user_facing: bool = False,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Route query and stream response with 500ms circuit breaker fallback."""
-        decision = await self.evaluate_routing(messages=messages, force_engine=force_engine)
+        """의도 기반 쿼리 라우팅 및 500ms 서킷 브레이커 Fallback 실시간 토큰 스트리밍."""
+        decision = await self.evaluate_routing(
+            messages=messages, force_engine=force_engine, user_facing=user_facing
+        )
 
         if decision.target_engine == LLMEngineType.SLM:
             try:
@@ -190,10 +211,13 @@ class HybridLLMRouter:
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
         force_engine: LLMEngineType | None = None,
+        user_facing: bool = False,
         **kwargs: Any,
     ) -> str:
-        """Route query and generate complete text with circuit breaker fallback."""
-        decision = await self.evaluate_routing(messages=messages, force_engine=force_engine)
+        """단일 턴 텍스트 완결 생성 (회로 차단기 Fallback 지원)."""
+        decision = await self.evaluate_routing(
+            messages=messages, force_engine=force_engine, user_facing=user_facing
+        )
 
         if decision.target_engine == LLMEngineType.SLM:
             try:
@@ -219,16 +243,19 @@ class HybridLLMRouter:
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
         force_engine: LLMEngineType | None = None,
+        user_facing: bool = False,
         **kwargs: Any,
     ) -> LLMResponse:
-        """Route query and generate structured LLMResponse with tool calls."""
+        """구조화된 도구 호출(ToolCallData)을 포함한 LLMResponse 생성 및 라우팅."""
         tools = kwargs.get("tools")
-        # If tools are bound/passed, route to Gemini by default unless forced
+        # 도구가 전달되었거나 사용자 대면 발화인 경우 Gemini 우선 라우팅
         effective_force = force_engine
         if effective_force is None and tools and len(tools) > 0:
             effective_force = LLMEngineType.GEMINI
 
-        decision = await self.evaluate_routing(messages=messages, force_engine=effective_force)
+        decision = await self.evaluate_routing(
+            messages=messages, force_engine=effective_force, user_facing=user_facing
+        )
 
         if decision.target_engine == LLMEngineType.SLM:
             try:
