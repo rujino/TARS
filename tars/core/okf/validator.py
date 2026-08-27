@@ -36,13 +36,17 @@ def validate_okf_document(doc: OKFDocument | dict[str, Any], raise_on_error: boo
     except pydantic.ValidationError as exc:
         if raise_on_error:
             raise OKFValidationError(
-                f"OKF schema validation failed: {exc}", errors=exc.errors()  # type: ignore[arg-type]
+                f"OKF schema validation failed: {exc}",
+                errors=exc.errors(),  # type: ignore[arg-type]
             ) from exc
         return False
 
     # 1. Version Compatibility Check
     version_major = metadata.okf_version.split(".")[0]
-    if version_major not in SUPPORTED_MAJOR_VERSIONS and metadata.okf_version not in SUPPORTED_MAJOR_VERSIONS:
+    if (
+        version_major not in SUPPORTED_MAJOR_VERSIONS
+        and metadata.okf_version not in SUPPORTED_MAJOR_VERSIONS
+    ):
         msg = f"Unsupported OKF version '{metadata.okf_version}'. Supported versions: {SUPPORTED_MAJOR_VERSIONS}"
         if raise_on_error:
             raise OKFVersionError(msg)
@@ -107,7 +111,9 @@ def validate_okf_semantic_relations(docs: list[OKFDocument], raise_on_error: boo
         if doc.id not in visited:
             if has_cycle(doc.id):
                 if raise_on_error:
-                    raise OKFValidationError(f"Circular dependency detected involving document '{doc.id}'.")
+                    raise OKFValidationError(
+                        f"Circular dependency detected involving document '{doc.id}'."
+                    )
                 return False
 
     return True

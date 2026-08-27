@@ -5,91 +5,34 @@ from __future__ import annotations
 import logging
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from langchain_core.messages import BaseMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tars.core.okf.models import OKFDocument, OKFImportance, OKFMetadata, OKFType
+from tars.core.okf.models import OKFDocument, OKFMetadata
+from tars.slicer.models import (
+    CHAT_TYPE_MAP,
+    GREETING_TYPE_MAP,
+    IMPORTANCE_SCORE_MAP,
+    PROFILE_TYPE_MAPS,
+    PROFILE_WEIGHTS,
+    TASK_TYPE_MAP,
+    TYPE_SCORE_MAP,
+    HeuristicTokenCounter,
+    ITokenCounter,
+    SlicedContextResult,
+    SlicedKnowledgeResult,
+    SlicerProfile,
+    SlicerWeights,
+)
 
 logger = logging.getLogger("tars.slicer")
 
 TOKEN_SPLIT_REGEX = re.compile(r"[\s,._\-\[\]\(\)\{\}\"\'/\\;:]+")
-
-
-@runtime_checkable
-class ITokenCounter(Protocol):
-    """Protocol defining token counting contract."""
-
-    def count_tokens(self, text: str) -> int:
-        """Count or estimate the number of tokens in the provided text string."""
-        ...
-
-
-class HeuristicTokenCounter:
-    """High-performance heuristic token counter optimized for CJK and ASCII text.
-
-    Estimation rule:
-    - ASCII / alphanumeric / symbols: ~4 chars per token.
-    - CJK / Hangul / East Asian wide chars: ~1.5 chars per token.
-    """
-
-    __slots__ = ()
-
-    def count_tokens(self, text: str) -> int:
-        """Calculate estimated token count for text."""
-        if not text:
-            return 0
-
-        cjk_count = 0
-        ascii_count = 0
-
-        for char in text:
-            code = ord(char)
-            # Hangul Jamo, Compatibility Jamo, Hangul Syllables, CJK Ideographs
-            if (
-                0x1100 <= code <= 0x11FF
-                or 0x3130 <= code <= 0x318F
-                or 0xAC00 <= code <= 0xD7AF
-                or 0x2E80 <= code <= 0x9FFF
-                or 0xF900 <= code <= 0xFAFF
-            ):
-                cjk_count += 1
-            else:
-                ascii_count += 1
-
-        estimated = (ascii_count / 4.0) + (cjk_count / 1.5)
-        return max(1, math.ceil(estimated))
-
-
-class SlicerWeights(BaseModel):
-    """Configuration weights for multi-factor scoring formula."""
-
-    model_config = ConfigDict(frozen=True)
-
-    weight_importance: float = Field(default=0.25, ge=0.0, le=1.0)
-    weight_match: float = Field(default=0.40, ge=0.0, le=1.0)
-    weight_type: float = Field(default=0.25, ge=0.0, le=1.0)
-    weight_recency: float = Field(default=0.10, ge=0.0, le=1.0)
-
-
-IMPORTANCE_SCORE_MAP: Mapping[OKFImportance, float] = {
-    OKFImportance.CRITICAL: 1.00,
-    OKFImportance.HIGH: 0.75,
-    OKFImportance.MEDIUM: 0.50,
-    OKFImportance.LOW: 0.20,
-}
-
-TYPE_SCORE_MAP: Mapping[OKFType, float] = {
-    OKFType.RULE: 1.00,
-    OKFType.PREFERENCE: 0.90,
-    OKFType.PROCEDURE: 0.70,
-    OKFType.ENTITY: 0.50,
-    OKFType.CONCEPT: 0.40,
-}
 
 
 def tokenize_text(text: str) -> set[str]:
@@ -100,18 +43,44 @@ def tokenize_text(text: str) -> set[str]:
     return {t.strip() for t in raw_tokens if len(t.strip()) > 0}
 
 
+def extract_context_tokens(
+    context_messages: Sequence[str | BaseMessage | dict[str, Any]] | None,
+    max_turns: int = 5,
+) -> set[str]:
+    """Extract normalized tokens from recent conversation context turns."""
+    if not context_messages:
+        return set()
+
+    recent_turns = context_messages[-max_turns:]
+    collected_tokens: set[str] = set()
+
+    for turn in recent_turns:
+        if isinstance(turn, str):
+            collected_tokens.update(tokenize_text(turn))
+        elif isinstance(turn, BaseMessage):
+            content = str(getattr(turn, "content", ""))
+            collected_tokens.update(tokenize_text(content))
+        elif isinstance(turn, dict):
+            content = str(turn.get("content", turn.get("text", "")))
+            collected_tokens.update(tokenize_text(content))
+
+    return collected_tokens
+
+
 def calculate_match_score(
     metadata: OKFMetadata,
     query_tokens: set[str],
     active_tags: set[str],
+    context_tokens: set[str] | None = None,
+    content: str | None = None,
 ) -> float:
-    """Calculate query keyword and tag matching score in range [0.0, 1.0]."""
-    if not query_tokens and not active_tags:
+    """Calculate query keyword, multi-turn context, and tag matching score in range [0.0, 1.0]."""
+    if not query_tokens and not active_tags and not context_tokens:
         return 0.0
 
     doc_tags = {tag.lower().strip() for tag in metadata.tags if tag.strip()}
 
-    # 1. Active tags overlap
+    # 1. Active tags overlap (high confidence explicit filter)
     tag_score = 0.0
     if active_tags:
         overlap = len(active_tags.intersection(doc_tags))
@@ -123,16 +92,49 @@ def calculate_match_score(
         overlap = len(query_tokens.intersection(doc_tags))
         q_tag_score = overlap / max(1, len(doc_tags))
 
+    # Context tokens vs doc tags
+    if context_tokens and doc_tags:
+        ctx_overlap = len(context_tokens.intersection(doc_tags))
+        ctx_tag_score = ctx_overlap / max(1, len(doc_tags))
+        q_tag_score = max(q_tag_score, (q_tag_score * 0.7) + (ctx_tag_score * 0.3))
+
     # 3. Query tokens vs title, category, id
     q_text_score = 0.0
-    if query_tokens:
-        text_target = f"{metadata.title} {metadata.category or ''} {metadata.id}".lower()
-        title_tokens = tokenize_text(text_target)
+    title_category_str = f"{metadata.title} {metadata.category or ''} {metadata.id}".lower()
+    title_tokens = tokenize_text(title_category_str)
+    if query_tokens and title_tokens:
         overlap = len(query_tokens.intersection(title_tokens))
         q_text_score = overlap / max(1, len(title_tokens))
 
-    combined = (0.45 * tag_score) + (0.35 * q_tag_score) + (0.20 * q_text_score)
-    return min(1.0, combined)
+    # Multi-turn context tokens vs title/category
+    if context_tokens and title_tokens:
+        ctx_overlap = len(context_tokens.intersection(title_tokens))
+        ctx_text_score = ctx_overlap / max(1, len(title_tokens))
+        q_text_score = max(q_text_score, (q_text_score * 0.7) + (ctx_text_score * 0.3))
+
+    # 4. Content keyword & substring matching if content is available
+    c_score = 0.0
+    if content:
+        content_lower = content.lower()
+        if query_tokens:
+            content_tokens = tokenize_text(content_lower)
+            c_overlap = len(query_tokens.intersection(content_tokens))
+            c_score = min(1.0, c_overlap / max(1, min(10, len(content_tokens))))
+
+        # Substring bonus for full phrase queries
+        query_raw = " ".join(sorted(query_tokens))
+        if query_raw and (query_raw in content_lower or query_raw in title_category_str):
+            c_score = min(1.0, c_score + 0.20)
+
+    # 5. Combined similarity score (S_sim)
+    if content:
+        combined = (
+            (0.35 * tag_score) + (0.30 * q_tag_score) + (0.20 * q_text_score) + (0.15 * c_score)
+        )
+    else:
+        combined = (0.45 * tag_score) + (0.35 * q_tag_score) + (0.20 * q_text_score)
+
+    return min(1.0, max(0.0, combined))
 
 
 def calculate_recency_score(updated_at: datetime) -> float:
@@ -152,13 +154,38 @@ def compute_document_score(
     query_tokens: set[str],
     active_tags: set[str],
     weights: SlicerWeights,
+    profile: SlicerProfile | str = SlicerProfile.CHAT,
+    context_tokens: set[str] | None = None,
+    content: str | None = None,
 ) -> float:
-    """Compute combined multi-factor score for a single OKF document."""
+    """Compute combined 5-factor score for a single OKF document."""
+    # 1. S_imp: Importance score
     imp_score = IMPORTANCE_SCORE_MAP.get(metadata.importance, 0.50)
-    match_score = calculate_match_score(metadata, query_tokens, active_tags)
-    type_score = TYPE_SCORE_MAP.get(metadata.type, 0.50)
+
+    # 2. S_sim: Context & Keyword matching score
+    match_score = calculate_match_score(
+        metadata=metadata,
+        query_tokens=query_tokens,
+        active_tags=active_tags,
+        context_tokens=context_tokens,
+        content=content,
+    )
+
+    # 3. S_type: Profile-aware type score
+    try:
+        resolved_profile = (
+            profile if isinstance(profile, SlicerProfile) else SlicerProfile(str(profile).lower())
+        )
+    except ValueError:
+        resolved_profile = SlicerProfile.CHAT
+
+    type_map = PROFILE_TYPE_MAPS.get(resolved_profile, TYPE_SCORE_MAP)
+    type_score = type_map.get(metadata.type, 0.50)
+
+    # 4. S_rec: Recency score
     rec_score = calculate_recency_score(metadata.updated_at)
 
+    # Combine weighted factors
     total = (
         (weights.weight_importance * imp_score)
         + (weights.weight_match * match_score)
@@ -196,35 +223,9 @@ def format_knowledge_context_markdown(docs: Sequence[OKFDocument]) -> str:
     for doc in docs:
         meta = doc.metadata
         blocks.append(
-            f"### [{meta.type.value.upper()}] {meta.title} (id: {meta.id})\n"
-            f"{doc.content.strip()}\n"
+            f"### [{meta.type.value.upper()}] {meta.title} (id: {meta.id})\n{doc.content.strip()}\n"
         )
     return "\n".join(blocks)
-
-
-class SlicedContextResult(BaseModel):
-    """Result structure containing sliced documents and prompt context metadata."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    selected_documents: list[OKFDocument] = Field(default_factory=list)
-    total_estimated_tokens: int = Field(default=0)
-    formatted_context: str = Field(default="")
-    scores: dict[str, float] = Field(default_factory=dict)
-
-    @property
-    def documents(self) -> list[OKFDocument]:
-        """Alias for selected_documents."""
-        return self.selected_documents
-
-    @property
-    def total_tokens(self) -> int:
-        """Alias for total_estimated_tokens."""
-        return self.total_estimated_tokens
-
-
-# Alias for backward and blueprint compatibility
-SlicedKnowledgeResult = SlicedContextResult
 
 
 class DynamicSlicerEngine:
@@ -239,6 +240,7 @@ class DynamicSlicerEngine:
     ) -> None:
         self.storage_manager = storage_manager
         self.token_counter: ITokenCounter = token_counter or HeuristicTokenCounter()
+        self._custom_weights: SlicerWeights | None = weights
         self.weights: SlicerWeights = weights or SlicerWeights()
         self._db_session = db_session
 
@@ -263,8 +265,10 @@ class DynamicSlicerEngine:
         self,
         docs: Sequence[OKFDocument],
         query: str = "",
+        context_messages: Sequence[str | BaseMessage] | None = None,
         active_tags: list[str] | None = None,
         token_budget: int = 1500,
+        profile: SlicerProfile | str = SlicerProfile.CHAT,
     ) -> SlicedContextResult:
         """Slice a provided collection of OKF documents within token budget."""
         if not docs:
@@ -275,10 +279,27 @@ class DynamicSlicerEngine:
                 scores={},
             )
 
+        try:
+            resolved_profile = (
+                profile
+                if isinstance(profile, SlicerProfile)
+                else SlicerProfile(str(profile).lower())
+            )
+        except ValueError:
+            resolved_profile = SlicerProfile.CHAT
+
+        # Resolve weights: use explicit custom weights if provided, else profile weights
+        effective_weights = (
+            self._custom_weights
+            if self._custom_weights is not None
+            else PROFILE_WEIGHTS.get(resolved_profile, self.weights)
+        )
+
         query_tokens = tokenize_text(query)
+        context_tokens = extract_context_tokens(context_messages)
         norm_active_tags = {t.lower().strip() for t in (active_tags or []) if t.strip()}
 
-        # 1. Base multi-factor scoring
+        # 1. Base multi-factor scoring (5-Factor)
         doc_map: dict[str, OKFDocument] = {doc.metadata.id: doc for doc in docs}
         score_map: dict[str, float] = {}
 
@@ -287,11 +308,14 @@ class DynamicSlicerEngine:
                 metadata=doc.metadata,
                 query_tokens=query_tokens,
                 active_tags=norm_active_tags,
-                weights=self.weights,
+                weights=effective_weights,
+                profile=resolved_profile,
+                context_tokens=context_tokens,
+                content=doc.content,
             )
             score_map[okf_id] = score
 
-        # 2. 1-Hop relation expansion & boosting with cycle prevention
+        # 2. Relation expansion & graph boosting with cycle prevention
         score_map = self._expand_relations(doc_map, score_map)
 
         # 3. Sort ranked documents
@@ -350,8 +374,10 @@ class DynamicSlicerEngine:
         self,
         user_id: str,
         query: str = "",
+        context_messages: Sequence[str | BaseMessage] | None = None,
         active_tags: list[str] | None = None,
         token_budget: int = 1500,
+        profile: SlicerProfile | str = SlicerProfile.CHAT,
         db_session: AsyncSession | None = None,
     ) -> list[OKFDocument]:
         """Slice and return most relevant OKF documents for a user from storage or DB index.
@@ -359,8 +385,18 @@ class DynamicSlicerEngine:
         Conforms to PROJECT.md interface contract.
         """
         session_to_use = db_session if db_session is not None else self._db_session
+        all_docs: list[OKFDocument] = []
+
+        query_tokens = tokenize_text(query)
+        norm_active_tags = {t.lower().strip() for t in (active_tags or []) if t.strip()}
+
         if session_to_use is not None and self.storage_manager is not None:
-            all_docs = await self._fetch_via_db(user_id, session_to_use)
+            all_docs = await self._fetch_via_db(
+                user_id=user_id,
+                db_session=session_to_use,
+                query_tokens=query_tokens,
+                active_tags=norm_active_tags,
+            )
 
         if not all_docs and self.storage_manager is not None:
             try:
@@ -372,17 +408,56 @@ class DynamicSlicerEngine:
         result = await self.slice_documents(
             docs=all_docs,
             query=query,
+            context_messages=context_messages,
             active_tags=active_tags,
             token_budget=token_budget,
+            profile=profile,
         )
         return result.selected_documents
+
+    async def slice_knowledge(
+        self,
+        user_id: str,
+        query: str = "",
+        context_messages: Sequence[str | BaseMessage] | None = None,
+        token_budget: int = 1500,
+        profile: str = "chat",
+        db: AsyncSession | None = None,
+    ) -> SlicedKnowledgeResult:
+        """Alias method matching PROJECT.md interface contract returning SlicedKnowledgeResult."""
+        session_to_use = db if db is not None else self._db_session
+        all_docs: list[OKFDocument] = []
+
+        query_tokens = tokenize_text(query)
+
+        if session_to_use is not None and self.storage_manager is not None:
+            all_docs = await self._fetch_via_db(
+                user_id=user_id,
+                db_session=session_to_use,
+                query_tokens=query_tokens,
+            )
+
+        if not all_docs and self.storage_manager is not None:
+            try:
+                all_docs = await self.storage_manager.list_okf_files(user_id)
+            except Exception as e:
+                logger.warning("Failed to list files from storage for user %s: %s", user_id, e)
+                all_docs = []
+
+        return await self.slice_documents(
+            docs=all_docs,
+            query=query,
+            context_messages=context_messages,
+            token_budget=token_budget,
+            profile=profile,
+        )
 
     def _expand_relations(
         self,
         doc_map: dict[str, OKFDocument],
         score_map: dict[str, float],
     ) -> dict[str, float]:
-        """Expand 1-hop depends_on and related_to relations with cycle detection."""
+        """Expand depends_on and related_to relations with cycle detection."""
         updated_scores = dict(score_map)
         visited: set[str] = set()
 
@@ -396,7 +471,7 @@ class DynamicSlicerEngine:
             seed_doc = doc_map[seed_id]
             relations = seed_doc.metadata.relations
 
-            # 1. depends_on: Essential dependency promotion
+            # 1. depends_on: Essential dependency promotion (95% seed score)
             for dep_id in relations.depends_on:
                 if dep_id in doc_map and dep_id not in visited:
                     current_dep_score = updated_scores.get(dep_id, 0.0)
@@ -416,17 +491,48 @@ class DynamicSlicerEngine:
         self,
         user_id: str,
         db_session: AsyncSession,
+        query_tokens: set[str] | None = None,
+        active_tags: set[str] | None = None,
+        candidate_limit: int = 25,
     ) -> list[OKFDocument]:
-        """Pre-query DB metadata index for fast candidate retrieval."""
+        """Pre-query DB metadata index for fast candidate pre-filtering before disk I/O."""
         try:
             from tars.db.models import UserWikiIndex
 
-            stmt = select(UserWikiIndex.okf_id).where(UserWikiIndex.user_id == user_id)
+            stmt = select(UserWikiIndex).where(UserWikiIndex.user_id == user_id)
             result = await db_session.execute(stmt)
-            okf_ids = [row[0] for row in result.all()]
+            records = result.scalars().all()
+
+            if not records:
+                return []
+
+            # If user has fewer records than limit, read all of them
+            if len(records) <= candidate_limit:
+                candidate_ids = [r.okf_id for r in records]
+            else:
+                # Fast in-memory metadata scoring on DB index records
+                scored_candidates: list[tuple[str, float]] = []
+                for rec in records:
+                    rec_tags = set(rec.tags) if isinstance(rec.tags, list) else set()
+                    tag_overlap = len(rec_tags.intersection(active_tags)) if active_tags else 0
+                    q_overlap = len(rec_tags.intersection(query_tokens)) if query_tokens else 0
+                    title_tokens = tokenize_text(f"{rec.title} {rec.category or ''}")
+                    title_overlap = (
+                        len(query_tokens.intersection(title_tokens)) if query_tokens else 0
+                    )
+                    meta_score = (
+                        (tag_overlap * 2.0)
+                        + (q_overlap * 1.5)
+                        + (title_overlap * 1.0)
+                        + (1.0 if rec.importance == "critical" else 0.5)
+                    )
+                    scored_candidates.append((rec.okf_id, meta_score))
+
+                scored_candidates.sort(key=lambda x: x[1], reverse=True)
+                candidate_ids = [c[0] for c in scored_candidates[:candidate_limit]]
 
             docs: list[OKFDocument] = []
-            for okf_id in okf_ids:
+            for okf_id in candidate_ids:
                 try:
                     doc = await self.storage_manager.read_okf_file(user_id, okf_id)
                     docs.append(doc)
@@ -450,15 +556,24 @@ class DynamicSlicerEngine:
 
 
 __all__ = [
+    "CHAT_TYPE_MAP",
     "DynamicSlicerEngine",
+    "GREETING_TYPE_MAP",
     "HeuristicTokenCounter",
+    "IMPORTANCE_SCORE_MAP",
     "ITokenCounter",
+    "PROFILE_TYPE_MAPS",
+    "PROFILE_WEIGHTS",
     "SlicedContextResult",
     "SlicedKnowledgeResult",
+    "SlicerProfile",
     "SlicerWeights",
+    "TASK_TYPE_MAP",
+    "TYPE_SCORE_MAP",
     "calculate_match_score",
     "calculate_recency_score",
     "compute_document_score",
+    "extract_context_tokens",
     "format_knowledge_context_markdown",
     "format_knowledge_context_xml",
     "tokenize_text",

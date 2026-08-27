@@ -36,7 +36,7 @@ def make_test_okf_doc(doc_id: str, title: str, content: str) -> OKFDocument:
         title=title,
         source=OKFSource.SYSTEM,
     )
-    return OKFDocument(frontmatter=fm, body=content)
+    return OKFDocument(metadata=fm, content=content)
 
 
 # ============================================================================
@@ -146,4 +146,4 @@ def test_persona_config_boundary_validation() -> None:
         TARSPersonaConfig(humor_level=-0.1, honesty_level=0.95, mode="companion")
 
     with pytest.raises((ValueError, Exception)):
-        TARSPersonaConfig(humor_level=0.90, honesty_level=0.95, mode="invalid_mode")
+        TARSPersonaConfig(humor_level=0.90, honesty_level=0.95, mode="invalid_mode")  # type: ignore[arg-type]

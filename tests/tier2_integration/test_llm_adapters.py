@@ -223,6 +223,7 @@ async def test_hybrid_router_force_engine_override(
             force_engine=LLMEngineType.GEMINI,
         )
     ]
+    assert len(chunks) > 0
     assert len(mock_gemini_adapter.call_history) == 1
     assert len(mock_llama_adapter.call_history) == 0
 

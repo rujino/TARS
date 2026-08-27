@@ -43,7 +43,7 @@ def make_doc(doc_id: str, title: str = "Test Doc", content: str = "Test Content"
         title=title,
         source=OKFSource.MANUAL,
     )
-    return OKFDocument(frontmatter=fm, body=content)
+    return OKFDocument(metadata=fm, content=content)
 
 
 # ============================================================================

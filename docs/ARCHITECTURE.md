@@ -57,5 +57,13 @@ TARS 프로젝트는 **"오브젝트 스토리지(지식 원본) + RDBMS(메타�
    - 고정된 도구 스키마만 캐싱하여 75% 비용 절감 및 지연 시간 최소화.
 4. **Self-Evolving Knowledge Loop**:
    - 비동기 백그라운드 지식 추출을 통한 지속적인 OKF 파일 자동 생성 및 자가 학습.
-5. **On-Device TTS & Standard Security**:
+5. **음성 우선 능동 대화 & 스마트 세션 라이프사이클 (Voice-First Session Architecture)**:
+   - **App-Launch Greeting**: 앱 실행 즉시 시간대/이전 맥락/OKF 지식을 결합해 1~2문장의 능동 오프닝을 먼저 발화하고 마이크 리스닝 모드로 즉시 전환.
+   - **Dual-Layer Memory**: 단기 작업 기억(Session/Context Window)은 시간 경과/주제 전환에 따라 기민하게 분기/초기화하고, 장기 기억은 비동기 OKF 파일로 영구 보존하여 세션 단절 없는 연속성 보장.
+6. **On-Device TTS & Standard Security**:
    - 온디바이스 TTS로 서버 부하 0% 달성 및 Nginx + Let's Encrypt 정식 SSL/TLS 보안 통신.
+7. **사용자별 토글형 원클릭 플러그인 허브 (User-Scoped Toggleable Tool Hub)**:
+   - 사용자마다 원하는 도구(Google Workspace, 개인 Notion, 공용 날씨/뉴스 MCP, 로컬 파일시스템 MCP 등)를 UI에서 스위치 토글로 활성화.
+   - 내부의 복잡한 전송 방식(`stdio` 프로세스 파이프, 원격 `SSE/HTTP` 네트워크, OAuth2 토큰 갱신)을 사용자 모르게 완전히 은닉화(캡슐화).
+   - 대화 세션 시 해당 유저의 권한과 활성화 목록에 맞춘 `ToolRegistry`를 동적으로 조립 및 주입(Per-User Tool Assembly).
+

@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from tars.adapters.base import BaseLLMAdapter
+from tars.adapters.base import BaseLLMAdapter, LLMResponse, ToolCallData
 from tars.api.app import create_app
 from tars.api.dependencies import get_db_session, get_storage_manager
 from tars.core.okf.models import (
@@ -238,7 +238,9 @@ async def api_client(
             yield session
 
     app.dependency_overrides[get_db_session] = override_get_db
-    app.dependency_overrides[get_storage_manager] = lambda: FileStorageManager(base_dir=temp_storage_root)
+    app.dependency_overrides[get_storage_manager] = lambda: FileStorageManager(
+        base_dir=temp_storage_root
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -273,17 +275,43 @@ class MockLLMAdapter(BaseLLMAdapter):
         simulated_delay: float = 0.0,
         simulate_delay: float | None = None,
         should_fail: bool = False,
+        tool_calls_sequence: list[list[ToolCallData]] | None = None,
     ) -> None:
         self.name = name
-        self.canned_response = canned_response or "TARS: Affirmative. System ready."
-        self.default_responses = default_responses or [self.canned_response]
+        if default_responses is not None:
+            self.default_responses = default_responses
+            self.canned_response = None
+        else:
+            self.canned_response = canned_response or "TARS: Affirmative. System ready."
+            self.default_responses = [self.canned_response]
         self.stream_chunks = stream_chunks or ["TARS: ", "Navigation ", "locked."]
         self._response_idx = 0
+        self._tool_call_idx = 0
+        self.tool_calls_sequence = tool_calls_sequence or []
+        self.bound_tools: list[dict[str, Any]] = []
         self.is_healthy_result = is_healthy_result
         self.simulated_delay = simulate_delay if simulate_delay is not None else simulated_delay
         self.should_fail = should_fail
         self.call_history: list[dict[str, Any]] = []
         self.recorded_calls: list[dict[str, Any]] = self.call_history
+
+    def bind_tools(self, tools: Sequence[dict[str, Any]]) -> MockLLMAdapter:
+        self.bound_tools = list(tools)
+        return self
+
+    async def agenerate_response(
+        self,
+        messages: Sequence[Any],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Simulate structured response generation with tool calls."""
+        text = await self.agenerate(messages, system_prompt=system_prompt, **kwargs)
+        tool_calls: list[ToolCallData] = []
+        if self.tool_calls_sequence and self._tool_call_idx < len(self.tool_calls_sequence):
+            tool_calls = self.tool_calls_sequence[self._tool_call_idx]
+            self._tool_call_idx += 1
+        return LLMResponse(content=text, tool_calls=tool_calls)
 
     async def astream(
         self,
@@ -292,12 +320,14 @@ class MockLLMAdapter(BaseLLMAdapter):
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """Simulate real-time token chunk streaming."""
-        self.call_history.append({
-            "method": "astream",
-            "messages": list(messages),
-            "system_prompt": system_prompt,
-            "kwargs": kwargs,
-        })
+        self.call_history.append(
+            {
+                "method": "astream",
+                "messages": list(messages),
+                "system_prompt": system_prompt,
+                "kwargs": kwargs,
+            }
+        )
         if self.should_fail:
             raise RuntimeError("Simulated SLM streaming error")
         if self.simulated_delay > 0:
@@ -320,18 +350,23 @@ class MockLLMAdapter(BaseLLMAdapter):
         **kwargs: Any,
     ) -> str:
         """Simulate full text response generation."""
-        self.call_history.append({
-            "method": "agenerate",
-            "messages": list(messages),
-            "system_prompt": system_prompt,
-            "kwargs": kwargs,
-        })
+        self.call_history.append(
+            {
+                "method": "agenerate",
+                "messages": list(messages),
+                "system_prompt": system_prompt,
+                "kwargs": kwargs,
+            }
+        )
         if self.should_fail:
             raise RuntimeError("Simulated SLM generation error")
         if self.simulated_delay > 0:
             await asyncio.sleep(self.simulated_delay)
 
-        resp = self.canned_response or self.default_responses[self._response_idx % len(self.default_responses)]
+        if self.default_responses:
+            resp = self.default_responses[self._response_idx % len(self.default_responses)]
+        else:
+            resp = self.canned_response or "TARS: Affirmative. System ready."
         self._response_idx += 1
         return resp
 

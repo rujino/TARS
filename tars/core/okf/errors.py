@@ -35,7 +35,6 @@ class OKFInvalidFrontmatterError(OKFParseError):
     """Raised when YAML frontmatter syntax is malformed or not a valid dictionary mapping."""
 
 
-
 class OKFValidationError(OKFError):
     """Raised when an OKF document fails schema validation or semantic constraint checks."""
 
@@ -52,12 +51,9 @@ class OKFMissingFieldError(OKFValidationError):
     """Raised when a mandatory OKF frontmatter field is missing."""
 
 
-
 class OKFSerializationError(OKFError):
     """Raised when serializing an OKF document to YAML/Markdown fails."""
 
 
-
 class OKFVersionError(OKFValidationError):
     """Raised when an unsupported OKF specification version is encountered."""
-

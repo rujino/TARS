@@ -48,7 +48,9 @@ def _extract_frontmatter_and_body(raw_text: str) -> tuple[str, str]:
         )
 
     if start_idx is None:
-        raise OKFInvalidFrontmatterError("Empty document or missing opening frontmatter delimiter '---'.")
+        raise OKFInvalidFrontmatterError(
+            "Empty document or missing opening frontmatter delimiter '---'."
+        )
 
     # Find closing delimiter
     end_idx: int | None = None
@@ -59,7 +61,9 @@ def _extract_frontmatter_and_body(raw_text: str) -> tuple[str, str]:
             break
 
     if end_idx is None:
-        raise OKFInvalidFrontmatterError("Unclosed frontmatter delimiter. Expected closing '---' not found.")
+        raise OKFInvalidFrontmatterError(
+            "Unclosed frontmatter delimiter. Expected closing '---' not found."
+        )
 
     frontmatter_yaml = "".join(lines[start_idx + 1 : end_idx])
     body = "".join(lines[end_idx + 1 :])
@@ -101,7 +105,9 @@ def parse_okf_text(raw_text: str, file_path: str | None = None) -> OKFDocument:
         )
 
     # Check for missing mandatory fields explicitly for specialized exception
-    missing_fields = [field for field in ("id", "type", "title") if field not in data or data[field] is None]
+    missing_fields = [
+        field for field in ("id", "type", "title") if field not in data or data[field] is None
+    ]
     if missing_fields:
         raise OKFMissingFieldError(
             f"Missing required OKF frontmatter field(s): {', '.join(missing_fields)}"

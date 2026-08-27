@@ -94,36 +94,37 @@ def test_websocket_streaming_full_lifecycle(
 
     with patch("tars.api.routers.chat.get_session_factory", return_value=test_session_factory):
         with patch.object(HybridLLMRouter, "route_and_stream", side_effect=mock_stream):
-            with client.websocket_connect(f"/api/v1/chat/ws?token={test_user_token}") as websocket:
-                # 1. Send chat message
-                send_payload = {
-                    "type": "chat_message",
-                    "session_id": "session_ws_001",
-                    "content": "TARS, check atmosphere.",
-                }
-                websocket.send_json(send_payload)
+            with patch("tars.api.routers.chat._execute_background_knowledge_extraction"):
+                with client.websocket_connect(f"/api/v1/chat/ws?token={test_user_token}") as websocket:
+                    # 1. Send chat message
+                    send_payload = {
+                        "type": "chat_message",
+                        "session_id": "session_ws_001",
+                        "content": "TARS, check atmosphere.",
+                    }
+                    websocket.send_json(send_payload)
 
-                # 2. Collect incoming frames
-                received_frames: list[dict[str, Any]] = []
-                while True:
-                    data = websocket.receive_json()
-                    received_frames.append(data)
-                    if data.get("type") == "stream_end" or data.get("event") == "stream_end":
-                        break
+                    # 2. Collect incoming frames
+                    received_frames: list[dict[str, Any]] = []
+                    while True:
+                        data = websocket.receive_json()
+                        received_frames.append(data)
+                        if data.get("type") == "stream_end" or data.get("event") == "stream_end":
+                            break
 
-                # 3. Validate lifecycle sequence
-                event_types = [f.get("type") or f.get("event") for f in received_frames]
-                assert "stream_start" in event_types
-                assert "token" in event_types
-                assert "stream_end" in event_types
+                    # 3. Validate lifecycle sequence
+                    event_types = [f.get("type") or f.get("event") for f in received_frames]
+                    assert "stream_start" in event_types
+                    assert "token" in event_types
+                    assert "stream_end" in event_types
 
-                # Verify tokens reconstruct original output
-                token_frames = [
-                    f.get("content") or f.get("delta") or f.get("data", {}).get("content", "")
-                    for f in received_frames
-                    if (f.get("type") or f.get("event")) == "token"
-                ]
-                assert "".join(token_frames) == "TARS: Atmospheric pressure is normal."
+                    # Verify tokens reconstruct original output
+                    token_frames = [
+                        f.get("content") or f.get("delta") or f.get("data", {}).get("content", "")
+                        for f in received_frames
+                        if (f.get("type") or f.get("event")) == "token"
+                    ]
+                    assert "".join(token_frames) == "TARS: Atmospheric pressure is normal."
 
 
 # ============================================================================
@@ -164,26 +165,35 @@ def test_websocket_multi_turn_in_single_connection(
 
             mock_router_stream.side_effect = [turn1_stream(), turn2_stream()]
 
-            with client.websocket_connect(f"/api/v1/chat/ws?token={test_user_token}") as ws:
-                # --- Turn 1 ---
-                ws.send_json({"type": "chat_message", "session_id": "multi_ws", "content": "Turn 1"})
-                frames_turn1 = []
-                while True:
-                    f = ws.receive_json()
-                    frames_turn1.append(f)
-                    if (f.get("type") or f.get("event")) == "stream_end":
-                        break
-                assert any((f.get("type") or f.get("event")) == "stream_start" for f in frames_turn1)
+            with patch("tars.api.routers.chat._execute_background_knowledge_extraction"):
+                with client.websocket_connect(f"/api/v1/chat/ws?token={test_user_token}") as ws:
+                    # --- Turn 1 ---
+                    ws.send_json(
+                        {"type": "chat_message", "session_id": "multi_ws", "content": "Turn 1"}
+                    )
+                    frames_turn1 = []
+                    while True:
+                        f = ws.receive_json()
+                        frames_turn1.append(f)
+                        if (f.get("type") or f.get("event")) == "stream_end":
+                            break
+                    assert any(
+                        (f.get("type") or f.get("event")) == "stream_start" for f in frames_turn1
+                    )
 
-                # --- Turn 2 ---
-                ws.send_json({"type": "chat_message", "session_id": "multi_ws", "content": "Turn 2"})
-                frames_turn2 = []
-                while True:
-                    f = ws.receive_json()
-                    frames_turn2.append(f)
-                    if (f.get("type") or f.get("event")) == "stream_end":
-                        break
-                assert any((f.get("type") or f.get("event")) == "stream_start" for f in frames_turn2)
+                    # --- Turn 2 ---
+                    ws.send_json(
+                        {"type": "chat_message", "session_id": "multi_ws", "content": "Turn 2"}
+                    )
+                    frames_turn2 = []
+                    while True:
+                        f = ws.receive_json()
+                        frames_turn2.append(f)
+                        if (f.get("type") or f.get("event")) == "stream_end":
+                            break
+                    assert any(
+                        (f.get("type") or f.get("event")) == "stream_start" for f in frames_turn2
+                    )
 
 
 # ============================================================================

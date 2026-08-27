@@ -30,21 +30,24 @@ class LlamaCppAdapter(BaseLLMAdapter):
         self,
         base_url: str | None = None,
         timeout_ms: int = 500,
-        model_name: str = "default",
+        model_name: str | None = None,
         temperature: float = 0.7,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.base_url = (base_url or get_settings().llamacpp_base_url).rstrip("/")
+        settings = get_settings()
+        self.base_url = (base_url or settings.llamacpp_base_url).rstrip("/")
         self.timeout_ms = timeout_ms
         self.timeout_sec = timeout_ms / 1000.0
-        self.model_name = model_name
+        self.model_name = model_name or settings.llamacpp_model_name
         self.temperature = temperature
         self._client = client
 
     def _get_http_client(self) -> httpx.AsyncClient:
         """Obtain or instantiate an AsyncClient with default timeout."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(self.timeout_sec * 4.0))
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=10.0)
+            )
         return self._client
 
     def _format_messages_for_slm(
@@ -76,7 +79,11 @@ class LlamaCppAdapter(BaseLLMAdapter):
     ) -> str:
         """Internal HTTP POST worker for full text generation (mockable in tests)."""
         client = self._get_http_client()
-        url = f"{self.base_url}/chat/completions" if self.base_url.endswith("/v1") else f"{self.base_url}/v1/chat/completions"
+        url = (
+            f"{self.base_url}/chat/completions"
+            if self.base_url.endswith("/v1")
+            else f"{self.base_url}/v1/chat/completions"
+        )
         payload = {
             "model": self.model_name,
             "messages": self._format_messages_for_slm(messages, system_prompt),
@@ -84,7 +91,7 @@ class LlamaCppAdapter(BaseLLMAdapter):
             "stream": False,
         }
 
-        response = await client.post(url, json=payload, timeout=self.timeout_sec * 6.0)
+        response = await client.post(url, json=payload, timeout=max(self.timeout_sec * 6.0, 30.0))
         response.raise_for_status()
         data = response.json()
         choices = data.get("choices", [])
@@ -100,7 +107,11 @@ class LlamaCppAdapter(BaseLLMAdapter):
     ) -> AsyncIterator[str]:
         """Internal HTTP streaming worker for SSE tokens (mockable in tests)."""
         client = self._get_http_client()
-        url = f"{self.base_url}/chat/completions" if self.base_url.endswith("/v1") else f"{self.base_url}/v1/chat/completions"
+        url = (
+            f"{self.base_url}/chat/completions"
+            if self.base_url.endswith("/v1")
+            else f"{self.base_url}/v1/chat/completions"
+        )
         payload = {
             "model": self.model_name,
             "messages": self._format_messages_for_slm(messages, system_prompt),
@@ -108,7 +119,9 @@ class LlamaCppAdapter(BaseLLMAdapter):
             "stream": True,
         }
 
-        async with client.stream("POST", url, json=payload, timeout=self.timeout_sec * 6.0) as response:
+        async with client.stream(
+            "POST", url, json=payload, timeout=max(self.timeout_sec * 6.0, 60.0)
+        ) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
                 clean_line = line.strip()
@@ -129,9 +142,14 @@ class LlamaCppAdapter(BaseLLMAdapter):
     async def _probe_endpoint_health(self) -> bool:
         """Internal health probe worker connecting to local server (mockable in tests)."""
         client = self._get_http_client()
+        root_url = self.base_url[:-3] if self.base_url.endswith("/v1") else self.base_url
+        v1_url = self.base_url if self.base_url.endswith("/v1") else f"{self.base_url}/v1"
+
         probe_urls = [
-            f"{self.base_url}/health",
-            f"{self.base_url}/models" if self.base_url.endswith("/v1") else f"{self.base_url}/v1/models",
+            f"{root_url}/health",
+            f"{v1_url}/health",
+            f"{v1_url}/models",
+            f"{root_url}/models",
         ]
         for url in probe_urls:
             try:
@@ -158,7 +176,9 @@ class LlamaCppAdapter(BaseLLMAdapter):
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """Stream token chunks from local SLM via SSE."""
-        async for chunk in self._http_stream_completion(messages, system_prompt=system_prompt, **kwargs):
+        async for chunk in self._http_stream_completion(
+            messages, system_prompt=system_prompt, **kwargs
+        ):
             yield chunk
 
     async def is_healthy(self) -> bool:

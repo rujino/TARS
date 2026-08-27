@@ -39,9 +39,7 @@ async def signup(
 ) -> dict[str, Any]:
     """Register a new user, create default TARS settings, and return access token."""
     # Check for existing user with same username or email
-    stmt = select(User).where(
-        or_(User.username == payload.username, User.email == payload.email)
-    )
+    stmt = select(User).where(or_(User.username == payload.username, User.email == payload.email))
     res = await db.execute(stmt)
     existing = res.scalar_one_or_none()
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator
 
 from fastapi import Depends, HTTPException, Security, status
@@ -14,6 +15,14 @@ from tars.core.security import decode_access_token
 from tars.db.models import User
 from tars.db.session import get_session_factory
 from tars.storage.manager import FileStorageManager
+from tars.tools.google.calendar import GoogleCalendarAdapter
+from tars.tools.google.gmail import GmailAdapter
+from tars.tools.mcp.adapter import register_mcp_server_tools
+from tars.tools.mcp.client import AsyncMCPClient
+from tars.tools.mcp.models import MCPServerConfig
+from tars.tools.registry import ToolRegistry
+
+logger = logging.getLogger("tars.api.dependencies")
 
 security_bearer = HTTPBearer(auto_error=False)
 
@@ -33,6 +42,32 @@ def get_storage_manager() -> FileStorageManager:
     """Provide the application file storage manager."""
     settings = get_settings()
     return FileStorageManager(base_dir=settings.storage_dir)
+
+
+async def get_tool_registry() -> ToolRegistry:
+    """Provide the application ToolRegistry with default Google and configured MCP tools."""
+    settings = get_settings()
+    registry = ToolRegistry()
+
+    # 1. Google Workspace tools (Auto-configured with mock/real mode based on credentials)
+    calendar_adapter = GoogleCalendarAdapter()
+    gmail_adapter = GmailAdapter()
+    registry.register_many(calendar_adapter.get_tools())
+    registry.register_many(gmail_adapter.get_tools())
+
+    # 2. Configured MCP server tools
+    for srv_cfg in settings.mcp_servers:
+        try:
+            client = AsyncMCPClient(config=MCPServerConfig(**srv_cfg))
+            await register_mcp_server_tools(client=client, registry=registry)
+        except Exception as exc:
+            logger.warning(
+                "Failed to register MCP server '%s': %s",
+                srv_cfg.get("name", "unknown"),
+                exc,
+            )
+
+    return registry
 
 
 async def get_current_user(
@@ -78,4 +113,5 @@ __all__ = [
     "get_current_user",
     "get_db_session",
     "get_storage_manager",
+    "get_tool_registry",
 ]

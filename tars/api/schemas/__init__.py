@@ -8,6 +8,8 @@ from tars.api.schemas.auth import (
 )
 from tars.api.schemas.chat import (
     ChatStreamRequest,
+    GreetingResponse,
+    SessionInfoResponse,
     WSMessageIn,
     WSMessageOut,
 )
@@ -18,6 +20,8 @@ from tars.api.schemas.config import (
 
 __all__ = [
     "ChatStreamRequest",
+    "GreetingResponse",
+    "SessionInfoResponse",
     "TARSConfigResponse",
     "TARSConfigUpdateRequest",
     "TokenResponse",

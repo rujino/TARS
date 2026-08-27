@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from tars.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from tars.db.models import (
+    ChatMessage,
+    ChatSession,
     TARSSettings,
     TarsSettings,
     User,
@@ -20,6 +22,8 @@ from tars.db.session import (
 
 __all__ = [
     "Base",
+    "ChatMessage",
+    "ChatSession",
     "TARSSettings",
     "TarsSettings",
     "TimestampMixin",

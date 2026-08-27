@@ -18,7 +18,8 @@ from typing import Any
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from tars.adapters.base import BaseLLMAdapter
+from tars.adapters.base import BaseLLMAdapter, LLMResponse
+from tars.config import get_settings
 
 logger = logging.getLogger("tars.adapters.router")
 
@@ -37,7 +38,9 @@ class RoutingDecision(BaseModel):
 
     target_engine: LLMEngineType = Field(..., description="Selected LLM execution engine")
     reason: str = Field(..., description="Rationale for routing decision")
-    is_fallback: bool = Field(default=False, description="True if decision is a fallback from unhealthy SLM")
+    is_fallback: bool = Field(
+        default=False, description="True if decision is a fallback from unhealthy SLM"
+    )
 
 
 # Regex patterns for intent classification
@@ -52,7 +55,8 @@ COMPLEX_REASONING_PATTERNS = re.compile(
 CASUAL_CHAT_PATTERNS = re.compile(
     r"\b(hello|hi|hey|greetings|good\s+morning|good\s+evening|good\s+afternoon|"
     r"how\s+are\s+you|how\'s\s+it\s+going|what\'s\s+up|who\s+are\s+you|tell\s+me\s+a\s+joke|"
-    r"joke|status\s+report|standing\s+by|quick\s+hello|ready|thank\s+you|thanks)\b",
+    r"joke|status\s+report|standing\s+by|quick\s+hello|ready|thank\s+you|thanks|"
+    r"안녕|안녕하세요|반가워|하이|고마워|감사합니다|상태\s*보고|농담\s*해봐|너\s*누구야)\b",
     re.IGNORECASE,
 )
 
@@ -64,19 +68,32 @@ class HybridLLMRouter:
         self,
         gemini_adapter: BaseLLMAdapter,
         slm_adapter: BaseLLMAdapter,
-        slm_timeout_ms: int = 500,
+        slm_timeout_ms: int | None = None,
     ) -> None:
         self.gemini_adapter = gemini_adapter
         self.slm_adapter = slm_adapter
-        self.slm_timeout_ms = slm_timeout_ms
-        self.slm_timeout_sec = slm_timeout_ms / 1000.0
+        timeout = (
+            slm_timeout_ms if slm_timeout_ms is not None else get_settings().llamacpp_timeout_ms
+        )
+        self.slm_timeout_ms = timeout
+        self.slm_timeout_sec = timeout / 1000.0
 
     async def evaluate_routing(
         self,
         messages: Sequence[BaseMessage],
         force_engine: LLMEngineType | None = None,
+        user_facing: bool = False,
     ) -> RoutingDecision:
-        """Evaluate messages to select target engine with health probe checking."""
+        """의도 분류 및 헬스 체크 기반 타깃 LLM/SLM 엔진 평가 라우팅.
+
+        [아키텍처 원칙]:
+        1. 사용자 대화 응답(User-Facing Response, user_facing=True):
+           - TARS 고유 페르소나(유머 90%, 정직 95%) 및 지식 융합을 위해 Google Gemini 100% 전담.
+        2. 내부 경량 추론(Internal Preprocessing, user_facing=False):
+           - 빠른 의도 분류, 단순 전처리, 키워드 추출 등은 로컬 SLM(llama.cpp) 전담 (초저지연, 비용 0원).
+        3. 500ms Fallback Circuit Breaker:
+           - 로컬 SLM 비정상/타임아웃 발생 시 Gemini로 즉각 자동 Fallback.
+        """
         if force_engine is not None:
             return RoutingDecision(
                 target_engine=force_engine,
@@ -91,10 +108,16 @@ class HybridLLMRouter:
                 is_fallback=False,
             )
 
+        # 사용자 대면 발화(User-Facing)인 경우 아키텍처 원칙에 따라 Gemini 전담
+        if user_facing:
+            return RoutingDecision(
+                target_engine=LLMEngineType.GEMINI,
+                reason="user_facing_response",
+                is_fallback=False,
+            )
+
         # Extract latest user message content
-        user_texts: list[str] = [
-            str(m.content) for m in messages if isinstance(m, HumanMessage)
-        ]
+        user_texts: list[str] = [str(m.content) for m in messages if isinstance(m, HumanMessage)]
         last_text = user_texts[-1] if user_texts else str(messages[-1].content)
 
         # 1. Complex reasoning / tool execution check -> Gemini
@@ -133,10 +156,13 @@ class HybridLLMRouter:
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
         force_engine: LLMEngineType | None = None,
+        user_facing: bool = False,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Route query and stream response with 500ms circuit breaker fallback."""
-        decision = await self.evaluate_routing(messages=messages, force_engine=force_engine)
+        """의도 기반 쿼리 라우팅 및 500ms 서킷 브레이커 Fallback 실시간 토큰 스트리밍."""
+        decision = await self.evaluate_routing(
+            messages=messages, force_engine=force_engine, user_facing=user_facing
+        )
 
         if decision.target_engine == LLMEngineType.SLM:
             try:
@@ -145,7 +171,6 @@ class HybridLLMRouter:
                     system_prompt=system_prompt,
                     **kwargs,
                 )
-                yielded_any = False
                 while True:
                     try:
                         chunk = await asyncio.wait_for(
@@ -153,13 +178,17 @@ class HybridLLMRouter:
                             timeout=self.slm_timeout_sec,
                         )
                         yield chunk
-                        yielded_any = True
                     except StopAsyncIteration:
                         break
                 return
             except Exception as slm_err:
+                err_detail = (
+                    f"{type(slm_err).__name__}: {slm_err}"
+                    if str(slm_err)
+                    else type(slm_err).__name__
+                )
                 logger.warning(
-                    "SLM streaming failed or timed out (%s). Falling back to Gemini.", slm_err
+                    "SLM streaming failed or timed out (%s). Falling back to Gemini.", err_detail
                 )
                 async for chunk in self.gemini_adapter.astream(
                     messages=messages,
@@ -182,10 +211,13 @@ class HybridLLMRouter:
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
         force_engine: LLMEngineType | None = None,
+        user_facing: bool = False,
         **kwargs: Any,
     ) -> str:
-        """Route query and generate complete text with circuit breaker fallback."""
-        decision = await self.evaluate_routing(messages=messages, force_engine=force_engine)
+        """단일 턴 텍스트 완결 생성 (회로 차단기 Fallback 지원)."""
+        decision = await self.evaluate_routing(
+            messages=messages, force_engine=force_engine, user_facing=user_facing
+        )
 
         if decision.target_engine == LLMEngineType.SLM:
             try:
@@ -194,12 +226,99 @@ class HybridLLMRouter:
                     timeout=self.slm_timeout_sec,
                 )
             except Exception as slm_err:
-                logger.warning("SLM generation failed (%s). Falling back to Gemini.", slm_err)
+                err_detail = (
+                    f"{type(slm_err).__name__}: {slm_err}"
+                    if str(slm_err)
+                    else type(slm_err).__name__
+                )
+                logger.warning("SLM generation failed (%s). Falling back to Gemini.", err_detail)
                 return await self.gemini_adapter.agenerate(
                     messages, system_prompt=system_prompt, **kwargs
                 )
 
         return await self.gemini_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs)
+
+    async def route_and_generate_response(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        force_engine: LLMEngineType | None = None,
+        user_facing: bool = False,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """구조화된 도구 호출(ToolCallData)을 포함한 LLMResponse 생성 및 라우팅."""
+        tools = kwargs.get("tools")
+        # 도구가 전달되었거나 사용자 대면 발화인 경우 Gemini 우선 라우팅
+        effective_force = force_engine
+        if effective_force is None and tools and len(tools) > 0:
+            effective_force = LLMEngineType.GEMINI
+
+        decision = await self.evaluate_routing(
+            messages=messages, force_engine=effective_force, user_facing=user_facing
+        )
+
+        if decision.target_engine == LLMEngineType.SLM:
+            try:
+                if hasattr(self.slm_adapter, "agenerate_response"):
+                    return await asyncio.wait_for(
+                        self.slm_adapter.agenerate_response(
+                            messages, system_prompt=system_prompt, **kwargs
+                        ),
+                        timeout=self.slm_timeout_sec,
+                    )
+                text = await asyncio.wait_for(
+                    self.slm_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs),
+                    timeout=self.slm_timeout_sec,
+                )
+                return LLMResponse(content=text, tool_calls=[])
+            except Exception as slm_err:
+                err_detail = (
+                    f"{type(slm_err).__name__}: {slm_err}"
+                    if str(slm_err)
+                    else type(slm_err).__name__
+                )
+                logger.warning("SLM generation failed (%s). Falling back to Gemini.", err_detail)
+
+        if hasattr(self.gemini_adapter, "agenerate_response"):
+            return await self.gemini_adapter.agenerate_response(
+                messages, system_prompt=system_prompt, **kwargs
+            )
+        text = await self.gemini_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs)
+        return LLMResponse(content=text, tool_calls=[])
+
+    async def agenerate_response(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Generate structured response (BaseLLMAdapter interface)."""
+        return await self.route_and_generate_response(
+            messages=messages, system_prompt=system_prompt, **kwargs
+        )
+
+    async def agenerate(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> str:
+        """Route query and generate complete text (BaseLLMAdapter interface)."""
+        return await self.route_and_generate(
+            messages=messages, system_prompt=system_prompt, **kwargs
+        )
+
+    async def astream(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
+        """Route query and stream tokens (BaseLLMAdapter interface)."""
+        async for chunk in self.route_and_stream(
+            messages=messages, system_prompt=system_prompt, **kwargs
+        ):
+            yield chunk
 
 
 __all__ = [
