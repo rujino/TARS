@@ -8,15 +8,19 @@ Verifies:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from tars.adapters.router import HybridLLMRouter
-from tars.api.dependencies import get_tool_registry
+from tars.api.app import create_app
+from tars.api.dependencies import get_db_session, get_storage_manager, get_tool_registry
 from tars.db.models import User
+from tars.storage.manager import FileStorageManager
 from tars.tools.base import BaseTool
 from tars.tools.registry import ToolRegistry
 
@@ -48,14 +52,15 @@ async def test_get_tool_registry_default_tools() -> None:
     assert "calendar_list_events" in tool_names
     assert "calendar_create_event" in tool_names
     assert "calendar_delete_event" in tool_names
-    assert "gmail_list_messages" in tool_names
+    assert "gmail_search_messages" in tool_names
+    assert "gmail_get_message" in tool_names
     assert "gmail_send_message" in tool_names
 
 
 @pytest.mark.asyncio
 async def test_chat_sse_stream_receives_tool_registry(
-    authenticated_client: AsyncClient,
-    test_user: User,
+    auth_client: AsyncClient,
+    seed_test_user: User,
 ) -> None:
     """Verify chat_sse_stream successfully receives ToolRegistry and passes tools to router."""
     received_tools: list[dict[str, Any]] | None = None
@@ -68,7 +73,7 @@ async def test_chat_sse_stream_receives_tool_registry(
         yield "wiring!"
 
     with patch.object(HybridLLMRouter, "route_and_stream", side_effect=mock_route_and_stream):
-        response = await authenticated_client.post(
+        response = await auth_client.post(
             "/api/v1/chat/stream",
             json={"message": "오늘 일정 어때?", "session_id": "test_tool_session"},
         )
@@ -82,15 +87,38 @@ async def test_chat_sse_stream_receives_tool_registry(
 
 @pytest.mark.asyncio
 async def test_custom_mcp_tool_injection_via_dependency_override(
-    app: Any,
-    authenticated_client: AsyncClient,
+    test_engine: AsyncEngine,
+    temp_storage_root: Path,
+    seed_test_user: User,
+    test_user_token: str,
 ) -> None:
     """Verify custom MCP tools can be injected into FastAPI via dependency_overrides."""
+    app = create_app()
     custom_registry = ToolRegistry([DummyEchoTool()])
+    storage = FileStorageManager(base_dir=temp_storage_root)
 
+    test_session_factory = async_sessionmaker(
+        bind=test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+
+    async def override_get_db() -> Any:
+        async with test_session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_get_db
+    app.dependency_overrides[get_storage_manager] = lambda: storage
     app.dependency_overrides[get_tool_registry] = lambda: custom_registry
 
-    try:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"Authorization": f"Bearer {test_user_token}"},
+    ) as client:
         received_tools: list[dict[str, Any]] | None = None
 
         async def mock_route_and_stream(messages: Any, system_prompt: str = "", **kwargs: Any) -> Any:
@@ -99,7 +127,7 @@ async def test_custom_mcp_tool_injection_via_dependency_override(
             yield "Custom tool injected!"
 
         with patch.object(HybridLLMRouter, "route_and_stream", side_effect=mock_route_and_stream):
-            response = await authenticated_client.post(
+            response = await client.post(
                 "/api/v1/chat/stream",
                 json={"message": "Echo test", "session_id": "test_echo_session"},
             )
@@ -108,5 +136,3 @@ async def test_custom_mcp_tool_injection_via_dependency_override(
             assert received_tools is not None
             assert len(received_tools) == 1
             assert received_tools[0]["name"] == "dummy_echo_tool"
-    finally:
-        app.dependency_overrides.pop(get_tool_registry, None)
