@@ -11,6 +11,7 @@
 
 ### K3s 설치 및 배포
   1. K3s 및 cert-manager 설치:
+  
     # K3s 설치
     curl -sfL https://get.k3s.io | sh -
     mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown $(id -u):$(id -g) ~/.kube/config
@@ -20,6 +21,7 @@
     kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
 
   2. 프로젝트 클론 및 도메인/비밀번호 설정:
+
     git clone https://github.com/rujino/TARS.git
     cd TARS
 
@@ -28,4 +30,5 @@
     # k8s/05-ingress.yaml (도메인명) 수정
 
   3. 원클릭 배포:
+
     bash k8s/deploy.sh
