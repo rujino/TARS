@@ -1,127 +1,141 @@
-# Project: TARS Phase 3
+# Project: TARS Phase 4 - Production Infrastructure & Containerization Suite
 
 ## Architecture
-TARS Phase 3는 세션 생명주기 관리(Working Memory), 정적 툴 CAG 및 외부 도구(MCP/Google Workspace) 연동, 그리고 OKF 동적 지식 슬라이싱 및 비동기 자가 진화 루프를 통합하여 완성된 지능형 AI 에이전트를 구축합니다.
+TARS Phase 4 establishes an enterprise-grade, highly reliable, and containerized deployment stack for the TARS AI Companion backend. The architecture consists of four orchestrated service tiers connected through an isolated Docker bridge network (`tars-network`) with front-facing SSL/TLS termination and low-latency reverse proxying:
 
-### 1. Data & Control Flow
 ```
-[User Request / Client]
-       │
-       ▼
-[FastAPI: /api/v1/chat/ws, /stream, /greeting]
-       │
-       ├─► [SmartSessionManager]: Time Decay (15m/2h) & Topic Shift & Reset
-       │         │
-       │         └─► (세션 종료/분기 시) ──► [Background: OKF Extractor] ──► [FileStorage & UserWikiIndex DB]
-       │
-       ├─► [DynamicSlicerEngine]: 5-Factor 점수화(Context, Importance, Type, Relations, Recency) & DB Fast Pre-filtering
-       │         │
-       │         └─► Dynamic Knowledge Slice ──┐
-       │                                        ▼
-       └─► [LangGraph StateGraph Engine] ◄── [ToolCAGManager (Static System Prompt + Tool JSON Schemas)]
-                 │
-                 ├─► [llm_node]: Function Calling / Tool Selection
-                 │         │
-                 │         ▼ (tool_calls 감지 시)
-                 ├─► [tool_node]: ToolRegistry (MCP Client & Google Workspace Adapters)
-                 │         │
-                 │         └─► (Graceful Fallback on error) ──► ReAct Loop re-entry
-                 │
-                 └─► Token Streaming & Final Response
+                  [ Public Internet / Mobile PWA Client ]
+                                    │
+                                    ▼ (Port 80 HTTP / 443 HTTPS & WSS)
+                 ┌──────────────────────────────────────┐
+                 │       tars-nginx (Nginx 1.25)        │
+                 │  - SSL Termination (Let's Encrypt)   │
+                 │  - HTTP -> HTTPS Redirect            │
+                 │  - WebSocket ($connection_upgrade)   │
+                 │  - SSE Zero-Buffering Proxy          │
+                 │  - Security Headers & Gzip           │
+                 │  - ACME Challenge Routing            │
+                 └──────────────┬───────────────────────┘
+                                │
+          ┌─────────────────────┴─────────────────────┐
+          ▼                                           ▼
+┌───────────────────────────────────┐    ┌───────────────────────────────────┐
+│     tars-backend (FastAPI)        │    │    certbot (Let's Encrypt)        │
+│  - Python 3.11-slim + uv          │    │  - 12h Renewal Loop Daemon        │
+│  - Non-Root `tarsuser` (10001)    │    │  - Shared Webroot & Certs Volumes │
+│  - Alembic Auto-Migrations on Boot│    └───────────────────────────────────┘
+│  - LangGraph + AI Companion Core  │
+└─────────────────┬─────────────────┘
+                  │ (Port 5432 asyncpg)
+                  ▼
+┌───────────────────────────────────┐
+│    tars-db (PostgreSQL 16)        │
+│  - Named Volume: postgres_data    │
+│  - Healthcheck: pg_isready        │
+│  - ACID & Relational Integrity    │
+└───────────────────────────────────┘
 ```
+
+---
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | ChatSession & ChatMessage DB Models | 세션 및 메시지 이력 영속화 ORM 모델 | M1 | Survey 1 (R1) |
-| 2 | Time Decay Session Routing | 15분 이내(유지), 15분~2시간(Bridge Summary+분기), 2시간 초과(신규 세션) | M1 | Survey 1 (R1) |
-| 3 | Topic Shift & Natural Reset | 자연어 리셋 명령 처리 및 SLM 기반 주제 급변 감지/세션 분기 | M1 | Survey 1 (R1) |
-| 4 | Proactive Greeting Endpoint | GET /api/v1/chat/greeting (시간대, 유휴시간, 맥락, OKF 5-Factor 오프닝) | M1 | Survey 1 (R1) |
-| 5 | Tool Base & Registry | BaseTool 추상화, ToolParameter, ToolRegistry 구현 | M2 | Survey 2 (R2) |
-| 6 | Static Tool CAG Manager | 정적 시스템 지침 + 대형 도구 스키마 번들링 및 Gemini/In-Memory 캐싱 | M2 | Survey 2 (R2) |
-| 7 | MCP Client & Tool Adapter | 표준 JSON-RPC 2.0 비동기 MCP 클라이언트 및 어댑터 | M2 | Survey 2 (R2) |
-| 8 | Google Workspace Adapters | Google Calendar (3종) 및 Gmail (3종) 도구 어댑터 & Mock 모드 | M2 | Survey 2 (R2) |
-| 9 | LangGraph ReAct Loop & Graceful Fallback | TARSState 확장, tool_node 격리 실행, 에러 시 Fallback, should_continue 라우터 | M2 | Survey 2 (R2) |
-| 10 | 5-Factor Dynamic OKF Slicing | Context, Importance, Type, Relations, Recency 다중 팩터 점수화 & 토큰 예산 관리 | M3 | Survey 3 (R3) |
-| 11 | DB Index Fast Pre-filtering | UserWikiIndex 기반 1차 메타데이터 필터링 및 스토리지 I/O 최적화 | M3 | Survey 3 (R3) |
-| 12 | Background Knowledge Self-Evolution | 대화 턴/세션 종료 시 비동기 OKF Extractor 트리거 & DB 원자적 동기화 | M3 | Survey 3 (R3) |
-| 13 | Real-time Knowledge Feedback Loop | 추출된 OKF가 다음 대화 및 Proactive Greeting에 실시간 인출되는 루프 완결 | M3 | Survey 3 (R3) |
-| 14 | Comprehensive E2E & Static Analysis | Tier 1~4 테스트 100% 통과, mypy --strict, ruff check 무결성 달성 | M4 | Survey 1,2,3 (R1-R3) |
+| F1 | `asyncpg` & `alembic` Dependencies | Add `asyncpg>=0.29.0` and `alembic>=1.13.1` to `pyproject.toml` via `uv` | M1 | Survey R2 |
+| F2 | Alembic Environment & Base Discovery | Configure `alembic.ini` and `migrations/env.py` with async engine and `tars.db.base.Base` metadata | M1 | Survey R2 |
+| F3 | Initial Baseline Migration | Generate `migrations/versions/0001_initial_schema.py` covering all 5 ORM tables (users, tars_settings, user_wikis, chat_sessions, chat_messages) with SQLite & PostgreSQL compatibility | M1 | Survey R2 |
+| F4 | Container Migration Bootstrapper | Create `scripts/run_migrations.sh` with DB connectivity polling and `alembic upgrade head` execution | M1 | Survey R2 |
+| F5 | Migration Regression Tests | Implement `tests/tier1_unit/test_alembic_migrations.py` verifying upgrade/downgrade and zero schema drift (`alembic check`) | M1 | Survey R2 |
+| F6 | Multi-Stage Dockerfile | Create `Dockerfile` with builder (`uv` cache mounts) and runtime (`python:3.11-slim`, non-root `tarsuser`, healthcheck) | M2 | Survey R1 |
+| F7 | Production Docker Compose | Create `docker-compose.yml` orchestrating `tars-backend`, `tars-db`, `tars-nginx`, `certbot` with healthchecks, volumes, and networks | M2 | Survey R1 |
+| F8 | Local Development Compose Override | Create `docker-compose.override.yml` for local live reload, source mounts, and port exposures | M2 | Survey R1 |
+| F9 | Container Entrypoint Script | Create `scripts/entrypoint.sh` executing migrations and launching Uvicorn cleanly | M2 | Survey R1 |
+| F10 | Nginx Main Configuration | Create `nginx/nginx.conf` with Gzip compression, worker tuning, 50MB upload limits, and `$connection_upgrade` map | M3 | Survey R3 |
+| F11 | Nginx Virtual Host & Proxy Rules | Create `nginx/conf.d/default.conf` with SSL modern ciphers, ACME challenge, WebSocket upgrade (`/api/v1/chat/ws`), and SSE zero-buffering (`/api/v1/chat/stream`) | M3 | Survey R3 |
+| F12 | SSL Bootstrap & Renewal Scripts | Create `scripts/init_ssl.sh` supporting self-signed dev mode and Let's Encrypt certbot issuance, plus `scripts/renew_certs.sh` | M3 | Survey R3 |
+| F13 | Production Environment Template | Create `.env.production.example` detailing all 7 configuration sections (Core, Security, Postgres, Domain/SSL, LLM, Storage, Integrations) | M4 | Survey R4 |
+| F14 | Comprehensive Deployment Guide | Create `DEPLOYMENT.md` covering prerequisites, DuckDNS/Cloudflare DDNS, router port forwarding (80/443), hairpin NAT, step-by-step deploy, iOS PWA / Web Speech TTS / WSS verification, and troubleshooting | M4 | Survey R4 |
+| F15 | E2E Infrastructure Validation | Verify complete test suite (Tiers 1-4), static analysis (`mypy --strict`, `ruff check`), and container configuration validity | M5 | Acceptance Criteria |
+
+---
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | 스마트 세션 라우팅 & 능동 오프닝 | DB 세션/메시지 모델, Time Decay, Topic Shift, Reset, Proactive Greeting | none | DONE |
-| M2 | 정적 툴 CAG & 외부 도구(MCP/Google) 연동 | ToolRegistry, ToolCAGManager, MCP Client, Google Workspace Adapters, LangGraph ReAct | none | DONE |
-| M3 | OKF 동적 슬라이싱 & 자가 진화 루프 | 5-Factor 슬라이서, DB 사전필터링, API 백그라운드 지식 추출기 연동, 실시간 반영 | M1, M2 | DONE |
-| M4 | E2E 테스트 스위트 및 종합 검증 | 전체 단위/통합/E2E 테스트 100% 통과, mypy --strict, ruff check 무결성 | M1, M2, M3 | DONE |
+| M1 | Production Database & Alembic Migrations | F1, F2, F3, F4, F5 | none | DONE |
+| M2 | Multi-stage Dockerfile & Compose Stack | F6, F7, F8, F9 | M1 | DONE |
+| M3 | Nginx Reverse Proxy & SSL Automation | F10, F11, F12 | M2 | IN_PROGRESS |
+| M4 | Host Environment & Deployment Guide | F13, F14 | M3 | PLANNED |
+| M5 | Final Milestone: 100% E2E Pass & Adversarial Hardening | F15, Tier 1-5 validation | M1, M2, M3, M4 | PLANNED |
+
+---
 
 ## Interface Contracts
 
-### 1. SmartSessionManager ↔ ChatRouter & GreetingService
-```python
-class SmartSessionManager:
-    async def get_or_create_session(
-        self,
-        db: AsyncSession,
-        user_id: str,
-        requested_session_id: str | None = None,
-        incoming_message: str | None = None,
-    ) -> tuple[ChatSession, list[ChatMessage], str | None]: ...
+### 1. Database & Alembic Integration Contract
+- `alembic.ini` points to `script_location = migrations`.
+- `migrations/env.py` dynamically injects `database_url` from `tars.config.get_settings().database_url`.
+- `target_metadata = Base.metadata` discoverable across all models (`users`, `tars_settings`, `user_wikis`, `chat_sessions`, `chat_messages`).
+- Migration `0001_initial_schema.py` must support `render_as_batch=True` for SQLite compatibility and standard DDL for PostgreSQL (`postgresql+asyncpg://...`).
 
-    async def record_turn(
-        self,
-        db: AsyncSession,
-        session_id: str,
-        user_id: str,
-        user_message: str,
-        assistant_message: str,
-    ) -> None: ...
-```
+### 2. Docker & Backend Runtime Contract
+- Base image: `python:3.11-slim`.
+- Package manager: `uv` (binary imported via `ghcr.io/astral-sh/uv:0.6`).
+- System user: `tarsuser` (UID: 10001, GID: 10001).
+- Healthcheck endpoint: `http://localhost:8000/health` returning HTTP 200 `{"status": "ok", "app": "TARS"}`.
+- Storage volumes: `/app/storage` (OKF files) and `/app/data` (runtime data).
 
-### 2. ToolCAGManager & ToolRegistry ↔ LangGraph StateGraph
-```python
-class ToolRegistry:
-    def register_tool(self, tool: BaseTool) -> None: ...
-    def get_all_tool_definitions(self) -> list[dict[str, Any]]: ...
-    async def execute_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]: ...
+### 3. Nginx Reverse Proxy & Streaming Contract
+- Upstream: `http://tars-backend:8000`.
+- WebSocket `/api/v1/chat/ws`:
+  - `proxy_http_version 1.1;`
+  - `proxy_set_header Upgrade $http_upgrade;`
+  - `proxy_set_header Connection $connection_upgrade;`
+  - `proxy_read_timeout 3600s;`
+  - `proxy_buffering off;`
+- Server-Sent Events `/api/v1/chat/stream`:
+  - `proxy_http_version 1.1;`
+  - `proxy_set_header Connection "";`
+  - `proxy_set_header X-Accel-Buffering no;`
+  - `chunked_transfer_encoding on;`
+  - `proxy_buffering off;`
+  - `proxy_cache off;`
+  - `proxy_read_timeout 300s;`
+- ACME Challenge: `/.well-known/acme-challenge/` mapped to `/var/www/certbot`.
 
-class ToolCAGManager:
-    def get_cached_system_prompt_and_tools(
-        self, base_prompt: str, tools: list[dict[str, Any]]
-    ) -> tuple[str, list[dict[str, Any]]]: ...
-```
-
-### 3. DynamicSlicerEngine & SelfEvolvingKnowledgeWorker ↔ Storage & API
-```python
-class DynamicSlicerEngine:
-    async def slice_context(
-        self,
-        user_id: str,
-        query: str,
-        context_messages: list[str] | None = None,
-        token_budget: int = 1500,
-        profile: str = "chat",
-        db: AsyncSession | None = None,
-    ) -> SlicedKnowledgeResult: ...
-
-class SelfEvolvingKnowledgeWorker:
-    async def extract_and_sync(
-        self,
-        user_id: str,
-        conversation_turns: list[dict[str, str]],
-        db: AsyncSession | None = None,
-    ) -> list[str]: ...
-```
+---
 
 ## Code Layout
-- `tars/db/models.py`: `ChatSession`, `ChatMessage` ORM 모델 추가 (M1 - DONE)
-- `tars/core/session/`: `manager.py`, `detector.py` (M1 - DONE)
-- `tars/services/greeting.py`: `ProactiveGreetingService` (M1 - DONE)
-- `tars/tools/`: `base.py`, `registry.py`, `cag.py`, `mcp/`, `google/` (M2 - DONE)
-- `tars/orchestrator/`: `state.py`, `nodes.py`, `graph.py` (M2 - DONE)
-- `tars/slicer/`: `engine.py`, `models.py` (M3 - DONE)
-- `tars/extractor/`: `worker.py`, `prompts.py` (M3 - DONE)
-- `tars/api/routers/chat.py`: 세션 바인딩, 백그라운드 태스크 연동, Greeting 엔드포인트 (M1, M3 - DONE)
-- `tars/config.py`: 설정 확장 (M2, M3 - DONE)
-- `tests/`: 단위/통합/E2E 테스트 스위트 (M1, M2, M3, M4 - DONE, 431 passed)
+```
+TARS/
+├── Dockerfile                         # Multi-stage production container build
+├── docker-compose.yml                 # Production multi-service orchestration
+├── docker-compose.override.yml        # Local development override
+├── pyproject.toml                     # Dependencies (asyncpg, alembic added via uv)
+├── alembic.ini                        # Alembic configuration
+├── migrations/
+│   ├── env.py                         # Async Alembic runner & Base metadata discovery
+│   ├── script.py.mako                 # Migration template
+│   └── versions/
+│       └── 0001_initial_schema.py     # Initial schema DDL migration
+├── nginx/
+│   ├── nginx.conf                     # Nginx core configuration (Gzip, Events, Map)
+│   └── conf.d/
+│       └── default.conf               # Virtual host, SSL, WS/SSE reverse proxy
+├── scripts/
+│   ├── entrypoint.sh                  # Container entrypoint & migration runner
+│   ├── run_migrations.sh              # Standalone migration wrapper with DB polling
+│   ├── init_ssl.sh                    # SSL bootstrap (self-signed dev & Let's Encrypt)
+│   └── renew_certs.sh                 # Certbot renewal helper
+├── .env.production.example            # Production environment variables template
+├── DEPLOYMENT.md                      # Production deployment & operations guide
+├── tests/
+│   ├── conftest.py                    # Pytest configuration & async DB fixtures
+│   ├── tier1_unit/
+│   │   ├── test_alembic_migrations.py # Migration upgrade/downgrade & drift tests
+│   │   └── test_adversarial_phase4_m1.py # Adversarial stress tests
+│   ├── tier2_integration/
+│   │   └── test_infra_config.py       # Docker, Compose & Nginx configuration tests
+│   └── ...                            # Existing Tier 1-4 tests
+└── tars/                              # Application source code
+```

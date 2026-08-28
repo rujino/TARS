@@ -94,7 +94,7 @@
   - 5-Factor 점수화 기반 OKF 지식 동적 슬라이싱 및 대화 기반 OKF 파일 자동 생성 비동기 자가 진화 루프.
   - 정적 툴 스키마 CAG 적용 및 MCP(HTTP/SSE/stdio) / Google 도구 어댑터 & ToolRegistry API 와이어링.
   - 앱 실행 시 능동 오프닝(Proactive Greeting) 엔드포인트 및 시간/주제 기반 스마트 세션 라우팅 엔진 구축.
-- **Phase 4: 프로덕션 정공법 인프라 & 컨테이너화**
+- **Phase 4: 프로덕션 정공법 인프라 & 컨테이너화 [DONE]**
   - Docker Compose 패키징 (FastAPI + PostgreSQL + Nginx + Certbot).
   - 도메인 연동 및 SSL/TLS 보안 인증서 적용.
 - **Phase 5: 네이티브 iOS 앱 확장 및 포트폴리오 문서화**

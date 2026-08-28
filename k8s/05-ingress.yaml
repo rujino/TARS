@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tars-ingress
+  namespace: tars
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  tls:
+    - hosts:
+        - tars.example.com # Replace with your real domain (e.g. tars.duckdns.org or yourdomain.com)
+      secretName: tars-tls-secret
+  rules:
+    - host: tars.example.com # Replace with your real domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tars-backend
+                port:
+                  number: 8000
