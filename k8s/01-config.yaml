@@ -9,14 +9,3 @@ data:
   TARS_DOMAIN: "localhost"
   POSTGRES_DB: "tars"
   POSTGRES_USER: "tarsuser"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: tars-secret
-  namespace: tars
-type: Opaque
-stringData:
-  POSTGRES_PASSWORD: "change_me_tarspassword"
-  TARS_JWT_SECRET_KEY: "change_me_super_secret_jwt_key_at_least_32_characters"
-  TARS_GEMINI_API_KEY: ""

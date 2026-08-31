@@ -19,12 +19,29 @@ docker build -t tars-backend:latest .
 
 # 2. Import Image to K3s Containerd Engine
 echo "📦 Step 2: Importing Docker image into K3s containerd runtime..."
-docker save tars-backend:latest | sudo k3s ctr images import -
+docker save tars-backend:latest | sudo k3s ctr -n k8s.io images import -
 
 # 3. Apply Kubernetes Manifests
 echo "⚙️  Step 3: Applying Kubernetes manifests..."
+if [ ! -f "${PROJECT_ROOT}/k8s/01-secret.yaml" ]; then
+    echo "⚠️  k8s/01-secret.yaml not found. Initializing from 01-secret.example.yaml..."
+    cp "${PROJECT_ROOT}/k8s/01-secret.example.yaml" "${PROJECT_ROOT}/k8s/01-secret.yaml"
+    echo "👉 Please edit k8s/01-secret.yaml with your actual passwords and keys!"
+fi
+
+if [ ! -f "${PROJECT_ROOT}/k8s/04-cluster-issuer.yaml" ] && [ -f "${PROJECT_ROOT}/k8s/04-cluster-issuer.example.yaml" ]; then
+    echo "⚠️  k8s/04-cluster-issuer.yaml not found. Initializing from 04-cluster-issuer.example.yaml..."
+    cp "${PROJECT_ROOT}/k8s/04-cluster-issuer.example.yaml" "${PROJECT_ROOT}/k8s/04-cluster-issuer.yaml"
+fi
+
+if [ ! -f "${PROJECT_ROOT}/k8s/05-ingress.yaml" ] && [ -f "${PROJECT_ROOT}/k8s/05-ingress.example.yaml" ]; then
+    echo "⚠️  k8s/05-ingress.yaml not found. Initializing from 05-ingress.example.yaml..."
+    cp "${PROJECT_ROOT}/k8s/05-ingress.example.yaml" "${PROJECT_ROOT}/k8s/05-ingress.yaml"
+fi
+
 kubectl apply -f "${PROJECT_ROOT}/k8s/00-namespace.yaml"
 kubectl apply -f "${PROJECT_ROOT}/k8s/01-config.yaml"
+kubectl apply -f "${PROJECT_ROOT}/k8s/01-secret.yaml"
 kubectl apply -f "${PROJECT_ROOT}/k8s/02-db.yaml"
 kubectl apply -f "${PROJECT_ROOT}/k8s/03-backend.yaml"
 

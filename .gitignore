@@ -272,3 +272,10 @@ $RECYCLE.BIN/
 *.db-journal
 tars.db
 storage/
+
+# Kubernetes Local Custom Manifests (Secrets, Ingress, ClusterIssuer)
+k8s/01-secret.yaml
+k8s/04-cluster-issuer.yaml
+k8s/05-ingress.yaml
+k8s/*secret*.yaml
+!k8s/*.example.yaml

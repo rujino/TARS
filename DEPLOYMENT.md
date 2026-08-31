@@ -77,10 +77,18 @@ cd TARS
 
 ### Step 4: 설정 파일(YAML) 수정
 
-1. **`k8s/01-config.yaml`**:
+개인 정보(도메인, 이메일, 키값)가 들어가는 파일들은 모두 템플릿(`.example.yaml`)으로 제공되며, `.gitignore`에 등록되어 안전하게 관리됩니다.
+
+```bash
+# 템플릿 복사
+cp k8s/01-secret.example.yaml k8s/01-secret.yaml
+cp k8s/04-cluster-issuer.example.yaml k8s/04-cluster-issuer.yaml
+cp k8s/05-ingress.example.yaml k8s/05-ingress.yaml
+```
+
+1. **`k8s/01-secret.yaml`**:
    - `TARS_JWT_SECRET_KEY`: `openssl rand -hex 32` 명령어로 생성한 안전한 32바이트 이상 키 입력.
    - `POSTGRES_PASSWORD`: 안전한 DB 비밀번호 설정.
-   - `TARS_DOMAIN`: 사용하실 도메인 입력 (예: `tars.yourdomain.com`).
    - `TARS_GEMINI_API_KEY`: Google Gemini API 키 입력.
 
 2. **`k8s/04-cluster-issuer.yaml`**:
@@ -88,6 +96,9 @@ cd TARS
 
 3. **`k8s/05-ingress.yaml`**:
    - `tars.example.com`을 실제 사용하시는 도메인으로 변경.
+
+4. **`k8s/01-config.yaml`**:
+   - `TARS_DOMAIN`: 사용하실 도메인 입력 (예: `tars.yourdomain.com`).
 
 ---
 

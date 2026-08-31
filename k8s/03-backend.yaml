@@ -32,7 +32,7 @@ metadata:
   labels:
     app: tars-backend
 spec:
-  replicas: 1
+  replicas: 3
   strategy:
     type: RollingUpdate
   selector:
