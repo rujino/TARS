@@ -27,7 +27,7 @@ if config.config_file_name is not None:
 def get_target_db_url() -> str:
     """Resolve database URL dynamically from environment, config, or settings."""
     explicit_url = config.get_main_option("sqlalchemy.url")
-    if explicit_url and explicit_url != "sqlite+aiosqlite:///./tars.db":
+    if explicit_url:
         return explicit_url
 
     env_url = os.environ.get("TARS_DATABASE_URL")
@@ -37,7 +37,7 @@ def get_target_db_url() -> str:
     try:
         return get_settings().database_url
     except Exception:
-        return explicit_url or "sqlite+aiosqlite:///./tars.db"
+        return explicit_url or "postgresql+asyncpg://tarsuser:tarspassword@localhost:5432/tars"
 
 
 # Target metadata for autogenerate support
@@ -52,7 +52,6 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,  # Enables batch mode for SQLite schema alterations
         compare_type=True,
     )
 
@@ -65,7 +64,6 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
-        render_as_batch=True,  # Enables batch mode for SQLite schema alterations
         compare_type=True,
     )
 

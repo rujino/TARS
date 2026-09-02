@@ -42,8 +42,8 @@ class Settings(BaseSettings):
 
     # Database settings
     database_url: str = Field(
-        default="sqlite+aiosqlite:///./tars.db",
-        description="Async SQLAlchemy database URL (sqlite+aiosqlite or postgresql+asyncpg)",
+        default="postgresql+asyncpg://tarsuser:tarspassword@localhost:5432/tars",
+        description="Async SQLAlchemy database URL (postgresql+asyncpg)",
     )
     db_echo: bool = Field(default=False, description="Echo SQL queries in logs")
 

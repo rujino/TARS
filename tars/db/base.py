@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from sqlalchemy import DateTime, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-# Standard naming convention for database constraints across SQLite and PostgreSQL.
+# Standard naming convention for PostgreSQL database constraints.
 # Crucial for future Alembic autogenerate migrations (`alembic revision --autogenerate`)
 # and deterministic constraint dropping. Do not remove even when using Base.metadata.create_all.
 NAMING_CONVENTION = {

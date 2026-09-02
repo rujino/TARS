@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import Any
 
-from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -20,29 +18,17 @@ _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
-def _enable_sqlite_foreign_keys(dbapi_connection: Any, connection_record: Any) -> None:
-    """Enforce SQLite foreign key constraints for all new connections."""
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON;")
-    cursor.close()
-
-
 def get_engine() -> AsyncEngine:
     """Get or create singleton AsyncEngine instance."""
     global _engine
     if _engine is None:
         settings = get_settings()
-        is_sqlite = settings.database_url.startswith("sqlite")
 
         _engine = create_async_engine(
             settings.database_url,
             echo=settings.db_echo,
             future=True,
         )
-
-        if is_sqlite:
-            # Register SQLite PRAGMA foreign_keys=ON on sync engine connection event
-            event.listen(_engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
 
     return _engine
 
