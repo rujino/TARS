@@ -102,7 +102,42 @@ cp k8s/05-ingress.example.yaml k8s/05-ingress.yaml
 
 ---
 
-### Step 5: 원클릭 빌드 및 배포
+### Step 5: 로컬 SLM (`llama-server`) 설정 및 구동 (선택/권장)
+
+TARS는 빠른 의도 분류, 단순 쿼리 전처리, 키워드 추출을 위해 온프레미스/호스트의 경량 SLM(`llama-server`)을 활용합니다.
+
+1. **llama.cpp / `llama-server` 설치 및 실행**:
+```bash
+# llama.cpp 빌드 또는 바이너리 다운로드 후 실행 예시:
+# (GGUF 모델 다운로드: HuggingFace 등에서 Qwen2.5-1.5B/3B, Llama-3.2-1B/3B GGUF)
+llama-server \
+  -m /path/to/model-Q4_K_M.gguf \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --ctx-size 4096 \
+  -ngl 99
+```
+
+2. **K3s 백엔드 연동 (`k8s/01-config.yaml`)**:
+호스트 PC에서 실행 중인 `llama-server`에 파드가 접근할 수 있도록 `TARS_LLAMACPP_BASE_URL`을 설정합니다:
+```yaml
+# k8s/01-config.yaml
+data:
+  TARS_LLAMACPP_BASE_URL: "http://<호스트-내부-IP>:8080/v1"
+  TARS_LLAMACPP_MODEL_NAME: "default"
+  TARS_LLAMACPP_TIMEOUT_MS: "3000"
+```
+
+3. **SLM 연결 및 스트리밍 사전 진단**:
+```bash
+uv run python scripts/test_slm.py
+```
+> [!NOTE]
+> 로컬 SLM이 실행 중이지 않거나 응답 지연(Timeout)이 발생하더라도, TARS의 **무중단 회로 차단기 (Circuit Breaker)**가 작동하여 모든 추론 작업을 Google Gemini로 자동 폴백(Fallback)하므로 전체 시스템은 안정적으로 유지됩니다.
+
+---
+
+### Step 6: 원클릭 빌드 및 배포
 
 배포 스크립트를 실행하여 로컬 이미지 빌드, K3s 임포트 및 매니페스트 적용을 일괄 처리합니다:
 ```bash
@@ -118,10 +153,13 @@ bash k8s/deploy.sh
 # 1. 전체 파드 및 서비스 상태 확인
 kubectl get pods,svc,pvc,ingress -n tars
 
-# 2. 백엔드 실시간 로그 모니터링
+# 2. 백엔드 실시간 로그 모니터링 (3 Replicas 중 하나)
 kubectl logs -f deployment/tars-backend -n tars
 
-# 3. SSL 인증서 발급 상태 확인
+# 3. DB 마이그레이션 및 파드 상태 상세 확인
+kubectl describe pod -l app=tars-backend -n tars
+
+# 4. SSL 인증서 발급 상태 확인
 kubectl get certificate -n tars
 kubectl describe certificate tars-tls-secret -n tars
 ```
@@ -134,4 +172,6 @@ kubectl describe certificate tars-tls-secret -n tars
 | :--- | :--- | :--- |
 | **인증서 발급 대기 (Pending/False)** | 공유기 80 포트 미개방 또는 도메인 DNS 전파 지연 | `kubectl describe challenge -n tars`로 원인 확인 및 80 포트포워딩 재확인 |
 | **CrashLoopBackOff (DB 연결 에러)** | DB 컨테이너가 준비되기 전 백엔드가 기동됨 | K3s가 자동으로 재시도하여 곧 정상 기동됩니다. `kubectl logs deployment/tars-backend -n tars` 확인 |
-| **ImagePullBackOff** | 로컬 이미지가 K3s containerd에 임포트되지 않음 | `docker save tars-backend:latest \| sudo k3s ctr images import -` 다시 실행 |
+| **ImagePullBackOff** | 로컬 이미지가 K3s containerd에 임포트되지 않음 | `docker save tars-backend:latest \| sudo k3s ctr -n k8s.io images import -` 다시 실행 |
+| **SLM 연결 실패 (Connection refused)** | `llama-server` 미구동 또는 호스트 방화벽 차단 | `llama-server` 구동 상태 및 `python scripts/test_slm.py` 점검. 미구동 시에도 Gemini Fallback 정상 작동 |
+| **PVC 바인딩 실패 (Pending)** | 로컬 디스크 용량 부족 또는 스토리지 클래스 누락 | `kubectl describe pvc -n tars` 확인 (`local-path` 스토리지 프로비저너 확인) |

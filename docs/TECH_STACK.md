@@ -12,9 +12,7 @@ TARS 프로젝트의 기술 스택은 **"오브젝트 스토리지 + RDBMS + OKF
 | **OKF (Open Knowledge Format)**  | **표준화된 지식 규격**           | YAML Frontmatter + Markdown 2계층 구조로 지식 유형, 태그, 관계망을 표준화하여 LLM의 맥락 이해도 극대화                                                     |
 | **Object / File Storage**        | **지식 원본 영속 스토리지**        | - 로컬/개발: `/storage/users/{user_id}/wikis/*.md`<br>`- 클라우드/운영: S3/MinIO 호환 오브젝트 스토리지`<br>`➡️ DB 부하 제로, 데이터 영구 보존, Git/옵시디언 호환` |
 | **PostgreSQL**                   | **메타데이터 &amp; 인증 RDBMS** | 회원 정보, JWT 인증, 사용자별 파일 경로(`file_path`), 생성/수정일 메타데이터 관리                                                                       |
-| **SQLAlchemy 2.0 & Alembic** | 비동기 ORM & 마이그레이션 | 비동기 FastAPI와 완벽히 호환되는 현대적 DB 추상화 및 버전 관리.<br>`- MVP 단계: 빠른 개발을 위해 Base.metadata.create_all 사용 (Alembic 파일 미생성)`<br>`- 운영 단계: Alembic 마이그레이션 도입 예정 (NAMING_CONVENTION 및 표준 제약조건 준수 필수)` |
-
-
+| **SQLAlchemy 2.0 & Alembic** | 비동기 ORM & 마이그레이션 | 비동기 FastAPI와 완벽히 호환되는 현대적 DB 추상화 및 비동기 스키마 버전 관리 (`asyncpg` + `Alembic`). 컨테이너 부팅 시 자동 마이그레이션 실행 및 스키마 드리프트 방지 (`0001_initial_schema.py`) |
 ---
 
 ## 2. 백엔드 &amp; 에이전트 오케스트레이션 (Backend &amp; Agent Framework)
@@ -51,7 +49,7 @@ TARS 프로젝트의 기술 스택은 **"오브젝트 스토리지 + RDBMS + OKF
 | 기술                             | 역할           | 선정 이유 (Rationale)                                             |
 | :------------------------------ | :------------ | :------------------------------------------------------------- |
 | **Google Gemini API**          | 클라우드 고지능 LLM | - **사용자 대화 응답(User-Facing Response) 100% 전담** (TARS 고유 페르소나 및 지식 융합)<br>- **복잡한 심층 내부 추론 전담** (다단계 계획, 복잡한 지식 자가 추출 및 충돌 해결, 툴 인자 파싱 및 결과 합성) |
-| **llama.cpp (`llama-server`)** | 온프레미스 로컬 SLM | - **경량 내부 추론 전담** (사용자 대화 직접 생성 절대 금지)<br>- Windows 로컬 GPU 자원 활용: 빠른 의도 분류, 단순 쿼리 전처리, 키워드/엔티티 추출, 선행 필터링 (비용 0원, 초저지연) |
+| **llama.cpp (`llama-server`)** | 온프레미스 로컬 SLM | - **경량 내부 추론 전담** (사용자 대화 직접 생성 배제, 빠른 의도 분류/전처리/키워드 추출)<br>- **리소스 오버헤드 최소화**: C++ 기반 경량 런타임 및 GGUF 포맷을 활용하여 VRAM 선점(Pre-allocation) 없이 단일 머신 환경에서 CPU/GPU 자원 효율 극대화<br>- **표준 인터페이스**: OpenAI 호환 API 규격(`LlamaCppAdapter`)을 준수하여 향후 고처리량 배치 환경(vLLM 등)으로의 전환 유연성 확보 |
 | **Static Prompt CAG**          | 정적 툴 스키마 캐싱  | TARS 페르소나 및 대형 툴 스키마 JSON만 캐싱하여 75% 비용 절감 및 속도 극대화            |
 
 
@@ -64,7 +62,9 @@ TARS 프로젝트의 기술 스택은 **"오브젝트 스토리지 + RDBMS + OKF
 | :------------------------------------------ | :------------------- | :------------------------------------------------------------------------------------------ |
 | **Langfuse**                               | LLM 트레이싱 &amp; 모니터링 | 유저별 세션 및 툴 호출 지연 시간, 토큰 소모량 실시간 시각화                                                        |
 | **On-Device TTS**                          | 엣지 클라이언트 음성 합성      | - Web: `SpeechSynthesis API`<br>`- iOS: AVSpeechSynthesizer`<br>➡️ 서버 부하 0%, 네트워크 트래픽 초경량화 |
-| **Docker &amp; Nginx &amp; Let's Encrypt** | 프로덕션 인프라 &amp; 보안   | 컨테이너화, 정식 HTTPS/WSS 암호화, Rate Limiting                                                     |
+| **K3s (Lightweight Kubernetes)**           | 컨테이너 오케스트레이션     | - **단일 노드/홈서버 최적화**: 표준 k8s API 및 선언적 매니페스트(Deployment, Service, PVC, Secret)를 유지하면서도 마스터 노드 메모리 사용량을 1GB 미만으로 경량화<br>- **고가용성 & 자가 복구**: 컨테이너 비정상 종료 시 자동 재시작 및 롤링 업데이트 제공 |
+| **Traefik &amp; cert-manager**             | Ingress &amp; SSL/TLS 자동화 | K3s 기본 내장 Traefik과 Let's Encrypt 자동 발급기(cert-manager)를 연동하여 HTTPS/WSS 엔드포인트 자동 암호화 및 갱신 |
+| **Docker**                                 | 로컬 개발 및 컨테이너 빌드   | 다단계 빌드(Multi-stage build) 및 `uv` 캐시 마운트를 통한 초경량 런타임 이미지 패키징 및 K3s containerd 엔진 임포트 |
 | **JWT (JSON Web Token)**                   | 디바이스 인증 &amp; 보안    | 인가된 클라이언트(아이폰)만 백엔드 리소스에 접근하도록 보안 제어                                                       |
 
 
