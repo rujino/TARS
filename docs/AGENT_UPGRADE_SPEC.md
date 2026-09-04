@@ -196,12 +196,11 @@ SSE 및 WebSocket 엔드포인트에서 단순 토큰 생성이 아닌 **ReAct �
 
 ---
 
-## 5. 업그레이드 작업 우선순위 체크리스트 (Implementation Checklist)
-
-- [ ] **Step 1**: `tests/tier1_unit/test_stress_db_reconciliation.py` 임포트 오류 수정 및 `pytest` 전체 패스 확인
-- [ ] **Step 2**: `GeminiAdapter`에 실제 GenAI SDK `tools` 바인딩 및 `agenerate_response` 구현
-- [ ] **Step 3**: `LlamaCppAdapter`에 `tools` 전달 및 `tool_calls` 파싱 구현
-- [ ] **Step 4**: 스트리밍 ReAct 에이전트 프로토콜 정의 및 `chat.py` (SSE/WS)에 LangGraph 실행 파이프라인 결합
-- [ ] **Step 5**: 도구 호출 중간 상태(`tool_start`, `tool_result`) 스트리밍 이벤트 전송 구현
-- [ ] **Step 6**: Google Calendar, Gmail, Mock MCP 도구 통합 E2E 테스트 작성 및 검증
+- [x] **Step 1**: `tests/tier1_unit/test_stress_db_reconciliation.py` 임포트 오류 수정 및 `pytest` 전체 패스 확인 (완료)
+- [x] **Step 2**: `GeminiAdapter`에 실제 GenAI SDK `tools` 바인딩 및 `agenerate_response` 구현 (완료)
+- [x] **Step 3**: `LlamaCppAdapter`에 `tools` 전달 및 `tool_calls` 파싱 구현 (완료)
+- [x] **Step 4**: 스트리밍 ReAct 에이전트 프로토콜(`AgentStreamEvent`) 정의 및 Thin Controller 패턴 도입 (`AgentChatService` 추출) (완료)
+- [x] **Step 5**: 도구 호출 중간 상태(`tool_start`, `tool_result`, `token`, `stream_end`) 스트리밍 이벤트 전송 구현 (완료)
+- [x] **Step 6**: Google Calendar, ReAct 도구 호출 및 WebSocket/SSE E2E 회귀 테스트 작성 및 검증 (`tests/tier3_e2e_api/test_agent_react_streaming_e2e.py`) (완료)
 - [ ] **Step 7**: 로컬 SLM 기반 초경량 구조화 의도 분류기 고도화 (선택/권장)
+

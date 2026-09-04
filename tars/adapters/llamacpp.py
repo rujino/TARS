@@ -11,13 +11,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import httpx
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from tars.adapters.base import BaseLLMAdapter
+from tars.adapters.base import BaseLLMAdapter, LLMResponse, ToolCallData
 from tars.config import get_settings
 
 logger = logging.getLogger("tars.adapters.llamacpp")
@@ -71,6 +72,66 @@ class LlamaCppAdapter(BaseLLMAdapter):
                 formatted.append({"role": "user", "content": str(msg.content)})
         return formatted
 
+    async def _http_post_response(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Internal HTTP POST worker for structured response with tool calling (mockable in tests)."""
+        client = self._get_http_client()
+        url = (
+            f"{self.base_url}/chat/completions"
+            if self.base_url.endswith("/v1")
+            else f"{self.base_url}/v1/chat/completions"
+        )
+        payload: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": self._format_messages_for_slm(messages, system_prompt),
+            "temperature": kwargs.get("temperature", self.temperature),
+            "stream": False,
+        }
+        tools = kwargs.get("tools")
+        if tools:
+            payload["tools"] = tools
+
+        response = await client.post(url, json=payload, timeout=max(self.timeout_sec * 6.0, 30.0))
+        response.raise_for_status()
+        data = response.json()
+        choices = data.get("choices", [])
+        if not choices or "message" not in choices[0]:
+            return LLMResponse(content="", tool_calls=[], model_name=self.model_name)
+
+        msg = choices[0]["message"]
+        content = str(msg.get("content", "") or "")
+        raw_tool_calls = msg.get("tool_calls", [])
+
+        parsed_tool_calls: list[ToolCallData] = []
+        if raw_tool_calls:
+            for tc in raw_tool_calls:
+                tc_id = tc.get("id") or f"call_{uuid.uuid4().hex[:8]}"
+                fn = tc.get("function", {})
+                name = fn.get("name") or tc.get("name", "")
+                raw_args = fn.get("arguments", {}) if "function" in tc else tc.get("arguments", {})
+                if isinstance(raw_args, str):
+                    try:
+                        args = json.loads(raw_args)
+                    except Exception:
+                        args = {}
+                elif isinstance(raw_args, dict):
+                    args = raw_args
+                else:
+                    args = {}
+                parsed_tool_calls.append(
+                    ToolCallData(id=tc_id, name=name, arguments=args)
+                )
+
+        return LLMResponse(
+            content=content,
+            tool_calls=parsed_tool_calls,
+            model_name=self.model_name,
+        )
+
     async def _http_post_completion(
         self,
         messages: Sequence[BaseMessage],
@@ -78,26 +139,12 @@ class LlamaCppAdapter(BaseLLMAdapter):
         **kwargs: Any,
     ) -> str:
         """Internal HTTP POST worker for full text generation (mockable in tests)."""
-        client = self._get_http_client()
-        url = (
-            f"{self.base_url}/chat/completions"
-            if self.base_url.endswith("/v1")
-            else f"{self.base_url}/v1/chat/completions"
+        resp = await self._http_post_response(
+            messages=messages,
+            system_prompt=system_prompt,
+            **kwargs,
         )
-        payload = {
-            "model": self.model_name,
-            "messages": self._format_messages_for_slm(messages, system_prompt),
-            "temperature": kwargs.get("temperature", self.temperature),
-            "stream": False,
-        }
-
-        response = await client.post(url, json=payload, timeout=max(self.timeout_sec * 6.0, 30.0))
-        response.raise_for_status()
-        data = response.json()
-        choices = data.get("choices", [])
-        if choices and "message" in choices[0]:
-            return str(choices[0]["message"].get("content", ""))
-        return ""
+        return resp.content
 
     async def _http_stream_completion(
         self,
@@ -159,6 +206,15 @@ class LlamaCppAdapter(BaseLLMAdapter):
             except Exception:
                 continue
         return False
+
+    async def agenerate_response(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Generate structured response with parsed tool calls via local SLM."""
+        return await self._http_post_response(messages, system_prompt=system_prompt, **kwargs)
 
     async def agenerate(
         self,

@@ -39,7 +39,7 @@ from tars.db.models import (
     User,
     UserWikiIndex,
 )
-from tars.db.session import _enable_sqlite_foreign_keys, get_db
+from tars.db.session import get_db
 from tars.storage.manager import (
     FileStorageManager,
     StoragePathTraversalError,
@@ -49,6 +49,14 @@ from tars.storage.reconciliation import (
     ReconciliationResult,
     StorageDBReconciliationEngine,
 )
+
+
+def _enable_sqlite_foreign_keys(dbapi_connection: Any, connection_record: Any) -> None:
+    """Ensure SQLite enforces foreign key constraints."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 
 # ============================================================================
 # Helper Factories

@@ -109,7 +109,23 @@ async def get_current_user(
     return user
 
 
+async def get_agent_chat_service(
+    db: AsyncSession = Depends(get_db_session),
+    storage: FileStorageManager = Depends(get_storage_manager),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+) -> Any:
+    """Provide initialized AgentChatService instance."""
+    from tars.services.agent_chat import AgentChatService
+
+    return AgentChatService(
+        db_session=db,
+        storage_manager=storage,
+        tool_registry=tool_registry,
+    )
+
+
 __all__ = [
+    "get_agent_chat_service",
     "get_current_user",
     "get_db_session",
     "get_storage_manager",
