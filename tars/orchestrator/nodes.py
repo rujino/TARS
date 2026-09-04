@@ -28,7 +28,6 @@ from langchain_core.messages import (
     RemoveMessage,
     ToolMessage,
 )
-from langgraph.graph import END
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,7 +96,8 @@ async def session_node(
     user_id = state.get("user_id", "")
     session_id = state.get("session_id")
     messages = state.get("messages", [])
-    active_query = state.get("active_query") or _extract_active_query(messages)
+    extracted_query = _extract_active_query(messages)
+    active_query = extracted_query if extracted_query else state.get("active_query", "")
 
     # 1. Fetch user persona parameters from DB (or state/defaults)
     humor = float(state.get("humor_level", DEFAULT_HUMOR_LEVEL))
@@ -142,6 +142,20 @@ async def session_node(
             background_tasks=background_tasks,
         )
         active_session_id = active_session.id
+
+        # Replace initial placeholder messages with DB working memory + active query
+        existing_messages = state.get("messages", [])
+        existing_ids: list[str] = [
+            str(m.id) for m in existing_messages if getattr(m, "id", None) is not None
+        ]
+        if existing_ids:
+            message_updates: list[BaseMessage] = (
+                [RemoveMessage(id=mid) for mid in existing_ids]
+                + list(working_memory)
+                + [HumanMessage(content=active_query)]
+            )
+        else:
+            message_updates = list(working_memory) + [HumanMessage(content=active_query)]
     else:
         # Fallback for standalone execution without DB session
         is_reset = bool(RESET_COMMAND_REGEX.match(active_query.strip()))
@@ -152,22 +166,12 @@ async def session_node(
             reason="Standalone session routing without DB session",
         )
         active_session_id = session_id or "default_session"
-        working_memory = []
-
-    # 3. Assemble clean message sequence (working_memory + current turn query)
-    existing_messages = state.get("messages", [])
-    existing_ids: list[str] = [
-        str(m.id) for m in existing_messages if getattr(m, "id", None) is not None
-    ]
-    if existing_ids:
-        # Avoid message duplication by removing initial placeholder messages with known IDs
-        message_updates: list[BaseMessage] = (
-            [RemoveMessage(id=mid) for mid in existing_ids]
-            + list(working_memory)
-            + [HumanMessage(content=active_query)]
-        )
-    else:
-        message_updates = list(working_memory) + [HumanMessage(content=active_query)]
+        if messages:
+            message_updates = list(messages)
+        elif active_query:
+            message_updates = [HumanMessage(content=active_query)]
+        else:
+            message_updates = []
 
     return {
         "session_id": active_session_id,
@@ -554,7 +558,7 @@ def should_continue(state: TARSState) -> str:
     if tool_calls and len(tool_calls) > 0 and iteration_count < max_iterations:
         return "tool_node"
 
-    return END
+    return "postprocess_node"
 
 
 __all__ = [

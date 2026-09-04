@@ -191,11 +191,11 @@ flowchart TD
 
 ### Phase 3: StateGraph 재구성 및 라우팅 (`tars/orchestrator/graph.py`)
 
-- [ ] **Task 3.1: 의존성 주입 래퍼 구성**
+- [x] **Task 3.1: 의존성 주입 래퍼 구성**
   - `build_tars_graph(router, slicer, persona_mgr, tool_registry, db_session, storage_mgr)` 인자 정의.
   - 외부 의존성(DB 세션, 스토리지, 세션 매니저)을 노드 클로저로 바인딩.
 
-- [ ] **Task 3.2: 엣지 및 조건부 라우팅 연결**
+- [x] **Task 3.2: 엣지 및 조건부 라우팅 연결**
   ```python
   # 진입점
   builder.add_edge(START, "session_node")
