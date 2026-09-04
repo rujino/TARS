@@ -130,7 +130,7 @@ flowchart TD
 
 ### Phase 2: 신규 노드 구현 및 기존 노드 개선 (`tars/orchestrator/nodes.py`)
 
-- [ ] **Task 2.1: `session_node` 신규 구현**
+- [x] **Task 2.1: `session_node` 신규 구현**
   - **책임**: 사용자 페르소나 설정(`TARSSettings`) 조회, `SmartSessionManager.route_session()` 호출, 세션 분기(시간 감쇄/리셋 감지), 워킹 메모리 로드.
   - **입력 State**: `user_id`, `session_id`, `active_query` (또는 `messages[-1]`)
   - **출력 State Update**:
@@ -146,7 +146,7 @@ flowchart TD
     }
     ```
 
-- [ ] **Task 2.2: `reset_node` 신규 구현**
+- [x] **Task 2.2: `reset_node` 신규 구현**
   - **책임**: 자연어 리셋 명령 감지 시 세션 아카이빙 완료 안내 메시지 생성.
   - **입력 State**: `mode`, `is_reset`
   - **출력 State Update**:
@@ -163,12 +163,12 @@ flowchart TD
     }
     ```
 
-- [ ] **Task 2.3: `postprocess_node` 신규 구현**
+- [x] **Task 2.3: `postprocess_node` 신규 구현**
   - **책임**: 현재 턴의 대화(`active_query`, `final_response`)를 DB에 영속화(`session_mgr.record_turn`)하고, 백그라운드 지식 추출 워커(`SelfEvolvingKnowledgeWorker`) 큐잉 지원.
   - **입력 State**: `session_id`, `user_id`, `active_query`, `final_response`
   - **주의사항**: `messages`에 담긴 순수 `HumanMessage`와 `AIMessage` 텍스트만 저장하며, `system_prompt`가 DB 대화 기록에 섞여 들어가지 않도록 보호.
 
-- [ ] **Task 2.4: `prompt_node` 리팩토링 및 프롬프트 인젝션 방어 적용**
+- [x] **Task 2.4: `prompt_node` 리팩토링 및 프롬프트 인젝션 방어 적용**
   - **입력 State**: `humor_level`, `honesty_level`, `mode`, `relevant_wikis`
   - **동작**:
     1. `relevant_wikis`의 본문 내 탈출용 태그(`</user_knowledge_context>`) sanitize 처리.
@@ -179,7 +179,7 @@ flowchart TD
     ```
   - **절대 금지**: `messages` 리스트에 `SystemMessage`를 `add_messages`하지 말 것.
 
-- [ ] **Task 2.5: `llm_node` 및 `tool_node` 리팩토링 (ReAct 루프)**
+- [x] **Task 2.5: `llm_node` 및 `tool_node` 리팩토링 (ReAct 루프)**
   - `llm_node`:
     - `router.route_and_generate_response(messages=list(messages), system_prompt=state["system_prompt"], tools=tools_decl)` 호출.
     - ReAct 순환 시 `state["system_prompt"]`가 유지되는지 확인.
