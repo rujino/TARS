@@ -45,8 +45,13 @@ class SessionRoutingDecision(BaseModel):
     reason: str = Field(default="", description="Human-readable explanation of the routing action")
 
 
+# Alias for backward/spec compatibility in orchestrator state
+RoutingDecision = SessionRoutingDecision
+
 __all__ = [
+    "RoutingDecision",
     "SessionRoutingAction",
     "SessionRoutingDecision",
     "TopicShiftResult",
 ]
+
