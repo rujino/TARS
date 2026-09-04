@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from fastapi import BackgroundTasks
+from langchain_core.callbacks.manager import adispatch_custom_event
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -31,7 +32,7 @@ from langchain_core.messages import (
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tars.adapters.base import ToolCallData
+from tars.adapters.base import LLMResponse, ToolCallData
 from tars.adapters.router import HybridLLMRouter
 from tars.config import get_settings
 from tars.core.okf.models import OKFDocument
@@ -200,6 +201,13 @@ async def reset_node(state: TARSState) -> dict[str, Any]:
         if mode == "companion"
         else "세션이 성공적으로 초기화되었습니다. 신규 작업을 시작하십시오."
     )
+    try:
+        await adispatch_custom_event(
+            "token",
+            {"delta": reset_msg, "content": reset_msg},
+        )
+    except Exception:
+        pass
     return {
         "final_response": reset_msg,
         "messages": [AIMessage(content=reset_msg)],
@@ -322,11 +330,16 @@ async def llm_node(
     system_prompt = state.get("system_prompt", "")
     tools_decl = tool_registry.export_gemini_declarations() if tool_registry is not None else []
 
-    resp = await router.route_and_generate_response(
-        messages=list(messages),
-        system_prompt=system_prompt,
-        tools=tools_decl,
-    )
+    gen_fn = getattr(router, "route_and_generate_response", None)
+    if callable(gen_fn):
+        maybe_coro = gen_fn(
+            messages=list(messages),
+            system_prompt=system_prompt,
+            tools=tools_decl,
+        )
+        resp = await maybe_coro if asyncio.iscoroutine(maybe_coro) else maybe_coro
+    else:
+        resp = LLMResponse(content="", tool_calls=[])
 
     if resp.tool_calls:
         langchain_tool_calls = [
@@ -338,6 +351,16 @@ async def llm_node(
             "messages": [ai_msg],
             "tool_calls": resp.tool_calls,
         }
+
+    # Emit complete token event for single-turn non-tool responses
+    if resp.content:
+        try:
+            await adispatch_custom_event(
+                "token",
+                {"delta": resp.content, "content": resp.content},
+            )
+        except Exception:
+            pass
 
     ai_msg = AIMessage(content=resp.content)
     return {
@@ -391,10 +414,31 @@ async def tool_node(
     for tc in pending_tool_calls:
         executed_tools.append(tc.name)
         try:
+            await adispatch_custom_event(
+                "tool_start",
+                {"tool": tc.name, "call_id": tc.id, "args": tc.arguments},
+            )
+        except Exception:
+            pass
+
+        try:
             if tool_registry is None:
                 raise RuntimeError("ToolRegistry is not configured in tool_node.")
 
             exec_result = await tool_registry.execute_tool(tc.name, tc.arguments)
+            try:
+                await adispatch_custom_event(
+                    "tool_result",
+                    {
+                        "tool": tc.name,
+                        "call_id": tc.id,
+                        "status": "success",
+                        "result": exec_result,
+                    },
+                )
+            except Exception:
+                pass
+
             raw_content = (
                 json.dumps(exec_result, ensure_ascii=False)
                 if not isinstance(exec_result, str)
@@ -403,9 +447,30 @@ async def tool_node(
             # Enclose in standard boundary delimiter so LLM treats as untrusted execution data
             content_str = f"[Tool Result: {tc.name}]\n{raw_content}"
             tool_messages.append(ToolMessage(content=content_str, tool_call_id=tc.id, name=tc.name))
-            results.append({"tool": tc.name, "status": "success", "result": exec_result})
+            results.append(
+                {
+                    "tool": tc.name,
+                    "call_id": tc.id,
+                    "args": tc.arguments,
+                    "status": "success",
+                    "result": exec_result,
+                }
+            )
         except Exception as exc:
             err_detail = f"{type(exc).__name__}: {exc}"
+            try:
+                await adispatch_custom_event(
+                    "tool_result",
+                    {
+                        "tool": tc.name,
+                        "call_id": tc.id,
+                        "status": "error",
+                        "error": err_detail,
+                    },
+                )
+            except Exception:
+                pass
+
             logger.warning(
                 "Tool '%s' execution failed: %s. Engaging graceful fallback.",
                 tc.name,
@@ -424,7 +489,15 @@ async def tool_node(
                     name=tc.name,
                 )
             )
-            results.append({"tool": tc.name, "status": "error", "error": err_detail})
+            results.append(
+                {
+                    "tool": tc.name,
+                    "call_id": tc.id,
+                    "args": tc.arguments,
+                    "status": "error",
+                    "error": err_detail,
+                }
+            )
             last_error = err_detail
 
     current_iterations = int(state.get("iteration_count", 0))

@@ -241,7 +241,7 @@ flowchart TD
 
 ### Phase 4: 스트리밍 브릿지 구현 (`tars/orchestrator/stream_bridge.py`)
 
-- [ ] **Task 4.1: 신규 파일 생성 및 `LangGraphStreamBridge` 클래스 작성**
+- [x] **Task 4.1: 신규 파일 생성 및 `LangGraphStreamBridge` 클래스 작성**
   - LangGraph의 `graph.astream_events(..., version="v2")`를 소비하여 FastAPI 라우터가 요구하는 `AgentStreamEvent` 제너레이터로 변환.
   - **이벤트 매핑 테이블**:
     | LangGraph Event (`kind`) | 조건 / 데이터 출처 | 방출할 `AgentStreamEvent` |
@@ -253,7 +253,7 @@ flowchart TD
     | *(루프 완료)* | final state | `type="stream_end", content=..., tools_used=...` |
     | *(종료)* | - | `type="done"` |
 
-- [ ] **Task 4.2: 비정상 에러 처리**
+- [x] **Task 4.2: 비정상 에러 처리**
   - 스트리밍 중 예외 발생 시 `type="error", error=str(e)` 이벤트 방출 및 제너레이터 안전 종료.
 
 ---
