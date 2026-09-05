@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from tars.config import get_settings
@@ -39,6 +40,7 @@ class ToolCAGManager:
         self._cached_content_id: str | None = None
         self._cache_hash: str = ""
         self._cached_bundle: dict[str, Any] | None = None
+        self._cached_at: datetime | None = None
 
     def get_static_instructions(self) -> str:
         """Compose static base system instructions without dynamic XML OKF slices."""
@@ -69,10 +71,14 @@ class ToolCAGManager:
         Returns:
             Dictionary containing system_prompt, tools, cache_hash, cached_content_id, and ttl.
         """
+        now = datetime.now(timezone.utc)
         current_hash = self.compute_cache_hash()
+
         if (
             not force_refresh
             and self._cached_bundle is not None
+            and self._cached_at is not None
+            and (now - self._cached_at).total_seconds() < self.ttl_seconds
             and self._cache_hash == current_hash
         ):
             return self._cached_bundle
@@ -80,6 +86,7 @@ class ToolCAGManager:
         instructions = self.get_static_instructions()
         tools = self.tool_registry.export_gemini_declarations()
         self._cache_hash = current_hash
+        self._cached_at = now
         self._cached_bundle = {
             "system_prompt": instructions,
             "tools": tools,
@@ -88,11 +95,15 @@ class ToolCAGManager:
             "ttl_seconds": self.ttl_seconds,
         }
         logger.debug(
-            "Recomputed static CAG bundle (hash=%s, tools_count=%d)",
+            "Recomputed static CAG bundle (hash=%s, tools_count=%d, ttl=%ds)",
             self._cache_hash[:8],
             len(tools),
+            self.ttl_seconds,
         )
         return self._cached_bundle
+
+    # Alias for contract compatibility
+    get_cag_bundle = get_static_cag_bundle
 
     async def sync_gemini_context_cache(
         self,
@@ -131,6 +142,7 @@ class ToolCAGManager:
                 self._cached_content_id = getattr(cache, "name", str(cache))
                 logger.info("Created Gemini server context cache: %s", self._cached_content_id)
                 self._cached_bundle = None  # refresh bundle with new cached_content_id
+                self._cached_at = None
                 return self._cached_content_id
 
             # Sync GenAI SDK cache creation
@@ -147,6 +159,7 @@ class ToolCAGManager:
                     "Created Gemini server context cache (sync): %s", self._cached_content_id
                 )
                 self._cached_bundle = None
+                self._cached_at = None
                 return self._cached_content_id
 
         except Exception as exc:
@@ -163,6 +176,7 @@ class ToolCAGManager:
         self._cached_content_id = None
         self._cached_bundle = None
         self._cache_hash = ""
+        self._cached_at = None
         logger.debug("ToolCAGManager cache invalidated.")
 
 

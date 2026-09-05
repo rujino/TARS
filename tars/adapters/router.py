@@ -11,8 +11,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from collections.abc import AsyncIterator, Sequence
-from enum import StrEnum
+from enum import Enum, StrEnum
 from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -20,8 +21,119 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from tars.adapters.base import BaseLLMAdapter, LLMResponse
 from tars.config import get_settings
+from tars.core.telemetry import update_circuit_breaker_metric
 
 logger = logging.getLogger("tars.adapters.router")
+
+
+
+class CircuitState(str, Enum):
+    """Operational states of the upstream LLM circuit breaker."""
+
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+
+TACTICAL_UPLINK_SEVERED_PREFIX = "[Tactical Uplink Severed — Operating on Auxiliary Local Core] "
+AUXILIARY_CORE_ACTIVE_PREFIX = "[Auxiliary Tactical Core Active] "
+
+
+class LLMCircuitBreaker:
+    """Stateful circuit breaker guarding external cloud LLM API calls."""
+
+    def __init__(
+        self,
+        failure_threshold: int = 3,
+        recovery_timeout: float = 30.0,
+    ) -> None:
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count: int = 0
+        self.last_failure_time: float = 0.0
+        self.state: CircuitState = CircuitState.CLOSED
+        update_circuit_breaker_metric(self.state.value)
+        self._half_open_in_flight: bool = False
+        self._half_open_timestamp: float = 0.0
+
+    def record_success(self) -> None:
+        """Record successful invocation, resetting failure counter and closing circuit."""
+        if self.state != CircuitState.CLOSED:
+            logger.info(
+                "Gemini Circuit Breaker RECOVERED: probe succeeded, state transitioned to CLOSED."
+            )
+        self.failure_count = 0
+        self.state = CircuitState.CLOSED
+        update_circuit_breaker_metric(self.state.value)
+        self._half_open_in_flight = False
+        self._half_open_timestamp = 0.0
+
+    def record_failure(self) -> None:
+        """Record execution failure, incrementing counter and tripping open if threshold met."""
+        self.failure_count += 1
+        self.last_failure_time = time.monotonic()
+        self._half_open_in_flight = False
+        self._half_open_timestamp = 0.0
+
+        if self.state == CircuitState.HALF_OPEN or self.failure_count >= self.failure_threshold:
+            self.state = CircuitState.OPEN
+            logger.error(
+                "Gemini Circuit Breaker TRIPPED OPEN (failures=%d, threshold=%d). Routing traffic to local SLM fallback.",
+                self.failure_count,
+                self.failure_threshold,
+            )
+        update_circuit_breaker_metric(self.state.value)
+
+    def record_cancellation(self) -> None:
+        """Reset in-flight canary probe flag upon cancellation in HALF_OPEN state."""
+        if self.state == CircuitState.HALF_OPEN:
+            self._half_open_in_flight = False
+            logger.info("Canary probe cancelled in HALF_OPEN state; reset in-flight flag.")
+
+    def allow_request(self) -> bool:
+        """Determine whether an upstream request is permitted according to state machine."""
+        if self.state == CircuitState.CLOSED:
+            return True
+
+        now = time.monotonic()
+        if self.state == CircuitState.OPEN:
+            if now - self.last_failure_time >= self.recovery_timeout:
+                self.state = CircuitState.HALF_OPEN
+                update_circuit_breaker_metric(self.state.value)
+                self._half_open_in_flight = True
+                self._half_open_timestamp = now
+                logger.info(
+                    "Gemini Circuit Breaker recovery timeout (%.1fs) elapsed. Transitioning to HALF_OPEN (canary probe).",
+                    self.recovery_timeout,
+                )
+                return True
+            return False
+
+        # self.state == CircuitState.HALF_OPEN
+        # Safety recovery: if canary probe in HALF_OPEN was abandoned or timed out, reset flag
+        if self._half_open_in_flight and (now - self._half_open_timestamp >= self.recovery_timeout):
+            logger.warning(
+                "Canary probe in HALF_OPEN timed out after %.1fs; resetting in-flight flag.",
+                now - self._half_open_timestamp,
+            )
+            self._half_open_in_flight = False
+
+        # Permit a single canary request; divert concurrent traffic
+        if not self._half_open_in_flight:
+            self._half_open_in_flight = True
+            self._half_open_timestamp = now
+            return True
+        return False
+
+    def reset(self) -> None:
+        """Manually reset circuit breaker to pristine CLOSED state."""
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+        self.state = CircuitState.CLOSED
+        update_circuit_breaker_metric(self.state.value)
+        self._half_open_in_flight = False
+        self._half_open_timestamp = 0.0
+
 
 
 class LLMEngineType(StrEnum):
@@ -69,6 +181,10 @@ class HybridLLMRouter:
         gemini_adapter: BaseLLMAdapter,
         slm_adapter: BaseLLMAdapter,
         slm_timeout_ms: int | None = None,
+        circuit_breaker: LLMCircuitBreaker | None = None,
+        failure_threshold: int = 3,
+        recovery_timeout: float = 30.0,
+        auxiliary_prefix: str = TACTICAL_UPLINK_SEVERED_PREFIX,
     ) -> None:
         self.gemini_adapter = gemini_adapter
         self.slm_adapter = slm_adapter
@@ -77,6 +193,31 @@ class HybridLLMRouter:
         )
         self.slm_timeout_ms = timeout
         self.slm_timeout_sec = timeout / 1000.0
+        self.circuit_breaker = circuit_breaker or LLMCircuitBreaker(
+            failure_threshold=failure_threshold,
+            recovery_timeout=recovery_timeout,
+        )
+        self.auxiliary_prefix = auxiliary_prefix
+
+    async def aclose(self) -> None:
+        """Close underlying LLM client adapters."""
+        if hasattr(self.slm_adapter, "aclose") and callable(self.slm_adapter.aclose):
+            await self.slm_adapter.aclose()
+        elif hasattr(self.slm_adapter, "close") and callable(self.slm_adapter.close):
+            res = self.slm_adapter.close()
+            if asyncio.iscoroutine(res):
+                await res
+
+        if hasattr(self.gemini_adapter, "aclose") and callable(self.gemini_adapter.aclose):
+            await self.gemini_adapter.aclose()
+        elif hasattr(self.gemini_adapter, "close") and callable(self.gemini_adapter.close):
+            res = self.gemini_adapter.close()
+            if asyncio.iscoroutine(res):
+                await res
+
+    async def close(self) -> None:
+        """Alias for aclose."""
+        await self.aclose()
 
     async def evaluate_routing(
         self,
@@ -181,6 +322,8 @@ class HybridLLMRouter:
                     except StopAsyncIteration:
                         break
                 return
+            except asyncio.CancelledError:
+                raise
             except Exception as slm_err:
                 err_detail = (
                     f"{type(slm_err).__name__}: {slm_err}"
@@ -190,16 +333,69 @@ class HybridLLMRouter:
                 logger.warning(
                     "SLM streaming failed or timed out (%s). Falling back to Gemini.", err_detail
                 )
-                async for chunk in self.gemini_adapter.astream(
+                if self.circuit_breaker.allow_request():
+                    try:
+                        async for chunk in self.gemini_adapter.astream(
+                            messages=messages,
+                            system_prompt=system_prompt,
+                            **kwargs,
+                        ):
+                            yield chunk
+                        self.circuit_breaker.record_success()
+                        return
+                    except asyncio.CancelledError:
+                        self.circuit_breaker.record_cancellation()
+                        raise
+                    except Exception as gemini_err:
+                        self.circuit_breaker.record_failure()
+                        logger.error(
+                            "Both SLM and Gemini failed during stream: %s",
+                            gemini_err,
+                            exc_info=True,
+                        )
+                        raise
+                else:
+                    raise
+
+        # Target engine is GEMINI
+        if self.circuit_breaker.allow_request():
+            first_chunk_yielded = False
+            try:
+                stream_iter = self.gemini_adapter.astream(
                     messages=messages,
                     system_prompt=system_prompt,
                     **kwargs,
-                ):
+                )
+                async for chunk in stream_iter:
+                    if not first_chunk_yielded:
+                        self.circuit_breaker.record_success()
+                        first_chunk_yielded = True
                     yield chunk
+                if not first_chunk_yielded:
+                    self.circuit_breaker.record_success()
                 return
+            except asyncio.CancelledError:
+                self.circuit_breaker.record_cancellation()
+                raise
+            except Exception as gemini_err:
+                err_detail = (
+                    f"{type(gemini_err).__name__}: {gemini_err}"
+                    if str(gemini_err)
+                    else type(gemini_err).__name__
+                )
+                logger.warning(
+                    "Gemini streaming failed (%s). Engaging local SLM fallback.", err_detail
+                )
+                self.circuit_breaker.record_failure()
+                if first_chunk_yielded:
+                    # Stream was partially delivered; cannot cleanly prepend prefix without corrupting stream
+                    raise
 
-        # Direct Gemini execution
-        async for chunk in self.gemini_adapter.astream(
+        # Fallback to local SLM
+        logger.info("Executing local SLM fallback streaming for query.")
+        if self.auxiliary_prefix:
+            yield self.auxiliary_prefix
+        async for chunk in self.slm_adapter.astream(
             messages=messages,
             system_prompt=system_prompt,
             **kwargs,
@@ -225,6 +421,8 @@ class HybridLLMRouter:
                     self.slm_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs),
                     timeout=self.slm_timeout_sec,
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as slm_err:
                 err_detail = (
                     f"{type(slm_err).__name__}: {slm_err}"
@@ -232,11 +430,51 @@ class HybridLLMRouter:
                     else type(slm_err).__name__
                 )
                 logger.warning("SLM generation failed (%s). Falling back to Gemini.", err_detail)
-                return await self.gemini_adapter.agenerate(
+                if self.circuit_breaker.allow_request():
+                    try:
+                        res = await self.gemini_adapter.agenerate(
+                            messages, system_prompt=system_prompt, **kwargs
+                        )
+                        self.circuit_breaker.record_success()
+                        return res
+                    except asyncio.CancelledError:
+                        self.circuit_breaker.record_cancellation()
+                        raise
+                    except Exception as gemini_err:
+                        self.circuit_breaker.record_failure()
+                        logger.error("Both SLM and Gemini failed: %s", gemini_err, exc_info=True)
+                        raise
+                raise
+
+        # Target engine is GEMINI
+        if self.circuit_breaker.allow_request():
+            try:
+                res = await self.gemini_adapter.agenerate(
                     messages, system_prompt=system_prompt, **kwargs
                 )
+                self.circuit_breaker.record_success()
+                return res
+            except asyncio.CancelledError:
+                self.circuit_breaker.record_cancellation()
+                raise
+            except Exception as gemini_err:
+                err_detail = (
+                    f"{type(gemini_err).__name__}: {gemini_err}"
+                    if str(gemini_err)
+                    else type(gemini_err).__name__
+                )
+                logger.warning(
+                    "Gemini generation failed (%s). Engaging local SLM fallback.", err_detail
+                )
+                self.circuit_breaker.record_failure()
 
-        return await self.gemini_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs)
+        # Fallback to local SLM
+        logger.info("Executing local SLM fallback generation for query.")
+        slm_res = await asyncio.wait_for(
+            self.slm_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs),
+            timeout=max(self.slm_timeout_sec, 5.0),
+        )
+        return f"{self.auxiliary_prefix}{slm_res}"
 
     async def route_and_generate_response(
         self,
@@ -271,6 +509,8 @@ class HybridLLMRouter:
                     timeout=self.slm_timeout_sec,
                 )
                 return LLMResponse(content=text, tool_calls=[])
+            except asyncio.CancelledError:
+                raise
             except Exception as slm_err:
                 err_detail = (
                     f"{type(slm_err).__name__}: {slm_err}"
@@ -279,12 +519,53 @@ class HybridLLMRouter:
                 )
                 logger.warning("SLM generation failed (%s). Falling back to Gemini.", err_detail)
 
-        if hasattr(self.gemini_adapter, "agenerate_response"):
-            return await self.gemini_adapter.agenerate_response(
-                messages, system_prompt=system_prompt, **kwargs
+        # Target engine is GEMINI
+        if self.circuit_breaker.allow_request():
+            try:
+                if hasattr(self.gemini_adapter, "agenerate_response"):
+                    resp = await self.gemini_adapter.agenerate_response(
+                        messages, system_prompt=system_prompt, **kwargs
+                    )
+                else:
+                    text = await self.gemini_adapter.agenerate(
+                        messages, system_prompt=system_prompt, **kwargs
+                    )
+                    resp = LLMResponse(content=text, tool_calls=[])
+                self.circuit_breaker.record_success()
+                return resp
+            except asyncio.CancelledError:
+                self.circuit_breaker.record_cancellation()
+                raise
+            except Exception as gemini_err:
+                err_detail = (
+                    f"{type(gemini_err).__name__}: {gemini_err}"
+                    if str(gemini_err)
+                    else type(gemini_err).__name__
+                )
+                logger.warning(
+                    "Gemini response generation failed (%s). Engaging local SLM fallback.",
+                    err_detail,
+                )
+                self.circuit_breaker.record_failure()
+
+        # Fallback to local SLM
+        logger.info("Executing local SLM fallback for structured response.")
+        if hasattr(self.slm_adapter, "agenerate_response"):
+            slm_resp = await asyncio.wait_for(
+                self.slm_adapter.agenerate_response(
+                    messages, system_prompt=system_prompt, **kwargs
+                ),
+                timeout=max(self.slm_timeout_sec, 5.0),
             )
-        text = await self.gemini_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs)
-        return LLMResponse(content=text, tool_calls=[])
+            return LLMResponse(
+                content=f"{self.auxiliary_prefix}{slm_resp.content}",
+                tool_calls=slm_resp.tool_calls,
+            )
+        text = await asyncio.wait_for(
+            self.slm_adapter.agenerate(messages, system_prompt=system_prompt, **kwargs),
+            timeout=max(self.slm_timeout_sec, 5.0),
+        )
+        return LLMResponse(content=f"{self.auxiliary_prefix}{text}", tool_calls=[])
 
     async def agenerate_response(
         self,
@@ -322,7 +603,11 @@ class HybridLLMRouter:
 
 
 __all__ = [
+    "AUXILIARY_CORE_ACTIVE_PREFIX",
+    "CircuitState",
     "HybridLLMRouter",
+    "LLMCircuitBreaker",
     "LLMEngineType",
     "RoutingDecision",
+    "TACTICAL_UPLINK_SEVERED_PREFIX",
 ]

@@ -12,15 +12,48 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from tars.adapters.base import BaseLLMAdapter
+from tars.adapters.base import BaseLLMAdapter, LLMResponse, ToolCallData
 from tars.config import get_settings
 
 logger = logging.getLogger("tars.adapters.gemini")
+
+_STREAM_SENTINEL = object()
+
+
+def _consume_sync_stream_safely(
+    response_stream: Any,
+    loop: asyncio.AbstractEventLoop,
+    queue: asyncio.Queue[Any],
+    stop_event: threading.Event,
+) -> None:
+    """Consume a blocking synchronous stream iterator in a daemon thread, pushing chunks to an asyncio.Queue."""
+    try:
+        for chunk in response_stream:
+            if stop_event.is_set() or loop.is_closed():
+                break
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, chunk)
+            except RuntimeError:
+                break
+    except Exception as exc:
+        if not stop_event.is_set() and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+            except RuntimeError:
+                pass
+    finally:
+        if not stop_event.is_set() and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, _STREAM_SENTINEL)
+            except RuntimeError:
+                pass
 
 
 class GeminiAdapter(BaseLLMAdapter):
@@ -89,45 +122,47 @@ class GeminiAdapter(BaseLLMAdapter):
                 formatted.append({"role": "user", "content": str(msg.content)})
         return formatted
 
-    async def _call_client_generate(
+    async def _call_client_generate_response(
         self,
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
         **kwargs: Any,
-    ) -> str:
-        """Internal worker executing non-stream Gemini completion (mockable in tests)."""
+    ) -> LLMResponse:
+        """Internal worker executing structured Gemini completion with tool calling."""
         client = self._get_client()
+        tools = kwargs.get("tools") or self.tools
+
         if client is None:
             # Fallback mock/offline response when API key is unconfigured
             last_msg = messages[-1].content if messages else ""
-            return f"TARS: Affirmative. Processed '{last_msg}'. Humor setting: 90%."
-
-        # Check if langchain ChatGoogleGenerativeAI
-        if hasattr(client, "ainvoke"):
-            all_msgs: list[BaseMessage] = []
-            if system_prompt:
-                all_msgs.append(SystemMessage(content=system_prompt))
-            all_msgs.extend(messages)
-            res = await client.ainvoke(all_msgs)
-            return str(res.content)
-
-        # Direct google-genai SDK
-        try:
-            from google.genai import types
-
-            config = types.GenerateContentConfig(
-                system_instruction=system_prompt if system_prompt else None,
-                temperature=self.temperature,
-                max_output_tokens=self.max_output_tokens,
+            return LLMResponse(
+                content=f"TARS: Affirmative. Processed '{last_msg}'. Humor setting: 90%.",
+                tool_calls=[],
+                model_name=self.model_name,
             )
-        except Exception:
-            config = None
 
         formatted = self._format_messages_for_gemini(messages, system_prompt)
         prompt_text = "\n".join(f"{m['role']}: {m['content']}" for m in formatted)
 
-        # Use native async client if available
+        # 1. Direct google-genai async SDK
         if hasattr(client, "aio") and hasattr(client.aio, "models"):
+            try:
+                from google.genai import types
+
+                genai_tools: Any = None
+                if tools:
+                    genai_tools = [types.Tool(function_declarations=list(tools))]  # type: ignore[arg-type]
+
+                config = types.GenerateContentConfig(
+                    system_instruction=system_prompt if system_prompt else None,
+                    temperature=self.temperature,
+                    max_output_tokens=self.max_output_tokens,
+                    tools=genai_tools,
+                )
+            except Exception as cfg_err:
+                logger.warning("Failed to build GenerateContentConfig: %s", cfg_err)
+                config = None
+
             if config is not None:
                 resp = await client.aio.models.generate_content(
                     model=self.model_name,
@@ -139,25 +174,116 @@ class GeminiAdapter(BaseLLMAdapter):
                     model=self.model_name,
                     contents=prompt_text,
                 )
-            return str(resp.text)
 
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: (
-                client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt_text,
-                    config=config,
+            parsed_tool_calls: list[ToolCallData] = []
+            if resp is not None and hasattr(resp, "function_calls") and resp.function_calls:
+                for fc in resp.function_calls:
+                    call_id = getattr(fc, "id", None) or f"call_{uuid.uuid4().hex[:8]}"
+                    name = getattr(fc, "name", "")
+                    args = dict(getattr(fc, "args", {}) or {})
+                    parsed_tool_calls.append(
+                        ToolCallData(id=call_id, name=name, arguments=args)
+                    )
+
+            content = ""
+            if resp is not None:
+                try:
+                    content = str(resp.text or "")
+                except Exception:
+                    content = ""
+
+            return LLMResponse(
+                content=content,
+                tool_calls=parsed_tool_calls,
+                model_name=self.model_name,
+            )
+
+        # 2. Check if langchain ChatGoogleGenerativeAI
+        if hasattr(client, "ainvoke") and callable(getattr(client, "ainvoke")):
+            bound_client = client
+            if tools and hasattr(client, "bind_tools"):
+                try:
+                    bound_client = client.bind_tools(tools)
+                except Exception as b_err:
+                    logger.warning("Failed to bind tools to langchain client: %s", b_err)
+
+            all_msgs: list[BaseMessage] = []
+            if system_prompt:
+                all_msgs.append(SystemMessage(content=system_prompt))
+            all_msgs.extend(messages)
+            res = await bound_client.ainvoke(all_msgs)
+
+            tool_calls = []
+            raw_tcs = getattr(res, "tool_calls", None) or []
+            for tc in raw_tcs:
+                if isinstance(tc, dict):
+                    tool_calls.append(
+                        ToolCallData(
+                            id=str(tc.get("id") or f"call_{uuid.uuid4().hex[:8]}"),
+                            name=str(tc.get("name", "")),
+                            arguments=dict(tc.get("args", {}) or {}),
+                        )
+                    )
+
+            return LLMResponse(
+                content=str(res.content or ""),
+                tool_calls=tool_calls,
+                model_name=self.model_name,
+            )
+        else:
+            loop = asyncio.get_running_loop()
+            resp = await loop.run_in_executor(
+                None,
+                lambda: (
+                    client.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt_text,
+                        config=config,
+                    )
+                    if config is not None
+                    else client.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt_text,
+                    )
+                ),
+            )
+
+        sync_tool_calls: list[ToolCallData] = []
+        if resp is not None and hasattr(resp, "function_calls") and resp.function_calls:
+            for fc in resp.function_calls:
+                call_id = getattr(fc, "id", None) or f"call_{uuid.uuid4().hex[:8]}"
+                name = getattr(fc, "name", "")
+                args = dict(getattr(fc, "args", {}) or {})
+                sync_tool_calls.append(
+                    ToolCallData(id=call_id, name=name, arguments=args)
                 )
-                if config is not None
-                else client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt_text,
-                )
-            ),
+
+        content = ""
+        if resp is not None:
+            try:
+                content = str(resp.text or "")
+            except Exception:
+                content = ""
+
+        return LLMResponse(
+            content=content,
+            tool_calls=sync_tool_calls,
+            model_name=self.model_name,
         )
-        return str(response.text)
+
+    async def _call_client_generate(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> str:
+        """Internal worker executing non-stream Gemini completion (mockable in tests)."""
+        resp = await self._call_client_generate_response(
+            messages=messages,
+            system_prompt=system_prompt,
+            **kwargs,
+        )
+        return resp.content
 
     async def _call_client_stream(
         self,
@@ -231,9 +357,33 @@ class GeminiAdapter(BaseLLMAdapter):
                 )
             ),
         )
-        for chunk in response_stream:
-            if chunk.text:
-                yield str(chunk.text)
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        stop_event = threading.Event()
+        thread = threading.Thread(
+            target=_consume_sync_stream_safely,
+            args=(response_stream, loop, queue, stop_event),
+            daemon=True,
+        )
+        thread.start()
+
+        async def stream_generate() -> AsyncIterator[str]:
+            try:
+                while True:
+                    item = await queue.get()
+                    if item is _STREAM_SENTINEL:
+                        break
+                    if isinstance(item, Exception):
+                        raise item
+                    chunk_text = getattr(item, "text", None)
+                    if chunk_text is None and isinstance(item, str):
+                        chunk_text = item
+                    if chunk_text:
+                        yield str(chunk_text)
+            finally:
+                stop_event.set()
+
+        async for chunk in stream_generate():
+            yield chunk
 
     async def _probe_api_health(self) -> bool:
         """Internal health probe worker (mockable in tests)."""
@@ -248,8 +398,21 @@ class GeminiAdapter(BaseLLMAdapter):
                 await client.ainvoke([HumanMessage(content="ping")])
             return True
         except Exception as e:
-            logger.debug("Gemini health probe failed: %s", e)
+            logger.warning("Gemini health probe failed: %s", e)
             return False
+
+    async def agenerate_response(
+        self,
+        messages: Sequence[BaseMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Generate structured response with parsed tool calls using Google Gemini."""
+        return await self._call_client_generate_response(
+            messages=messages,
+            system_prompt=system_prompt,
+            **kwargs,
+        )
 
     async def agenerate(
         self,

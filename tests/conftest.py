@@ -6,6 +6,10 @@ mock LLM adapters, test users, and sample OKF documents.
 
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("TARS_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Sequence
 from datetime import UTC, datetime
@@ -90,6 +94,8 @@ def test_storage_manager(storage_manager: FileStorageManager) -> FileStorageMana
 @pytest_asyncio.fixture(scope="function")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create a pristine in-memory SQLite async database engine for each test."""
+    import tars.db.session as db_session_module
+
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         echo=False,
@@ -99,12 +105,30 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    old_engine = db_session_module._engine
+    old_sessionmaker = db_session_module._sessionmaker
+
+    db_session_module._engine = engine
+    db_session_module._sessionmaker = async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+
     yield engine
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    db_session_module._engine = old_engine
+    db_session_module._sessionmaker = old_sessionmaker
 
-    await engine.dispose()
+    try:
+        async with asyncio.timeout(1.0):
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+            await engine.dispose()
+    except (Exception, asyncio.TimeoutError):
+        pass
+
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -119,8 +143,13 @@ async def async_db_session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSess
     )
 
     async with session_factory() as session:
-        yield session
-        await session.rollback()
+        try:
+            yield session
+        finally:
+            try:
+                await session.rollback()
+            except Exception:
+                pass
 
 
 @pytest_asyncio.fixture(scope="function")

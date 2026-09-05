@@ -18,8 +18,8 @@ from tars.api.schemas import (
 )
 from tars.core.security import (
     create_access_token,
-    get_password_hash,
-    verify_password,
+    get_password_hash_async,
+    verify_password_async,
 )
 from tars.db.models import TARSSettings, User
 
@@ -56,7 +56,7 @@ async def signup(
 
     # Create User and default TARSSettings
     now = datetime.now(UTC)
-    hashed_pwd = get_password_hash(payload.password)
+    hashed_pwd = await get_password_hash_async(payload.password)
 
     new_user = User(
         username=payload.username,
@@ -105,7 +105,7 @@ async def login(
     res = await db.execute(stmt)
     user = res.scalar_one_or_none()
 
-    if user is None or not verify_password(payload.password, user.hashed_password):
+    if user is None or not await verify_password_async(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",

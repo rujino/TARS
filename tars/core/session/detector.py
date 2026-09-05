@@ -88,11 +88,11 @@ class TopicShiftDetector:
         self,
         recent_turns: Sequence[ChatMessage | BaseMessage],
         new_query: str,
-        timeout_seconds: float = 0.5,
+        timeout_seconds: float = 2.0,
     ) -> TopicShiftResult:
         """Evaluate whether new_query represents a semantic topic shift from recent dialogue context.
 
-        Uses a fast timeout (default 500ms) with safe fallback to False to guarantee low latency.
+        Uses a realistic cloud timeout (default 2.0s) with safe fallback to False to guarantee low latency.
         """
         if not recent_turns or len(recent_turns) < 2 or not new_query.strip():
             return TopicShiftResult(is_topic_shift=False)
@@ -123,14 +123,18 @@ class TopicShiftDetector:
                 is_topic_shift=is_shift,
                 new_topic=new_topic,
             )
-        except TimeoutError:
-            logger.debug(
+        except (TimeoutError, asyncio.TimeoutError):
+            logger.warning(
                 "Topic shift detection timed out after %.2fs; defaulting to False",
                 timeout_seconds,
             )
             return TopicShiftResult(is_topic_shift=False)
         except Exception as exc:
-            logger.debug("Topic shift detection failed (%s); defaulting to False", exc)
+            logger.error(
+                "Topic shift detection failed (%s); defaulting to False",
+                exc,
+                exc_info=True,
+            )
             return TopicShiftResult(is_topic_shift=False)
 
 

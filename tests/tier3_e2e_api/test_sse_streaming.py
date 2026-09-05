@@ -128,3 +128,64 @@ async def test_sse_streaming_empty_message_validation(
     """Verify empty message body returns 422 Unprocessable Entity."""
     response = await auth_client.post("/api/v1/chat/stream", json={})
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_terminates_on_client_disconnect(
+    auth_client: AsyncClient,
+    seed_test_user: User,
+) -> None:
+    """Verify POST /api/v1/chat/stream terminates immediately when request.is_disconnected() is True."""
+    mock_tokens = ["TARS: ", "Navigation ", "thrusters ", "online."]
+
+    async def mock_router_stream(*args: Any, **kwargs: Any) -> Any:
+        for t in mock_tokens:
+            yield t
+
+    # Simulate client disconnect after the first token event
+    # First 2 calls (stream_start, first token) return False; subsequent call returns True
+    disconnect_sequence = [False, False, True, True]
+
+    async def mock_is_disconnected(self: Any) -> bool:
+        if disconnect_sequence:
+            return disconnect_sequence.pop(0)
+        return True
+
+    with patch.object(HybridLLMRouter, "route_and_stream", side_effect=mock_router_stream), \
+         patch("starlette.requests.Request.is_disconnected", new=mock_is_disconnected), \
+         patch("tars.api.routers.chat.logger.info") as mock_log_info:
+        payload = {
+            "session_id": "session_disconnect_001",
+            "message": "TARS, status?",
+        }
+        response = await auth_client.post("/api/v1/chat/stream", json=payload)
+        assert response.status_code == 200
+
+        raw_content = response.text
+        events = parse_sse_events(raw_content)
+
+        # Extract tokens
+        token_pieces: list[str] = []
+        for e in events:
+            if e.get("event") == "token":
+                try:
+                    data_obj = json.loads(e["data"])
+                    token_pieces.append(data_obj.get("content") or data_obj.get("delta", ""))
+                except json.JSONDecodeError:
+                    token_pieces.append(e["data"])
+
+        # Only the first token ("TARS: ") was yielded before client disconnection was detected
+        assert token_pieces == ["TARS: "]
+
+        # Stream ended prematurely before reaching stream_end or done
+        event_names = [e.get("event") for e in events if "event" in e]
+        assert "stream_end" not in event_names
+        assert "done" not in event_names
+
+        # Verify disconnection log entry
+        assert any(
+            "Client disconnected from SSE stream" in str(arg)
+            for call in mock_log_info.call_args_list
+            for arg in call.args
+        )
+

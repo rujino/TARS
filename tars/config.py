@@ -46,6 +46,32 @@ class Settings(BaseSettings):
         description="Async SQLAlchemy database URL (postgresql+asyncpg)",
     )
     db_echo: bool = Field(default=False, description="Echo SQL queries in logs")
+    db_pool_size: int = Field(
+        default=20, description="SQLAlchemy connection pool size"
+    )
+    db_max_overflow: int = Field(
+        default=10, description="SQLAlchemy max pool overflow"
+    )
+    db_pool_timeout: float = Field(
+        default=30.0, description="SQLAlchemy pool timeout in seconds"
+    )
+    db_pool_recycle: int = Field(
+        default=1800, description="SQLAlchemy connection recycle in seconds"
+    )
+    db_pool_pre_ping: bool = Field(
+        default=True, description="Enable connection health pre-ping"
+    )
+
+    # CORS Settings (SEC-01)
+    cors_origins: list[str] = Field(
+        default=[
+            "http://localhost:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8000",
+        ],
+        description="Allowed CORS origin domains (explicit whitelist, no wildcard with credentials)",
+    )
 
     # JWT Authentication settings
     jwt_secret_key: str = Field(

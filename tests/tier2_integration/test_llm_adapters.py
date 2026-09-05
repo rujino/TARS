@@ -79,6 +79,58 @@ async def test_gemini_adapter_health_check() -> None:
         is_healthy = await adapter.is_healthy()
         assert is_healthy is False
 
+@pytest.mark.asyncio
+async def test_gemini_adapter_agenerate_response_with_tools() -> None:
+    """Verify GeminiAdapter parses function_calls into ToolCallData structures."""
+    from unittest.mock import MagicMock
+
+    from tars.adapters.base import LLMResponse
+
+    adapter = GeminiAdapter(api_key="fake-test-key", model_name="gemini-2.0-flash")
+
+    # Mock google-genai client response
+    mock_fc = MagicMock()
+    mock_fc.id = "call_cal_123"
+    mock_fc.name = "calendar_list_events"
+    mock_fc.args = {"max_results": 5}
+
+    mock_resp = MagicMock()
+    mock_resp.text = "Checking calendar..."
+    mock_resp.function_calls = [mock_fc]
+
+    mock_client = MagicMock()
+    mock_client.aio.models.generate_content = AsyncMock(return_value=mock_resp)
+
+    with patch.object(adapter, "_get_client", return_value=mock_client):
+        messages: list[BaseMessage] = [HumanMessage(content="Check my events.")]
+        tool_decl = [{"name": "calendar_list_events", "description": "List events"}]
+        resp = await adapter.agenerate_response(
+            messages=messages,
+            system_prompt="You are TARS.",
+            tools=tool_decl,
+        )
+
+        assert isinstance(resp, LLMResponse)
+        assert resp.content == "Checking calendar..."
+        assert len(resp.tool_calls) == 1
+        tc = resp.tool_calls[0]
+        assert tc.id == "call_cal_123"
+        assert tc.name == "calendar_list_events"
+        assert tc.arguments == {"max_results": 5}
+
+
+@pytest.mark.asyncio
+async def test_gemini_adapter_agenerate_response_offline() -> None:
+    """Verify GeminiAdapter returns graceful offline mock response when client is None."""
+    adapter = GeminiAdapter(api_key=None)
+
+    with patch.object(adapter, "_get_client", return_value=None):
+        messages: list[BaseMessage] = [HumanMessage(content="Hello TARS")]
+        resp = await adapter.agenerate_response(messages=messages)
+
+        assert resp.tool_calls == []
+        assert "Affirmative" in resp.content
+
 
 # ============================================================================
 # 2. LlamaCppAdapter Integration Tests

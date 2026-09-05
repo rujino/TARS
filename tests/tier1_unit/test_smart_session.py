@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -158,6 +159,29 @@ class TestTopicShiftDetector:
         result = await detector.detect_topic_shift(history, "Query 2", timeout_seconds=0.05)
         # Should gracefully timeout and return False
         assert not result.is_topic_shift
+
+    @pytest.mark.asyncio
+    async def test_detect_topic_shift_default_timeout_is_2s(self) -> None:
+        """Verify default timeout_seconds is 2.0s and allows realistic LLM latency (REL-05)."""
+        import inspect
+
+        sig = inspect.signature(TopicShiftDetector.detect_topic_shift)
+        assert sig.parameters["timeout_seconds"].default == 2.0
+
+        class RealisticCloudLLM(MockLLMAdapter):
+            async def agenerate(self, *args: Any, **kwargs: Any) -> str:
+                await asyncio.sleep(0.1)  # Realistic latency > 0.05s, within 2.0s
+                return '{"is_topic_shift": true, "new_topic": "Stellar Evolution"}'
+
+        detector = TopicShiftDetector(llm_adapter=RealisticCloudLLM())
+        history = [
+            HumanMessage(content="Tell me about Python asyncio."),
+            AIMessage(content="asyncio is a library to write concurrent code."),
+        ]
+        # Call WITHOUT passing timeout_seconds to ensure default 2.0s is utilized
+        result = await detector.detect_topic_shift(history, "How do black holes form?")
+        assert result.is_topic_shift is True
+        assert result.new_topic == "Stellar Evolution"
 
 
 # ============================================================================
@@ -425,3 +449,99 @@ class TestSmartSessionManager:
         assert reloaded.last_active_at > original_last_active
         assert len(reloaded.messages) == 2
         assert reloaded.title == "TARS, calculate landing vector."
+
+    @pytest.mark.asyncio
+    async def test_archive_session_dispatches_task_when_background_tasks_is_none(
+        self,
+        async_db_session: AsyncSession,
+        seed_test_user: User,
+        temp_storage_root: Any,
+    ) -> None:
+        """Verify archive_session falls back to asyncio.create_task registered with _background_node_tasks when background_tasks is None."""
+        from tars.extractor.worker import SelfEvolvingKnowledgeWorker
+        from tars.orchestrator.nodes import _background_node_tasks
+
+        _background_node_tasks.clear()
+
+        storage = FileStorageManager(base_dir=temp_storage_root)
+        mock_llm = MockLLMAdapter()
+        manager = SmartSessionManager(
+            db_session=async_db_session,
+            storage_manager=storage,
+            llm_adapter=mock_llm,
+        )
+
+        session = await manager.create_new_session(
+            user_id=seed_test_user.id, title="Archival Fallback Test"
+        )
+        await manager.record_turn(
+            session_id=session.id,
+            user_id=seed_test_user.id,
+            user_content="Turn 1 Question",
+            assistant_content="Turn 1 Answer",
+        )
+
+        task_started = asyncio.Event()
+        allow_finish = asyncio.Event()
+
+        async def controlled_extract(*args: Any, **kwargs: Any) -> list[Any]:
+            task_started.set()
+            await allow_finish.wait()
+            return []
+
+        with patch.object(
+            SelfEvolvingKnowledgeWorker, "extract_and_sync", side_effect=controlled_extract
+        ):
+            # Archive with background_tasks=None
+            await manager.archive_session(session, background_tasks=None)
+
+            # Wait for task to start
+            await asyncio.wait_for(task_started.wait(), timeout=1.0)
+
+            # Verify task was registered in _background_node_tasks
+            pending = [t for t in _background_node_tasks if not t.done()]
+            assert len(pending) >= 1, (
+                "Expected background task to be registered in _background_node_tasks"
+            )
+            bg_task = pending[0]
+
+            allow_finish.set()
+            await bg_task
+            assert bg_task.done()
+            assert not bg_task.cancelled()
+            assert bg_task not in _background_node_tasks
+
+    @pytest.mark.asyncio
+    async def test_run_async_knowledge_extraction_cooperative_cancellation(
+        self,
+        temp_storage_root: Any,
+    ) -> None:
+        """Verify _run_async_knowledge_extraction re-raises asyncio.CancelledError when cancelled."""
+        from tars.core.session.manager import _run_async_knowledge_extraction
+        from tars.extractor.worker import SelfEvolvingKnowledgeWorker
+
+        storage = FileStorageManager(base_dir=temp_storage_root)
+
+        async def slow_extract(*args: Any, **kwargs: Any) -> list[Any]:
+            await asyncio.sleep(10.0)
+            return []
+
+        with patch.object(
+            SelfEvolvingKnowledgeWorker, "extract_and_sync", side_effect=slow_extract
+        ):
+            messages = [HumanMessage(content="Q"), AIMessage(content="A")]
+            task = asyncio.create_task(
+                _run_async_knowledge_extraction(
+                    user_id="user_cancel_test",
+                    messages=messages,
+                    storage_manager=storage,
+                    extractor_llm=MockLLMAdapter(),
+                )
+            )
+            await asyncio.sleep(0.01)
+            task.cancel()
+
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+            assert task.cancelled()

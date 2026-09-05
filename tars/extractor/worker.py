@@ -153,7 +153,7 @@ class SelfEvolvingKnowledgeWorker:
                     )
                 return summaries
             except Exception as err:
-                logger.debug("Failed to fetch knowledge summary from DB: %s", err)
+                logger.warning("Failed to fetch knowledge summary from DB: %s", err)
 
         # Fallback to storage
         try:
@@ -168,7 +168,7 @@ class SelfEvolvingKnowledgeWorker:
                     }
                 )
         except Exception as ex:
-            logger.debug("Failed to list knowledge from storage: %s", ex)
+            logger.warning("Failed to list knowledge from storage: %s", ex)
 
         return summaries
 
@@ -224,7 +224,7 @@ class SelfEvolvingKnowledgeWorker:
             data = json.loads(cleaned_json)
             result = KnowledgeExtractionResult.model_validate(data)
         except Exception as err:
-            logger.debug("Extractor LLM response could not be parsed: %s", err)
+            logger.error("Extractor LLM response could not be parsed: %s", err, exc_info=True)
             return []
 
         if not result.should_extract or not result.content:

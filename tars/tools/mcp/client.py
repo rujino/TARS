@@ -8,6 +8,7 @@ Supports:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -146,11 +147,41 @@ class AsyncMCPClient:
             )
         return tools
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> MCPCallResult:
-        """Invoke a tool on the remote MCP server (tools/call)."""
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> MCPCallResult:
+        """Invoke a tool on the remote MCP server with retry backoff and timeout guard."""
         if not self._is_connected:
             await self.connect()
 
+        effective_timeout = timeout if timeout is not None else (self.config.timeout or 10.0)
+
+        try:
+            return await asyncio.wait_for(
+                self._execute_tool_with_retry(name, arguments),
+                timeout=effective_timeout,
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.warning("MCP tool '%s' timed out after %.1fs", name, effective_timeout)
+            return MCPCallResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": f"Execution timed out after {effective_timeout}s",
+                    }
+                ],
+                isError=True,
+            )
+
+    async def _execute_tool_with_retry(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+    ) -> MCPCallResult:
+        args = arguments or {}
         if self.config.transport == MCPTransportType.MOCK:
             if name not in self._mock_tools:
                 return MCPCallResult(
@@ -165,9 +196,9 @@ class AsyncMCPClient:
                     import inspect
 
                     if inspect.iscoroutinefunction(handler):
-                        res = await handler(**arguments)
+                        res = await handler(**args)
                     else:
-                        res = handler(**arguments)
+                        res = handler(**args)
 
                     if isinstance(res, MCPCallResult):
                         return res
@@ -184,9 +215,9 @@ class AsyncMCPClient:
                         isError=True,
                     )
             return MCPCallResult(
-                content=[{"type": "text", "text": f"Mock executed {name} with args: {arguments}"}],
+                content=[{"type": "text", "text": f"Mock executed {name} with args: {args}"}],
                 isError=False,
-                structured_data={"status": "mock_success", "tool": name, "arguments": arguments},
+                structured_data={"status": "mock_success", "tool": name, "arguments": args},
             )
 
         req_id = self._next_id()
@@ -194,32 +225,72 @@ class AsyncMCPClient:
             "jsonrpc": "2.0",
             "id": req_id,
             "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
+            "params": {"name": name, "arguments": args},
         }
 
         if not self.config.url:
             raise ValueError(f"MCP server '{self.config.name}' requires a valid URL.")
 
-        client = self._get_http_client()
-        resp = await client.post(self.config.url, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                client = self._get_http_client()
+                resp = await client.post(self.config.url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
 
-        if "error" in data:
-            err_msg = (
-                data["error"].get("message", str(data["error"]))
-                if isinstance(data["error"], dict)
-                else str(data["error"])
-            )
-            return MCPCallResult(
-                content=[{"type": "text", "text": f"MCP tool error: {err_msg}"}],
-                isError=True,
-            )
+                if "error" in data:
+                    err_msg = (
+                        data["error"].get("message", str(data["error"]))
+                        if isinstance(data["error"], dict)
+                        else str(data["error"])
+                    )
+                    return MCPCallResult(
+                        content=[{"type": "text", "text": f"MCP tool error: {err_msg}"}],
+                        isError=True,
+                    )
 
-        result_data = data.get("result", {})
-        content = result_data.get("content", [])
-        is_error = result_data.get("isError", False)
-        return MCPCallResult(content=content, isError=is_error)
+                result_data = data.get("result", {})
+                content = result_data.get("content", [])
+                is_error = result_data.get("isError", False)
+                return MCPCallResult(content=content, isError=is_error)
+
+            except (httpx.ConnectError, httpx.HTTPStatusError) as exc:
+                is_retryable = isinstance(exc, httpx.ConnectError) or (
+                    isinstance(exc, httpx.HTTPStatusError)
+                    and exc.response.status_code in (502, 503, 504)
+                )
+                if not is_retryable or attempt == max_retries:
+                    logger.error(
+                        "MCP tool '%s' failed (attempt %d/%d): %s",
+                        name,
+                        attempt + 1,
+                        max_retries + 1,
+                        exc,
+                    )
+                    return MCPCallResult(
+                        content=[{"type": "text", "text": f"MCP tool network failure: {exc}"}],
+                        isError=True,
+                    )
+                delay = 0.5 * (2**attempt)
+                logger.warning(
+                    "MCP tool '%s' transient failure (%s); retrying in %.2fs...",
+                    name,
+                    exc,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+            except Exception as exc:
+                logger.error("MCP tool '%s' unexpected failure: %s", name, exc, exc_info=True)
+                return MCPCallResult(
+                    content=[{"type": "text", "text": f"MCP tool unexpected error: {exc}"}],
+                    isError=True,
+                )
+
+        return MCPCallResult(
+            content=[{"type": "text", "text": f"MCP tool '{name}' failed after retries"}],
+            isError=True,
+        )
 
     async def ping(self) -> bool:
         """Check if MCP server connection is healthy."""
@@ -244,6 +315,10 @@ class AsyncMCPClient:
         if self._owns_http_client and self._http_client is not None:
             await self._http_client.aclose()
             self._http_client = None
+
+    async def aclose(self) -> None:
+        """Alias for close."""
+        await self.close()
 
 
 __all__ = [

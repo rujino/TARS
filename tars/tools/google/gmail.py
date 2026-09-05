@@ -55,6 +55,15 @@ class GmailAdapter:
             },
         }
 
+    async def close(self) -> None:
+        """Close underlying authentication and HTTP resources."""
+        if hasattr(self.auth_helper, "close"):
+            await self.auth_helper.close()
+
+    async def aclose(self) -> None:
+        """Async close alias."""
+        await self.close()
+
     async def search_messages(
         self,
         query: str,

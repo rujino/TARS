@@ -10,6 +10,7 @@ from tars.core.session.manager import (
     SmartSessionManager,
 )
 from tars.core.session.models import (
+    RoutingDecision,
     SessionRoutingAction,
     SessionRoutingDecision,
     TopicShiftResult,
@@ -18,6 +19,7 @@ from tars.core.session.models import (
 __all__ = [
     "MID_TERM_THRESHOLD_SECONDS",
     "RESET_COMMAND_REGEX",
+    "RoutingDecision",
     "SHORT_TERM_THRESHOLD_SECONDS",
     "SessionRoutingAction",
     "SessionRoutingDecision",

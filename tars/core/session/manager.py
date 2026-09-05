@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -61,6 +62,9 @@ async def _run_async_knowledge_extraction(
                 user_id,
                 len(docs),
             )
+    except asyncio.CancelledError:
+        logger.warning("Background knowledge extraction cancelled for user %s", user_id)
+        raise
     except Exception as exc:
         logger.error(
             "Error during background knowledge extraction for user %s: %s",
@@ -213,7 +217,31 @@ class SmartSessionManager:
                 extractor_llm=self.llm,
             )
         else:
-            logger.debug("No background_tasks context available; skipping async extraction")
+            # Fallback for persistent WebSocket sessions where background_tasks is None
+            try:
+                from tars.orchestrator.nodes import _background_node_tasks
+
+                task = asyncio.create_task(
+                    _run_async_knowledge_extraction(
+                        user_id=user_id,
+                        messages=langchain_msgs,
+                        storage_manager=self.storage,
+                        extractor_llm=self.llm,
+                    )
+                )
+                _background_node_tasks.add(task)
+                task.add_done_callback(_background_node_tasks.discard)
+                logger.info(
+                    "Dispatched WebSocket archival extraction via asyncio.create_task for user %s",
+                    user_id,
+                )
+            except Exception as bg_err:
+                logger.error(
+                    "Failed to dispatch background knowledge extraction for user %s: %s",
+                    user_id,
+                    bg_err,
+                    exc_info=True,
+                )
 
     async def archive_session(
         self,
