@@ -12,7 +12,8 @@ from typing import Any
 
 from fastapi import BackgroundTasks
 
-from tars.orchestrator.events import AgentStreamEvent
+from tars.orchestrator.models import AgentStreamEvent
+from tars.orchestrator.state import TARSState
 
 logger = logging.getLogger("tars.orchestrator.stream_bridge")
 
@@ -24,7 +25,7 @@ class LangGraphStreamBridge:
     async def stream_graph_events(
         cls,
         graph: Any,
-        initial_state: dict[str, Any],
+        initial_state: dict[str, Any] | TARSState,
         background_tasks: BackgroundTasks | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Consume LangGraph astream_events(version='v2') and yield AgentStreamEvents.
@@ -51,10 +52,8 @@ class LangGraphStreamBridge:
         emitted_tool_starts: set[str] = set()
         emitted_tool_results: set[str] = set()
         token_count = 0
+        stream_started = False
         stream_ended = False
-
-        # 1. Immediately emit stream_start event before consuming graph events
-        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
 
         try:
             if not hasattr(graph, "astream_events"):
@@ -65,24 +64,29 @@ class LangGraphStreamBridge:
                 ev_name = str(event.get("name", ""))
                 data: dict[str, Any] = event.get("data", {}) or {}
 
-                # 2. Track session_id updates from session_node
+                # 2. Track session_id updates from session_node and emit stream_start
                 if ev_type == "on_chain_end" and ev_name == "session_node":
                     output = data.get("output", {})
                     if isinstance(output, dict) and output.get("session_id"):
                         active_session_id = str(output["session_id"])
+                    if not stream_started:
+                        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
+                        stream_started = True
 
                 # 3. Handle custom events dispatched via adispatch_custom_event
                 elif ev_type == "on_custom_event":
+                    if not stream_started:
+                        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
+                        stream_started = True
                     if ev_name == "token":
                         delta = str(data.get("delta", ""))
                         if delta:
                             accumulated_chunks.append(delta)
                             token_count += 1
-                            curr_content = str(data.get("content") or "".join(accumulated_chunks))
                             yield AgentStreamEvent(
                                 type="token",
                                 delta=delta,
-                                content=curr_content,
+                                content=delta,
                             )
 
                     elif ev_name == "tool_start":
@@ -120,6 +124,10 @@ class LangGraphStreamBridge:
 
                 # 4. Standard LangChain ChatModel streaming chunks
                 elif ev_type == "on_chat_model_stream":
+                    if not stream_started:
+                        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
+                        stream_started = True
+
                     chunk = data.get("chunk")
                     delta = ""
                     chunk_content = getattr(chunk, "content", None)
@@ -136,11 +144,14 @@ class LangGraphStreamBridge:
                         yield AgentStreamEvent(
                             type="token",
                             delta=delta,
-                            content="".join(accumulated_chunks),
+                            content=delta,
                         )
 
                 # 5. Standard LangChain Tool execution events
                 elif ev_type == "on_tool_start":
+                    if not stream_started:
+                        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
+                        stream_started = True
                     t_name = ev_name
                     t_id = str(
                         event.get("run_id")
@@ -241,6 +252,10 @@ class LangGraphStreamBridge:
 
                 # 9. Top-level graph completion
                 elif ev_type == "on_chain_end" and ev_name == "LangGraph":
+                    if not stream_started:
+                        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
+                        stream_started = True
+
                     output = data.get("output", {})
                     final_text = "".join(accumulated_chunks)
                     if (

@@ -260,7 +260,7 @@ flowchart TD
 
 ### Phase 5: Service 레이어 결합 (`tars/services/agent_chat.py`)
 
-- [ ] **Task 5.1: `stream_chat` 본문 축소**
+- [x] **Task 5.1: `stream_chat` 본문 축소**
   - 기존 230줄에 달하던 인라인 로직을 Graph 컴파일 인스턴스 생성 및 Bridge 호출로 대체.
   ```python
   async def stream_chat(
@@ -296,7 +296,7 @@ flowchart TD
       ):
           yield event
   ```
-- [ ] **Task 5.2: `chat.py` 역참조 및 임포트 정리**
+- [x] **Task 5.2: `chat.py` 역참조 및 임포트 정리**
   - `agent_chat.py`와 `chat.py` 간의 불필요한 상호 참조 및 지저분한 인라인 임포트 코드 정리.
 
 ---

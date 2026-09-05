@@ -202,18 +202,7 @@ async def chat_websocket_endpoint(
         except Exception:
             pass
     finally:
-        from tars.services.agent_chat import _background_ws_tasks
-
-        if _background_ws_tasks:
-            pending = [t for t in _background_ws_tasks if not t.done()]
-            for t in pending:
-                t.cancel()
-            if pending:
-                try:
-                    await asyncio.gather(*pending, return_exceptions=True)
-                except Exception:
-                    pass
-            _background_ws_tasks.clear()
+        logger.debug("WebSocket handler connection cleaned up for user %s", user_id)
 
 
 

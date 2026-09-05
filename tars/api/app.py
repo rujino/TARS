@@ -16,6 +16,7 @@ from tars.api.routers.config import router as config_router
 from tars.config import get_settings
 from tars.db.base import Base
 from tars.db.session import get_engine
+from tars.orchestrator.nodes import shutdown_background_tasks
 
 
 @asynccontextmanager
@@ -30,6 +31,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
+
+    # Graceful Shutdown: Drain background knowledge extraction tasks cleanly
+    await shutdown_background_tasks(timeout=5.0)
+
 
 
 def create_app() -> FastAPI:

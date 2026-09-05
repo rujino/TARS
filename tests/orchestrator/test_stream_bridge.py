@@ -398,10 +398,9 @@ async def test_stream_bridge_catches_graph_exception() -> None:
     ):
         events.append(event)
 
-    assert len(events) == 2
-    assert events[0].type == "stream_start"
-    assert events[1].type == "error"
-    assert "Fatal graph runtime crash" in (events[1].error or "")
+    assert any(e.type == "error" for e in events)
+    assert events[-1].type == "error"
+    assert "Fatal graph runtime crash" in (events[-1].error or "")
 
 
 @pytest.mark.asyncio
@@ -416,10 +415,9 @@ async def test_stream_bridge_invalid_graph_object() -> None:
     ):
         events.append(event)
 
-    assert len(events) == 2
-    assert events[0].type == "stream_start"
-    assert events[1].type == "error"
-    assert "astream_events" in (events[1].error or "")
+    assert any(e.type == "error" for e in events)
+    assert events[-1].type == "error"
+    assert "astream_events" in (events[-1].error or "")
 
 
 # ============================================================================
