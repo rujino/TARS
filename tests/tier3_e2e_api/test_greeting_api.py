@@ -14,6 +14,7 @@ Verifies:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from unittest.mock import patch
@@ -116,6 +117,40 @@ async def test_greeting_reflects_work_mode(
         assert any(
             kw in data["greeting"]
             for kw in ["시스템", "모듈", "작업", "명령", "대기", "가동", "점검"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_greeting_service_llm_timeout_fallback(
+    auth_client: AsyncClient,
+    seed_test_user: User,
+) -> None:
+    """Verify greeting falls back to deterministic template when LLM generation times out (REL-04)."""
+    import time
+
+    async def hanging_generate(*args: Any, **kwargs: Any) -> str:
+        await asyncio.sleep(5.0)
+        return "Delayed greeting that should never be returned."
+
+    start_time = time.monotonic()
+    with patch.object(HybridLLMRouter, "route_and_generate", side_effect=hanging_generate):
+        response = await auth_client.get("/api/v1/chat/greeting")
+        elapsed = time.monotonic() - start_time
+
+        assert response.status_code == 200
+        # Should return right around the 3.0s timeout mark
+        assert elapsed >= 2.8
+        assert elapsed < 4.5
+
+        data = response.json()
+        assert "greeting" in data
+        assert isinstance(data["greeting"], str)
+        assert len(data["greeting"]) > 0
+        assert data["greeting"] != "Delayed greeting that should never be returned."
+        # Confirm deterministic fallback characteristics
+        assert any(
+            kw in data["greeting"]
+            for kw in ["시스템", "대기", "파트너", "명령", "진단", "정상"]
         )
 
 

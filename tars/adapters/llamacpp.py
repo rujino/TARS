@@ -254,7 +254,8 @@ class LlamaCppAdapter(BaseLLMAdapter):
                 self._probe_endpoint_health(),
                 timeout=self.timeout_sec,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Local SLM health probe failed: %s", exc)
             return False
 
 

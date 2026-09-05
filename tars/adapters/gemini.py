@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
@@ -22,6 +23,37 @@ from tars.adapters.base import BaseLLMAdapter, LLMResponse, ToolCallData
 from tars.config import get_settings
 
 logger = logging.getLogger("tars.adapters.gemini")
+
+_STREAM_SENTINEL = object()
+
+
+def _consume_sync_stream_safely(
+    response_stream: Any,
+    loop: asyncio.AbstractEventLoop,
+    queue: asyncio.Queue[Any],
+    stop_event: threading.Event,
+) -> None:
+    """Consume a blocking synchronous stream iterator in a daemon thread, pushing chunks to an asyncio.Queue."""
+    try:
+        for chunk in response_stream:
+            if stop_event.is_set() or loop.is_closed():
+                break
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, chunk)
+            except RuntimeError:
+                break
+    except Exception as exc:
+        if not stop_event.is_set() and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+            except RuntimeError:
+                pass
+    finally:
+        if not stop_event.is_set() and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, _STREAM_SENTINEL)
+            except RuntimeError:
+                pass
 
 
 class GeminiAdapter(BaseLLMAdapter):
@@ -128,7 +160,7 @@ class GeminiAdapter(BaseLLMAdapter):
                     tools=genai_tools,
                 )
             except Exception as cfg_err:
-                logger.debug("Failed to build GenerateContentConfig: %s", cfg_err)
+                logger.warning("Failed to build GenerateContentConfig: %s", cfg_err)
                 config = None
 
             if config is not None:
@@ -325,9 +357,33 @@ class GeminiAdapter(BaseLLMAdapter):
                 )
             ),
         )
-        for chunk in response_stream:
-            if chunk.text:
-                yield str(chunk.text)
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        stop_event = threading.Event()
+        thread = threading.Thread(
+            target=_consume_sync_stream_safely,
+            args=(response_stream, loop, queue, stop_event),
+            daemon=True,
+        )
+        thread.start()
+
+        async def stream_generate() -> AsyncIterator[str]:
+            try:
+                while True:
+                    item = await queue.get()
+                    if item is _STREAM_SENTINEL:
+                        break
+                    if isinstance(item, Exception):
+                        raise item
+                    chunk_text = getattr(item, "text", None)
+                    if chunk_text is None and isinstance(item, str):
+                        chunk_text = item
+                    if chunk_text:
+                        yield str(chunk_text)
+            finally:
+                stop_event.set()
+
+        async for chunk in stream_generate():
+            yield chunk
 
     async def _probe_api_health(self) -> bool:
         """Internal health probe worker (mockable in tests)."""
@@ -342,7 +398,7 @@ class GeminiAdapter(BaseLLMAdapter):
                 await client.ainvoke([HumanMessage(content="ping")])
             return True
         except Exception as e:
-            logger.debug("Gemini health probe failed: %s", e)
+            logger.warning("Gemini health probe failed: %s", e)
             return False
 
     async def agenerate_response(

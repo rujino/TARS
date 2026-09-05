@@ -29,6 +29,14 @@ from tars.tools.registry import ToolRegistry
 
 logger = logging.getLogger("tars.services.agent_chat")
 
+_EXTRACTION_SEMAPHORE: asyncio.Semaphore = asyncio.Semaphore(10)
+
+
+def get_extraction_semaphore() -> asyncio.Semaphore:
+    """Return the global extraction concurrency semaphore."""
+    global _EXTRACTION_SEMAPHORE
+    return _EXTRACTION_SEMAPHORE
+
 
 async def execute_background_knowledge_extraction(
     user_id: str,
@@ -40,51 +48,52 @@ async def execute_background_knowledge_extraction(
     if not user_id or not conversation_turns:
         return
 
-    db = None
-    try:
-        session_factory = get_session_factory()
-        db = session_factory()
-        active_llm = llm_adapter or HybridLLMRouter(
-            gemini_adapter=GeminiAdapter(),
-            slm_adapter=LlamaCppAdapter(),
-        )
-        worker = SelfEvolvingKnowledgeWorker(
-            extractor_llm=active_llm,
-            storage_manager=storage,
-        )
-        extracted_docs = await worker.extract_and_sync(
-            user_id=user_id,
-            conversation_turns=conversation_turns,
-            db_session=db,
-        )
-        if extracted_docs:
-            logger.info(
-                "Background knowledge extraction succeeded for user %s: %d documents extracted",
-                user_id,
-                len(extracted_docs),
+    async with _EXTRACTION_SEMAPHORE:
+        db = None
+        try:
+            session_factory = get_session_factory()
+            db = session_factory()
+            active_llm = llm_adapter or HybridLLMRouter(
+                gemini_adapter=GeminiAdapter(),
+                slm_adapter=LlamaCppAdapter(),
             )
-    except asyncio.CancelledError:
-        logger.warning("Background knowledge extraction cancelled for user %s", user_id)
-        raise
-    except Exception as exc:
-        logger.error(
-            "Background knowledge extraction failed for user %s: %s",
-            user_id,
-            exc,
-            exc_info=True,
-        )
-    finally:
-        if llm_adapter is None and "active_llm" in locals() and active_llm is not None:
-            try:
-                if hasattr(active_llm, "aclose") and callable(active_llm.aclose):
-                    await active_llm.aclose()
-            except BaseException:
-                pass
-        if db is not None:
-            try:
-                await db.close()
-            except BaseException:
-                pass
+            worker = SelfEvolvingKnowledgeWorker(
+                extractor_llm=active_llm,
+                storage_manager=storage,
+            )
+            extracted_docs = await worker.extract_and_sync(
+                user_id=user_id,
+                conversation_turns=conversation_turns,
+                db_session=db,
+            )
+            if extracted_docs:
+                logger.info(
+                    "Background knowledge extraction succeeded for user %s: %d documents extracted",
+                    user_id,
+                    len(extracted_docs),
+                )
+        except asyncio.CancelledError:
+            logger.warning("Background knowledge extraction cancelled for user %s", user_id)
+            raise
+        except Exception as exc:
+            logger.error(
+                "Background knowledge extraction failed for user %s: %s",
+                user_id,
+                exc,
+                exc_info=True,
+            )
+        finally:
+            if llm_adapter is None and "active_llm" in locals() and active_llm is not None:
+                try:
+                    if hasattr(active_llm, "aclose") and callable(active_llm.aclose):
+                        await active_llm.aclose()
+                except BaseException:
+                    pass
+            if db is not None:
+                try:
+                    await db.close()
+                except BaseException:
+                    pass
 
 
 class AgentChatService:
@@ -150,4 +159,5 @@ __all__ = [
     "AgentChatService",
     "AgentStreamEvent",
     "execute_background_knowledge_extraction",
+    "get_extraction_semaphore",
 ]

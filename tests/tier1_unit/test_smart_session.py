@@ -160,6 +160,29 @@ class TestTopicShiftDetector:
         # Should gracefully timeout and return False
         assert not result.is_topic_shift
 
+    @pytest.mark.asyncio
+    async def test_detect_topic_shift_default_timeout_is_2s(self) -> None:
+        """Verify default timeout_seconds is 2.0s and allows realistic LLM latency (REL-05)."""
+        import inspect
+
+        sig = inspect.signature(TopicShiftDetector.detect_topic_shift)
+        assert sig.parameters["timeout_seconds"].default == 2.0
+
+        class RealisticCloudLLM(MockLLMAdapter):
+            async def agenerate(self, *args: Any, **kwargs: Any) -> str:
+                await asyncio.sleep(0.1)  # Realistic latency > 0.05s, within 2.0s
+                return '{"is_topic_shift": true, "new_topic": "Stellar Evolution"}'
+
+        detector = TopicShiftDetector(llm_adapter=RealisticCloudLLM())
+        history = [
+            HumanMessage(content="Tell me about Python asyncio."),
+            AIMessage(content="asyncio is a library to write concurrent code."),
+        ]
+        # Call WITHOUT passing timeout_seconds to ensure default 2.0s is utilized
+        result = await detector.detect_topic_shift(history, "How do black holes form?")
+        assert result.is_topic_shift is True
+        assert result.new_topic == "Stellar Evolution"
+
 
 # ============================================================================
 # 2. SmartSessionManager Time Decay & Lifecycle Tests

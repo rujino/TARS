@@ -21,8 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from tars.adapters.base import BaseLLMAdapter, LLMResponse
 from tars.config import get_settings
+from tars.core.telemetry import update_circuit_breaker_metric
 
 logger = logging.getLogger("tars.adapters.router")
+
 
 
 class CircuitState(str, Enum):
@@ -50,6 +52,7 @@ class LLMCircuitBreaker:
         self.failure_count: int = 0
         self.last_failure_time: float = 0.0
         self.state: CircuitState = CircuitState.CLOSED
+        update_circuit_breaker_metric(self.state.value)
         self._half_open_in_flight: bool = False
         self._half_open_timestamp: float = 0.0
 
@@ -61,6 +64,7 @@ class LLMCircuitBreaker:
             )
         self.failure_count = 0
         self.state = CircuitState.CLOSED
+        update_circuit_breaker_metric(self.state.value)
         self._half_open_in_flight = False
         self._half_open_timestamp = 0.0
 
@@ -78,6 +82,7 @@ class LLMCircuitBreaker:
                 self.failure_count,
                 self.failure_threshold,
             )
+        update_circuit_breaker_metric(self.state.value)
 
     def record_cancellation(self) -> None:
         """Reset in-flight canary probe flag upon cancellation in HALF_OPEN state."""
@@ -94,6 +99,7 @@ class LLMCircuitBreaker:
         if self.state == CircuitState.OPEN:
             if now - self.last_failure_time >= self.recovery_timeout:
                 self.state = CircuitState.HALF_OPEN
+                update_circuit_breaker_metric(self.state.value)
                 self._half_open_in_flight = True
                 self._half_open_timestamp = now
                 logger.info(
@@ -124,8 +130,10 @@ class LLMCircuitBreaker:
         self.failure_count = 0
         self.last_failure_time = 0.0
         self.state = CircuitState.CLOSED
+        update_circuit_breaker_metric(self.state.value)
         self._half_open_in_flight = False
         self._half_open_timestamp = 0.0
+
 
 
 class LLMEngineType(StrEnum):
@@ -340,7 +348,11 @@ class HybridLLMRouter:
                         raise
                     except Exception as gemini_err:
                         self.circuit_breaker.record_failure()
-                        logger.error("Both SLM and Gemini failed during stream: %s", gemini_err)
+                        logger.error(
+                            "Both SLM and Gemini failed during stream: %s",
+                            gemini_err,
+                            exc_info=True,
+                        )
                         raise
                 else:
                     raise
@@ -430,7 +442,7 @@ class HybridLLMRouter:
                         raise
                     except Exception as gemini_err:
                         self.circuit_breaker.record_failure()
-                        logger.error("Both SLM and Gemini failed: %s", gemini_err)
+                        logger.error("Both SLM and Gemini failed: %s", gemini_err, exc_info=True)
                         raise
                 raise
 

@@ -14,12 +14,14 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     Query,
+    Request,
     WebSocket,
     WebSocketDisconnect,
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.websockets import WebSocketState
 
 from tars.adapters.gemini import GeminiAdapter
 from tars.adapters.llamacpp import LlamaCppAdapter
@@ -87,6 +89,7 @@ async def get_proactive_greeting(
     summary="Stream real-time tokens via Server-Sent Events (SSE)",
 )
 async def chat_sse_stream(
+    request: Request,
     payload: ChatStreamRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
@@ -101,6 +104,9 @@ async def chat_sse_stream(
             session_id=payload.session_id,
             background_tasks=background_tasks,
         ):
+            if await request.is_disconnected():
+                logger.info("Client disconnected from SSE stream; terminating graph execution")
+                break
             yield event.to_sse_event()
 
     return StreamingResponse(
@@ -189,6 +195,9 @@ async def chat_websocket_endpoint(
                     message=user_content,
                     session_id=requested_session_id,
                 ):
+                    if websocket.client_state == WebSocketState.DISCONNECTED:
+                        logger.info("Client disconnected from WebSocket during turn; terminating execution.")
+                        break
                     if event.type != "done":
                         await websocket.send_json(event.to_ws_dict())
 

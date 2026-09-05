@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from typing import Any
@@ -184,13 +185,20 @@ class ProactiveGreetingService:
                 context_docs=relevant_wikis,
             )
             try:
-                raw_greeting = await self.llm.agenerate(
-                    messages=[HumanMessage(content=prompt)],
-                    system_prompt="You are TARS from Interstellar. Return ONLY the 1-2 sentence Korean greeting.",
+                raw_greeting = await asyncio.wait_for(
+                    self.llm.agenerate(
+                        messages=[HumanMessage(content=prompt)],
+                        system_prompt="You are TARS from Interstellar. Return ONLY the 1-2 sentence Korean greeting.",
+                    ),
+                    timeout=3.0,
                 )
                 greeting_candidate = str(raw_greeting).strip().strip('"').strip("'")
                 if greeting_candidate:
                     greeting_text = greeting_candidate
+            except (asyncio.TimeoutError, TimeoutError):
+                logger.warning(
+                    "Greeting LLM generation timed out (>3.0s); falling back to deterministic template."
+                )
             except Exception as exc:
                 logger.warning("LLM greeting generation failed: %s; using fallback", exc)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -24,10 +25,29 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         settings = get_settings()
 
+        engine_kwargs: dict[str, Any] = {
+            "echo": settings.db_echo,
+            "future": True,
+        }
+
+        # StaticPool (e.g. SQLite :memory:) does not support pool_size, max_overflow, or pool_timeout
+        if "sqlite" in settings.database_url and ":memory:" in settings.database_url:
+            engine_kwargs["pool_pre_ping"] = settings.db_pool_pre_ping
+            engine_kwargs["pool_recycle"] = settings.db_pool_recycle
+        else:
+            engine_kwargs.update(
+                {
+                    "pool_size": settings.db_pool_size,
+                    "max_overflow": settings.db_max_overflow,
+                    "pool_timeout": settings.db_pool_timeout,
+                    "pool_recycle": settings.db_pool_recycle,
+                    "pool_pre_ping": settings.db_pool_pre_ping,
+                }
+            )
+
         _engine = create_async_engine(
             settings.database_url,
-            echo=settings.db_echo,
-            future=True,
+            **engine_kwargs,
         )
 
     return _engine

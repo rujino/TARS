@@ -367,7 +367,7 @@ async def llm_node(
                         "tool_calls": [],
                     }
         except Exception as exc:
-            logger.debug("Direct route_and_stream bypassed or failed: %s", exc)
+            logger.warning("Direct route_and_stream bypassed or failed: %s", exc)
 
     # 2. ReAct structured response generation
     gen_fn = getattr(router, "route_and_generate_response", None)
@@ -613,19 +613,10 @@ async def postprocess_node(
         ]
 
         from tars.services.agent_chat import execute_background_knowledge_extraction
-        extract_fn = execute_background_knowledge_extraction
-
-        # Support backward-compatible test patching via tars.api.routers.chat._execute_background_knowledge_extraction
-        try:
-            import tars.api.routers.chat as chat_router_mod
-            if hasattr(chat_router_mod, "_execute_background_knowledge_extraction"):
-                extract_fn = chat_router_mod._execute_background_knowledge_extraction
-        except Exception:
-            pass
 
         if background_tasks is not None:
             background_tasks.add_task(
-                extract_fn,
+                execute_background_knowledge_extraction,
                 user_id=user_id,
                 conversation_turns=turns,
                 storage=storage_manager,
@@ -633,7 +624,7 @@ async def postprocess_node(
             )
         else:
             try:
-                coro_or_res = extract_fn(
+                coro_or_res = execute_background_knowledge_extraction(
                     user_id=user_id,
                     conversation_turns=turns,
                     storage=storage_manager,

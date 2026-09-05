@@ -100,7 +100,7 @@ def test_websocket_streaming_full_lifecycle(
 
     with patch("tars.api.routers.chat.get_session_factory", return_value=test_session_factory):
         with patch.object(HybridLLMRouter, "route_and_stream", side_effect=mock_stream):
-            with patch("tars.api.routers.chat._execute_background_knowledge_extraction"):
+            with patch("tars.services.agent_chat.execute_background_knowledge_extraction"):
                 with client.websocket_connect(f"/api/v1/chat/ws?token={test_user_token}") as websocket:
                     # 1. Send chat message
                     send_payload = {
@@ -171,7 +171,7 @@ def test_websocket_multi_turn_in_single_connection(
 
             mock_router_stream.side_effect = [turn1_stream(), turn2_stream()]
 
-            with patch("tars.api.routers.chat._execute_background_knowledge_extraction"):
+            with patch("tars.services.agent_chat.execute_background_knowledge_extraction"):
                 with client.websocket_connect(f"/api/v1/chat/ws?token={test_user_token}") as ws:
                     # --- Turn 1 ---
                     ws.send_json(

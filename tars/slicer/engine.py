@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import re
@@ -531,13 +532,24 @@ class DynamicSlicerEngine:
                 scored_candidates.sort(key=lambda x: x[1], reverse=True)
                 candidate_ids = [c[0] for c in scored_candidates[:candidate_limit]]
 
+            tasks = [
+                self.storage_manager.read_okf_file(user_id, okf_id)
+                for okf_id in candidate_ids
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
             docs: list[OKFDocument] = []
-            for okf_id in candidate_ids:
-                try:
-                    doc = await self.storage_manager.read_okf_file(user_id, okf_id)
-                    docs.append(doc)
-                except Exception as e:
-                    logger.debug("Could not read file for %s/%s: %s", user_id, okf_id, e)
+            for okf_id, res in zip(candidate_ids, results, strict=False):
+                if isinstance(res, OKFDocument):
+                    docs.append(res)
+                elif isinstance(res, BaseException):
+                    logger.warning("Could not read file for %s/%s: %s", user_id, okf_id, res)
+                else:
+                    logger.warning(
+                        "Unexpected result type when reading file for %s/%s: %s",
+                        user_id,
+                        okf_id,
+                        type(res),
+                    )
             return docs
         except Exception as err:
             logger.warning("DB pre-query failed for user %s: %s", user_id, err)
