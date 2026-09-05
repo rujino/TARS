@@ -1,115 +1,99 @@
-# TARS: 위트 있는 AI 동반자 &amp; 에이전트 (PRD)
+# TARS: 위트 있는 AI 동반자 & 에이전트 제품 명세서 (PRD)
 
-## 1. 프로젝트 비전 및 목표
+## 1. 프로젝트 비전 및 시스템 개요
 
 - **비전**: 영화 *인터스텔라*의 TARS처럼, 신뢰할 수 있는 문제 해결 능력과 **유머 지수(90%) / 솔직함(95%)**을 갖춘 나만의 AI 동반자.
-- **1차 목표**: 일상적인 대화(Daily Companion Chat)와 클라이언트 디바이스 TTS를 통한 TARS 특유의 음성 피드백 제공.
-- **확장 목표**: **오브젝트 스토리지 + DB + OKF 삼위일체 지식 베이스, 자가 진화 루프, MCP/외부 도구 연동**을 통한 실생활 보조.
-- **엔지니어링 목표**: **분리형 스토리지(File + RDBMS) + OKF 표준 엔진 + LangGraph A2A + Langfuse LLMOps**, 그리고 **K3s(경량 쿠버네티스) + Traefik Ingress + cert-manager 기반 프로덕션 엣지 오케스트레이션** 아키텍처 구축.
+- **운영 상태**:
+  - **일상 대화 & 실시간 음성 인터랙션**: WebSocket 및 SSE 실시간 양방향 스트리밍과 클라이언트 On-Device Web Speech TTS/STT를 통한 TARS 고유의 음성 피드백 가동.
+  - **오브젝트 스토리지 + DB + OKF 삼위일체 지식 베이스**: 분리형 스토리지(File PVC + PostgreSQL 16)와 OKF(Open Knowledge Format 1.0) 표준 엔진 기반 5-Factor 동적 슬라이싱 및 대화 기반 비동기 자가 진화 루프 완결.
+  - **LangGraph ReAct 에이전트 오케스트레이션**: 단일 `StateGraph` 파이프라인에서 세션 분기, 프롬프트 인젝션 방어벽, Gemini Function Calling, MCP 및 Google Workspace 도구 연동, 턴 영속화 수행.
+  - **프로덕션 엣지 인프라**: K3s(경량 쿠버네티스) + Traefik Ingress + cert-manager (Let's Encrypt SSL/TLS), 로컬 SLM(`llama.cpp`), 텔레메트리(Correlation ID, 구조화 로깅, 상태 프로브), Graceful Shutdown 완결.
 
 ---
 
 ## 2. 노드 및 하드웨어 구성
 
 1. **Host Server (K3s Edge Cluster / Production Node)**:
-  - **K3s 기반 선언적 컨테이너 오케스트레이션**:
-    - **FastAPI 백엔드 파드 (`tars-backend`, 3 Replicas)**:
-      - **OKF Engine**: 문서 헤더 파싱 ➔ 지식 지도 구성 ➔ 동적 슬라이싱 주입.
-      - **정적 툴 CAG**: 시스템 지시문 및 대형 툴 스키마 JSON 캐싱.
-      - **LangGraph A2A Orchestrator**: SLM 전처리 / Gemini 고지능 발화 / Tool 루프.
-      - **비동기 지식 추출기**: 대화 속 중요 정보 감지 ➔ 새 OKF 파일 자동 생성 ➔ 스토리지/DB 자동 저장.
-      - **무중단 운영**: Liveness/Readiness 헬스체크 및 무중단 롤링 업데이트(RollingUpdate).
-    - **Storage Layer (`tars-storage-pvc` 10Gi, `tars-data-pvc` 5Gi)**:
-      - K3s `local-path` 스토리지 클래스 기반 사용자별 OKF 마크다운 문서 원본 및 데이터 영구 보존 (`/app/storage/users/{user_id}/wikis/*.md`).
-    - **DB Layer (`tars-db`, PostgreSQL 16 Deployment + 10Gi PVC)**:
-      - 회원 정보, TARS 파라미터, 파일 경로(`file_path`) 메타데이터, 대화 세션/이력 관리 및 Alembic 비동기 마이그레이션.
-    - **로컬 SLM 추론 엔진 (`llama-server` / `llama.cpp`)**:
-      - GGUF C++ 경량 런타임 기반 의도 분류, 쿼리 전처리, 키워드 추출 전담 (OpenAI 호환 API `/v1`, K3s 클러스터 내부 및 호스트 연동).
-    - **Traefik Ingress + cert-manager**:
-      - Let's Encrypt 자동 SSL/TLS 인증서 발급/갱신 (HTTPS/WSS 무중단 종단 및 SSE/WebSocket 실시간 스트리밍).
-    - **보안 & 환경 분리 (ConfigMap & Secret)**:
-      - 민감 키(JWT Secret, Gemini API Key, DB Password)를 Kubernetes Secret으로 분리 격리.
-  - **Langfuse Tracing Layer**: 유저 세션별 대화 및 툴 호출 과정 트레이싱.
-2. **Mac (Development Environment)**:
-  - Python `uv` 패키지 관리자를 활용한 주 개발 환경.
-3. **iPhone (Edge Client)**:
-  - JWT 인증 기반으로 서버에 접속하여 텍스트 대화 송수신.
-  - 수신된 텍스트를 **아이폰 내장 TTS 엔진(AVSpeechSynthesizer)**으로 TARS 톤(피치/속도 조정)에 맞춰 실시간 음성 출력.
+   - **K3s 기반 선언적 컨테이너 오케스트레이션**:
+     - **FastAPI 백엔드 파드 (`tars-backend`, 3 Replicas)**:
+       - **OKF Engine**: YAML Frontmatter 파싱 ➔ 지식 지도 구성 ➔ 5-Factor 동적 슬라이싱 주입.
+       - **정적 툴 CAG**: 페르소나 및 대형 툴 스키마 JSON 인메모리 캐싱.
+       - **LangGraph ReAct Orchestrator**: 세션 라우팅 / SLM 전처리 / Gemini 고지능 발화 / Tool 호출 루프 / 후처리 및 영속화 단일 파이프라인.
+       - **비동기 지식 추출기**: 대화 속 중요 사실/선호도 감지 ➔ 새 OKF 파일 자동 생성 ➔ 스토리지/DB 원자적 저장.
+       - **운영 안정성**: Liveness/Readiness 헬스체크 (`/health/live`, `/health/ready`), Correlation ID 추적, 서버 종료 시 백그라운드 태스크 완결(Graceful Drain, 5초 타임아웃).
+     - **Storage Layer (`tars-storage-pvc` 10Gi, `tars-data-pvc` 5Gi)**:
+       - K3s `local-path` 기반 사용자별 OKF 마크다운 문서 원본 영구 보존 (`/app/storage/users/{user_id}/wikis/*.md`).
+     - **DB Layer (`tars-db`, PostgreSQL 16 Deployment + 10Gi PVC)**:
+       - 회원 정보, TARS 파라미터, 파일 경로(`file_path`) 메타데이터, 대화 세션/이력 관리 및 Alembic 비동기 마이그레이션 (`asyncpg`).
+     - **로컬 SLM 추론 엔진 (`llama-server` / `llama.cpp`)**:
+       - GGUF C++ 경량 런타임 기반 의도 분류, 쿼리 전처리, 키워드 추출 (OpenAI 호환 API `/v1`, 서킷 브레이커 자동 Fallback 연동).
+     - **Traefik Ingress + cert-manager**:
+       - Let's Encrypt 자동 SSL/TLS 인증서 발급/갱신 (HTTPS/WSS 무중단 종단 및 SSE/WebSocket 실시간 스트리밍).
+     - **보안 & 환경 분리 (ConfigMap & Secret)**:
+       - 민감 키(JWT Secret, Gemini API Key, DB Password)를 Kubernetes Secret으로 분리 격리 및 안전한 CORS 정책 적용.
+   - **Langfuse & Telemetry Layer**: Correlation ID 기반 유저 세션별 대화, 툴 호출, 모델 지연 시간 및 토큰 소모량 추적.
+
+2. **Client Interface (Web PWA / Mobile Browser)**:
+   - 반응형 Sci-Fi HUD 인터페이스 및 PWA(Service Worker, Manifest) 지원.
+   - JWT 인증 기반 보안 세션 수립 및 WebSocket/SSE 실시간 스트리밍.
+   - **On-Device TTS/STT**: Web Speech API 기반 TARS 톤(피치/속도 조정) 실시간 음성 발화 및 음성 입력 지원 (서버 부하 0%).
 
 ---
 
-## 3. 핵심 기능 요구사항 (Key Requirements)
+## 3. 핵심 기능 구현 명세 (Core Features Implementation)
 
 ### 3.1. 오브젝트 스토리지 + DB + OKF 지식 아키텍처
-
-- **지식 원본 영속화**: 순수 OKF 포맷(`.md`)으로 파일시스템/오브젝트 스토리지(K3s PVC)에 보관 (데이터 영구 보존, Git 호환).
-- **초경량 메타데이터 DB**: RDBMS(PostgreSQL 16)는 `user_id`, `okf_id`, `file_path`, `updated_at` 메타데이터만 초고속 관리.
-- **OKF 전용 엔진**: Frontmatter 메타데이터 파싱 및 지식 관계망(`relations`) 기반 동적 슬라이싱 주입.
+- **지식 원본 영속화**: 순수 OKF 포맷(`.md`)으로 파일시스템/스토리지(PVC)에 보관하여 벤더 독립성 및 Git 호환성 확보.
+- **초경량 메타데이터 DB**: PostgreSQL 16은 `user_id`, `okf_id`, `file_path`, `updated_at` 메타데이터만 관리하여 극상의 성능 보장.
+- **5-Factor 동적 슬라이서**: Context Relevance, Importance, Type, Relations, Recency 5개 가중치 기반으로 질문에 가장 적합한 OKF 지식을 최대 1,500 토큰 내로 패킹하여 프롬프트에 주입.
 
 ### 3.2. 대화 기반 자가 학습 OKF 지식 베이스
-
 - **대화 속 자동 지식 포착**: 사용자가 대화 중에 언급한 새로운 선호도, 규칙, 일정 정보를 TARS가 자동 추출.
-- **OKF 파일 자동 생성**: `source: "auto_extracted"` 태그와 함께 YAML Frontmatter + Markdown 구조로 파일 생성.
-- **비동기 백그라운드 처리**: 대화 응답 속도에 영향을 주지 않도록 비동기 백그라운드 태스크로 스토리지/DB에 저장.
+- **OKF 파일 자동 생성**: `source: "auto_extracted"` 태그와 함께 표준 YAML Frontmatter + Markdown 본문 구조로 파일 생성.
+- **비동기 백그라운드 완결**: 클라이언트 소켓이 종료되더라도 작업이 중단되지 않는 격리된 비동기 태스크로 DB/스토리지 원자적 동기화 보장.
 
-### 3.3. 데이터베이스 &amp; 회원 관리 (RDBMS &amp; Auth)
+### 3.3. 데이터베이스 & 회원 관리 (RDBMS & Auth)
+- **비동기 보안 인증**: `asyncio.to_thread` 기반 non-blocking Passlib(bcrypt) 비밀번호 해싱 및 JWT 액세스 토큰 발급.
+- **개인화 설정 저장**: 유저별 선호 `humor_level`(기본 90%), `honesty_level`(기본 95%), TARS 모드(`companion` / `work`) 저장 및 즉각 반영.
+- **대화 이력 보존**: 세션별 대화 메시지 DB 영속화 및 이전 대화 맥락 복원.
 
-- **회원가입 / 로그인**: Passlib(bcrypt) 비밀번호 해싱 및 JWT 액세스 토큰 발급.
-- **개인화 설정 저장**: 유저별 선호 `humor_level`, `honesty_level`, TARS 모드 저장.
-- **대화 이력 보존**: 세션별 대화 메시지 DB 저장 및 이전 대화 불러오기 지원.
-
-### 3.4. LangGraph & 도구 생태계 (LangGraph & Tools)
-
-- **A2A 계층형 오케스트레이션**:
-  - **사용자 대화 응답 (100%)**: Google Gemini 전담 (TARS 고유 페르소나 및 지식 융합 발화).
-  - **경량 내부 추론**: 로컬 SLM(`llama-server` / `llama.cpp`) 전담 (빠른 의도 분류, 단순 쿼리 전처리, 키워드 추출 / VRAM 무점유 GGUF C++ 런타임).
-  - **심층 내부 추론**: Google Gemini 전담 (다단계 계획, 복잡한 지식 자가 추출 및 충돌 해결, 툴 파싱).
-  - **무중단 회로 차단기 (Circuit Breaker)**: 로컬 SLM 장애/지연 시 경량 내부 작업도 Gemini로 즉시 Fallback.
-- **정적 툴 CAG**: 대형 툴 JSON 스키마만 캐싱하여 75% 비용 절감 및 속도 극대화.
+### 3.4. LangGraph ReAct 오케스트레이션 & 도구 생태계
+- **단일 StateGraph 파이프라인**:
+  - `session_node` ➔ (`is_reset` 분기) ➔ `slicer_node` ➔ `prompt_node` ➔ `llm_node` ⇄ `tool_node` (ReAct 루프) ➔ `postprocess_node`
+- **하이브리드 추론 분리 & 양방향 서킷 브레이커**:
+  - **사용자 대화 응답 (100%)**: Google Gemini 전담 (TARS 고유 페르소나 및 도구 결과 융합 발화).
+  - **경량 내부 추론**: 로컬 SLM(`llama.cpp`) 전담 (의도 분류, 쿼리 전처리).
+  - **자동 Failover**: 로컬 SLM 지연/장애 시 Gemini로 즉시 Fallback, 반대로 외부 Gemini 장애 시에도 로컬 대응 가능한 서킷 브레이커 탑재.
 - **확장형 도구 & MCP 생태계**:
-  - MCP(Model Context Protocol) 클라이언트(HTTP/SSE/stdio/Mock), Google Calendar/Gmail 어댑터 내장.
-  - **사용자별 토글형 원클릭 플러그인 허브 (User-Scoped Toggleable Tool Hub)**:
-    - 앱/웹 UI에서 사용자가 구글 캘린더, 지메일, 공용 날씨/뉴스 MCP, 사설 MCP 서버 등을 스위치 토글(ON/OFF)로 간편하게 활성화/비활성화.
-    - 내부 전송 방식(stdio 서브프로세스, 원격 HTTP/SSE, OAuth2 토큰 주입 등)을 사용자에게 완벽히 은닉화(캡슐화)하여 직관적인 UX 제공.
-    - 사용자 계정별로 활성화된 도구들만 동적으로 선별하여 세션별 `ToolRegistry`에 자동 주입.
+  - Anthropic 표준 JSON-RPC 2.0 MCP Client (HTTP, SSE, stdio, Mock 트랜스포트 지원).
+  - Google Workspace(Calendar, Gmail) 네이티브 도구 어댑터.
+  - 사용자별 활성화 목록에 따른 동적 `ToolRegistry` 세션 주입.
+  - 도구 실행 타임아웃 격리(10초) 및 에러 시 TARS 데드팬 위트 Fallback.
+- **프롬프트 보안 및 인젝션 방어벽**:
+  - `system_prompt`와 `messages` 상태를 엄격히 분리하여 DB 대화 기록 오염 방지.
+  - 동적 지식 및 도구 실행 결과를 XML 경계 태그(`<user_knowledge_context>`, `[Tool Result]`)로 격리하고 지시문 우선순위 계층화(`[SYSTEM DIRECTIVE PRIORITY]`) 적용.
 
-### 3.5. 온디바이스 음성 & 보안 인프라
-
-- **On-Device TTS**: 텍스트만 전송하여 아이폰 내장 엔진으로 즉시 발화 (서버 부하 0%).
-- **선언적 K3s 인프라 & 정공법 보안**: K3s(경량 쿠버네티스) + Traefik Ingress + cert-manager 기반 정식 Let's Encrypt SSL/TLS (HTTPS/WSS), Secret/ConfigMap 환경 분리, 영구 볼륨(PVC) 데이터 무결성 보장.
-
-### 3.6. 음성 우선(Voice-First) 능동 대화 & 스마트 세션 관리
-
+### 3.5. 음성 인터랙션 & 스마트 세션 관리
 - **앱 실행 시 선제 화제 제시 (App-Launch Proactive Greeting)**:
-  - 앱 실행(Foreground 진입) 시 빈 입력창 대기 대신, TARS가 접속 시간대/공백 시간(Idle)/이전 대화 맥락/OKF 지식 기반으로 1~2문장의 위트 있는 오프닝 멘트를 먼저 음성으로 발화하고 마이크(STT)를 자동 활성화.
-- **상황별 스마트 세션 분기 (Smart Session Routing)**:
-  - **시간 경과 기반 감쇄(Time Decay)**: 단기(15분 이내, 세션 유지) / 중기(15분~2시간, 브릿지 요약 후 분기) / 장기(2시간 이상, 완전 새 세션).
-  - **의미론적 주제 전환(Topic Shift)**: 로컬 SLM이 주제 급변 감지 시 이전 세션을 아카이브하고 깨끗한 새 세션/태스크 스레드로 분기.
-  - **음성 명령어 제어**: "TARS, 리셋해", "새로운 주제야" 등의 자연어 음성 명령으로 세션 초기화 지원.
-- **세션-지식 분리 구조**:
-  - 세션은 단기 작업 기억(Working Memory)으로 기민하게 초기화/분기되며, 세션 종료/분기 시 이전 대화는 비동기 지식 추출기를 통해 OKF(장기 기억)로 영구 보존.
+  - 앱 접속 시 빈 화면 대기 대신 접속 시간대, 미접속 공백 기간, 이전 대화 맥락, OKF 지식을 종합하여 1~2문장의 능동 오프닝 발화 생성.
+- **스마트 세션 라이프사이클**:
+  - **시간 경과 감쇄**: 15분 이내 세션 유지, 15분~2시간 브릿지 요약 후 분기, 2시간 초과 시 신규 세션 분기.
+  - **자연어 명령 제어**: "TARS, 리셋해", "새로운 주제야" 입력 시 즉각 아카이빙 후 세션 초기화.
+  - **의미론적 주제 전환**: 대화 흐름 급변 감지 시 세션을 분기하고 이전 맥락을 OKF 장기 기억으로 이관.
+- **On-Device TTS/STT**: 텍스트 스트리밍 수신과 동시에 브라우저 음성 합성 엔진으로 발화하여 서버 자원 소모 제로화.
 
 ---
 
-## 4. 단계별 마일스톤 (Milestones)
+## 4. 시스템 사양 요약 (System Specifications)
 
-- **Phase 1: Mac 개발 환경 세팅 & DB/Storage + OKF Engine + LangGraph Core 프로토타입 [DONE]**
-  - `uv` 기반 FastAPI + SQLAlchemy(SQLite) + File Storage + OKF Engine + LangGraph 뼈대 구성.
-  - User 스키마, `user_wikis` 메타데이터 스키마 모델링 및 JWT 인증.
-  - 로컬 `llama.cpp` (내부 경량 추론 노드) + Google Gemini (사용자 응답 생성 노드) 연결 및 TARS 시스템 프롬프트(Humor 90%) 주입.
-- **Phase 2: 비동기 텍스트 스트리밍 & On-Device TTS 웹 클라이언트(PWA) [DONE]**
-  - WebSocket/SSE 실시간 토큰 스트리밍.
-  - 아이폰 브라우저에서 로그인 후 대화 텍스트 수신 즉시 Web Speech API로 TARS 톤 음성 발화 구현.
-- **Phase 3: OKF 동적 슬라이싱 & 정적 CAG 툴 연동 & 비동기 지식 자가 진화 & 스마트 세션 라우팅 [DONE]**
-  - 5-Factor 점수화 기반 OKF 지식 동적 슬라이싱 및 대화 기반 OKF 파일 자동 생성 비동기 자가 진화 루프.
-  - 정적 툴 스키마 CAG 적용 및 MCP(HTTP/SSE/stdio) / Google 도구 어댑터 & ToolRegistry API 와이어링.
-  - 앱 실행 시 능동 오프닝(Proactive Greeting) 엔드포인트 및 시간/주제 기반 스마트 세션 라우팅 엔진 구축.
-- **Phase 4: 프로덕션 K3s 오케스트레이션 & SLM 인프라 배포 [DONE]**
-  - K3s 경량 쿠버네티스 선언적 매니페스트 구축 (Namespace, ConfigMap, Secret, PostgreSQL 16 Deployment/PVC, FastAPI 3-Replica Deployment/PVC, Traefik Ingress, cert-manager ClusterIssuer).
-  - 온프레미스/K3s 연동 로컬 SLM(`llama-server`) 인프라 구축 및 진단 도구(`scripts/test_slm.py`).
-  - `k8s/deploy.sh` 원클릭 빌드/임포트/배포 자동화 스크립트 및 Alembic 비동기 마이그레이션 부트스트랩.
-  - 도메인 DDNS 연동 및 cert-manager 기반 Let's Encrypt HTTPS/WSS 자동화.
-- **Phase 5: 네이티브 iOS 앱 확장 및 포트폴리오 문서화**
-  - SwiftUI 기반 전용 TARS 앱 빌드 & `AVSpeechSynthesizer` 네이티브 TTS / STT 연동.
-  - 앱 실행 즉시 TARS 오프닝 음성 출력 ➔ 마이크 자동 리스닝 Voice-First 턴테이킹 UX 구현.
-  - 아키텍처 다이어그램 및 엔지니어링 문서(README/블로그) 정리.
+| 구분 | 사양 및 구성 |
+| :--- | :--- |
+| **백엔드 프레임워크** | FastAPI, Python 3.11+, uv, Pydantic v2 |
+| **에이전트 엔진** | LangGraph StateGraph (7-Node ReAct Pipeline, StreamBridge) |
+| **LLM 서빙** | Google Gemini (100% User-Facing & Function Calling) + Local llama.cpp (SLM Preprocessing) |
+| **지식 시스템** | OKF (Open Knowledge Format 1.0) + 5-Factor Dynamic Slicer Engine |
+| **스토리지 & DB** | File Storage (K3s PVC) + PostgreSQL 16 (SQLAlchemy 2.0 asyncpg, Alembic) |
+| **외부 확장** | MCP (JSON-RPC 2.0 HTTP/SSE/stdio), Google Calendar/Gmail API |
+| **관측성 & 텔레메트리**| Correlation ID ContextVar, 구조화 JSON 로깅, Langfuse 추적, Liveness/Readiness 프로브 |
+| **인프라 & 배포** | K3s (3 Replicas), Traefik Ingress, cert-manager (Let's Encrypt SSL/TLS), Docker |
+| **클라이언트** | PWA Web (Responsive Sci-Fi HUD, Web Speech API TTS/STT, WebSocket/SSE) |
