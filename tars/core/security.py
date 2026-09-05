@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -17,7 +18,8 @@ logger = logging.getLogger("tars.core.security")
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a bcrypt hash."""
     try:
-        return bool(bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8")))
+        pwd_bytes = plain_password.encode("utf-8")[:72]
+        return bool(bcrypt.checkpw(pwd_bytes, hashed_password.encode("utf-8")))
     except Exception as e:
         logger.warning("Password verification failed: %s", e)
         return False
@@ -33,6 +35,21 @@ def get_password_hash(password: str) -> str:
 def hash_password(password: str) -> str:
     """Alias for get_password_hash."""
     return get_password_hash(password)
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """Asynchronously verify password without blocking the event loop."""
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
+
+
+async def get_password_hash_async(password: str) -> str:
+    """Asynchronously generate bcrypt hash without blocking the event loop."""
+    return await asyncio.to_thread(get_password_hash, password)
+
+
+async def hash_password_async(password: str) -> str:
+    """Alias for get_password_hash_async."""
+    return await get_password_hash_async(password)
 
 
 def create_access_token(
@@ -76,6 +93,9 @@ __all__ = [
     "create_access_token",
     "decode_access_token",
     "get_password_hash",
+    "get_password_hash_async",
     "hash_password",
+    "hash_password_async",
     "verify_password",
+    "verify_password_async",
 ]

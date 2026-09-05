@@ -245,6 +245,10 @@ class AsyncMCPClient:
             await self._http_client.aclose()
             self._http_client = None
 
+    async def aclose(self) -> None:
+        """Alias for close."""
+        await self.close()
+
 
 __all__ = [
     "AsyncMCPClient",

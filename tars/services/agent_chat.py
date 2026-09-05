@@ -74,6 +74,12 @@ async def execute_background_knowledge_extraction(
             exc_info=True,
         )
     finally:
+        if llm_adapter is None and "active_llm" in locals() and active_llm is not None:
+            try:
+                if hasattr(active_llm, "aclose") and callable(active_llm.aclose):
+                    await active_llm.aclose()
+            except BaseException:
+                pass
         if db is not None:
             try:
                 await db.close()

@@ -644,7 +644,7 @@ async def postprocess_node(
                     _background_node_tasks.add(task)
                     task.add_done_callback(_background_node_tasks.discard)
             except Exception as bg_err:
-                logger.warning("Failed to dispatch background knowledge extraction: %s", bg_err)
+                logger.error("Failed to dispatch background knowledge extraction: %s", bg_err, exc_info=True)
 
     return {}
 

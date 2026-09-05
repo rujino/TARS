@@ -51,6 +51,16 @@ class LlamaCppAdapter(BaseLLMAdapter):
             )
         return self._client
 
+    async def aclose(self) -> None:
+        """Close underlying HTTP client and connection pool."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
+
+    async def close(self) -> None:
+        """Alias for aclose."""
+        await self.aclose()
+
     def _format_messages_for_slm(
         self,
         messages: Sequence[BaseMessage],

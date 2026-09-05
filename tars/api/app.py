@@ -10,12 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from tars.api.dependencies import close_tool_registry, get_tool_registry
 from tars.api.routers.auth import router as auth_router
 from tars.api.routers.chat import router as chat_router
 from tars.api.routers.config import router as config_router
 from tars.config import get_settings
 from tars.db.base import Base
-from tars.db.session import get_engine
+from tars.db.session import close_db, get_engine
 from tars.orchestrator.nodes import shutdown_background_tasks
 
 
@@ -30,10 +31,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # RES-01: Initialize ToolRegistry singleton on startup
+    app.state.tool_registry = await get_tool_registry()
     yield
 
     # Graceful Shutdown: Drain background knowledge extraction tasks cleanly
     await shutdown_background_tasks(timeout=5.0)
+
+    # RES-01: Close tool registry and underlying HTTP clients
+    if hasattr(app.state, "tool_registry") and app.state.tool_registry is not None:
+        try:
+            await app.state.tool_registry.aclose()
+        except Exception:
+            pass
+    await close_tool_registry()
+
+    # RES-02: Dispose of SQLAlchemy database engine connection pool
+    await close_db()
 
 
 

@@ -117,9 +117,9 @@ class GeminiAdapter(BaseLLMAdapter):
             try:
                 from google.genai import types
 
-                genai_tools = None
+                genai_tools: Any = None
                 if tools:
-                    genai_tools = [types.Tool(function_declarations=list(tools))]
+                    genai_tools = [types.Tool(function_declarations=list(tools))]  # type: ignore[arg-type]
 
                 config = types.GenerateContentConfig(
                     system_instruction=system_prompt if system_prompt else None,
@@ -216,13 +216,13 @@ class GeminiAdapter(BaseLLMAdapter):
                 ),
             )
 
-        parsed_tool_calls: list[ToolCallData] = []
+        sync_tool_calls: list[ToolCallData] = []
         if resp is not None and hasattr(resp, "function_calls") and resp.function_calls:
             for fc in resp.function_calls:
                 call_id = getattr(fc, "id", None) or f"call_{uuid.uuid4().hex[:8]}"
                 name = getattr(fc, "name", "")
                 args = dict(getattr(fc, "args", {}) or {})
-                parsed_tool_calls.append(
+                sync_tool_calls.append(
                     ToolCallData(id=call_id, name=name, arguments=args)
                 )
 
@@ -235,7 +235,7 @@ class GeminiAdapter(BaseLLMAdapter):
 
         return LLMResponse(
             content=content,
-            tool_calls=parsed_tool_calls,
+            tool_calls=sync_tool_calls,
             model_name=self.model_name,
         )
 

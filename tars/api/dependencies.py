@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -26,6 +27,8 @@ logger = logging.getLogger("tars.api.dependencies")
 
 security_bearer = HTTPBearer(auto_error=False)
 
+_global_tool_registry: ToolRegistry | None = None
+
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Yield a database session with automatic cleanup."""
@@ -44,8 +47,8 @@ def get_storage_manager() -> FileStorageManager:
     return FileStorageManager(base_dir=settings.storage_dir)
 
 
-async def get_tool_registry() -> ToolRegistry:
-    """Provide the application ToolRegistry with default Google and configured MCP tools."""
+async def build_tool_registry() -> ToolRegistry:
+    """Instantiate and populate a ToolRegistry with default Google and MCP tools."""
     settings = get_settings()
     registry = ToolRegistry()
 
@@ -54,12 +57,15 @@ async def get_tool_registry() -> ToolRegistry:
     gmail_adapter = GmailAdapter()
     registry.register_many(calendar_adapter.get_tools())
     registry.register_many(gmail_adapter.get_tools())
+    registry.track_client(calendar_adapter)
+    registry.track_client(gmail_adapter)
 
     # 2. Configured MCP server tools
     for srv_cfg in settings.mcp_servers:
         try:
             client = AsyncMCPClient(config=MCPServerConfig(**srv_cfg))
             await register_mcp_server_tools(client=client, registry=registry)
+            registry.track_client(client)
         except Exception as exc:
             logger.warning(
                 "Failed to register MCP server '%s': %s",
@@ -68,6 +74,22 @@ async def get_tool_registry() -> ToolRegistry:
             )
 
     return registry
+
+
+async def get_tool_registry() -> ToolRegistry:
+    """Provide the application ToolRegistry singleton."""
+    global _global_tool_registry
+    if _global_tool_registry is None:
+        _global_tool_registry = await build_tool_registry()
+    return _global_tool_registry
+
+
+async def close_tool_registry() -> None:
+    """Gracefully close the global tool registry and associated clients."""
+    global _global_tool_registry
+    if _global_tool_registry is not None:
+        await _global_tool_registry.aclose()
+        _global_tool_registry = None
 
 
 async def get_current_user(
@@ -125,6 +147,7 @@ async def get_agent_chat_service(
 
 
 __all__ = [
+    "close_tool_registry",
     "get_agent_chat_service",
     "get_current_user",
     "get_db_session",

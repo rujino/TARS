@@ -6,6 +6,10 @@ mock LLM adapters, test users, and sample OKF documents.
 
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("TARS_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Sequence
 from datetime import UTC, datetime

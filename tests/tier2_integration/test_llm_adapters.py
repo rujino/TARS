@@ -83,7 +83,8 @@ async def test_gemini_adapter_health_check() -> None:
 async def test_gemini_adapter_agenerate_response_with_tools() -> None:
     """Verify GeminiAdapter parses function_calls into ToolCallData structures."""
     from unittest.mock import MagicMock
-    from tars.adapters.base import LLMResponse, ToolCallData
+
+    from tars.adapters.base import LLMResponse
 
     adapter = GeminiAdapter(api_key="fake-test-key", model_name="gemini-2.0-flash")
 

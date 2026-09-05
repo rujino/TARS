@@ -8,6 +8,7 @@ Supports:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Sequence
 from typing import Any
@@ -22,9 +23,36 @@ class ToolRegistry:
 
     def __init__(self, tools: Sequence[BaseTool] | None = None) -> None:
         self._tools: dict[str, BaseTool] = {}
+        self._managed_clients: list[Any] = []
         if tools:
             for tool in tools:
                 self.register(tool)
+
+    def track_client(self, client: Any) -> None:
+        """Track an underlying client or adapter resource for lifecycle cleanup."""
+        if client not in self._managed_clients:
+            self._managed_clients.append(client)
+
+    async def aclose(self) -> None:
+        """Gracefully close all managed HTTP clients and connections."""
+        for client in list(self._managed_clients):
+            try:
+                if hasattr(client, "aclose") and callable(client.aclose):
+                    res = client.aclose()
+                    if asyncio.iscoroutine(res):
+                        await res
+                elif hasattr(client, "close") and callable(client.close):
+                    res = client.close()
+                    if asyncio.iscoroutine(res):
+                        await res
+            except Exception as exc:
+                logger.warning("Error closing managed client %r: %s", client, exc)
+        self._managed_clients.clear()
+        self._tools.clear()
+
+    async def close(self) -> None:
+        """Alias for aclose."""
+        await self.aclose()
 
     def register(self, tool: BaseTool) -> None:
         """Register a tool instance in the registry.
