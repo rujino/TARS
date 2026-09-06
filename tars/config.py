@@ -120,7 +120,7 @@ class Settings(BaseSettings):
 
     # Google Workspace Settings
     google_mock_mode: bool = Field(
-        default=True,
+        default=False,
         description="Enable deterministic offline mock mode for Google Workspace APIs",
     )
     google_client_id: str = Field(default="", description="Google OAuth2 Client ID")

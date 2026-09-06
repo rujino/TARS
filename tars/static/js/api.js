@@ -57,11 +57,15 @@ class TARSApiClient {
     if (!res.ok) {
       let errorDetail = `HTTP ${res.status}`;
       try {
-        const errJson = await res.json();
-        errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
-      } catch {
         const errText = await res.text();
-        if (errText) errorDetail = errText;
+        try {
+          const errJson = JSON.parse(errText);
+          errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
+        } catch {
+          if (errText) errorDetail = errText;
+        }
+      } catch {
+        // fallback to default errorDetail
       }
       throw new Error(errorDetail);
     }
@@ -116,6 +120,45 @@ class TARSApiClient {
     return this.request('/tars/config/reset', {
       method: 'POST'
     });
+  }
+
+  // --- MCP & Tool Management APIs (G5) ---
+  async getToolServers() {
+    return this.request('/tools/servers', { method: 'GET' });
+  }
+
+  async toggleTool(toolName, active = null) {
+    const options = { method: 'PATCH' };
+    if (active !== null && active !== undefined) {
+      options.body = JSON.stringify({ active, enabled: active });
+    }
+    return this.request(`/tools/${encodeURIComponent(toolName)}/toggle`, options);
+  }
+
+  async getGoogleAuthUrl() {
+    return this.request('/tools/auth/google/url', { method: 'GET' });
+  }
+
+  async getGoogleCredentials() {
+    return this.request('/tools/auth/google/credentials', { method: 'GET' });
+  }
+
+  async updateGoogleCredentials(clientId, clientSecret) {
+    return this.request('/tools/auth/google/credentials', {
+      method: 'POST',
+      body: JSON.stringify({
+        client_id: clientId !== undefined ? clientId : null,
+        client_secret: clientSecret !== undefined ? clientSecret : null
+      })
+    });
+  }
+
+  async disconnectGoogle() {
+    return this.request('/tools/auth/google/disconnect', { method: 'POST' });
+  }
+
+  async testServerConnection(serverId) {
+    return this.request(`/tools/servers/${encodeURIComponent(serverId)}/test`, { method: 'POST' });
   }
 }
 

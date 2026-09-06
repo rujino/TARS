@@ -159,6 +159,9 @@ class AgentChatService:
         )
         stream_config = {"callbacks": [lf_handler]} if lf_handler else None
 
+        captured_engine: str | None = None
+        captured_model_name: str | None = None
+
         try:
             with trace_attributes_context(
                 user_id=user_id,
@@ -171,9 +174,17 @@ class AgentChatService:
                     background_tasks=background_tasks,
                     config=stream_config,
                 ):
+                    if event.engine:
+                        captured_engine = event.engine
+                    if event.model_name:
+                        captured_model_name = event.model_name
                     yield event
         finally:
-            flush_langfuse_handler(lf_handler)
+            flush_langfuse_handler(
+                lf_handler,
+                engine=captured_engine,
+                model_name=captured_model_name,
+            )
 
 
 __all__ = [

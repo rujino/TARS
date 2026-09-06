@@ -101,13 +101,41 @@ def get_langfuse_callback_handler(
         return None
 
 
-def flush_langfuse_handler(handler: Any | None) -> None:
-    """Flush pending traces from the given callback handler."""
-    if handler is not None and hasattr(handler, "flush") and callable(handler.flush):
-        try:
+def flush_langfuse_handler(
+    handler: Any | None,
+    engine: str | None = None,
+    model_name: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Flush pending traces from the given callback handler and tag the responding engine/model."""
+    if handler is None:
+        return
+
+    try:
+        if hasattr(handler, "trace") and handler.trace is not None:
+            existing_tags = list(getattr(handler, "tags", []) or [])
+            new_tags = list(existing_tags)
+            if engine:
+                new_tags.append(f"engine:{engine.lower()}")
+            if model_name:
+                new_tags.append(f"model:{model_name}")
+
+            trace_meta = dict(getattr(handler, "metadata", {}) or {})
+            if engine:
+                trace_meta["engine"] = engine.upper()
+            if model_name:
+                trace_meta["model_name"] = model_name
+            if metadata:
+                trace_meta.update(metadata)
+
+            handler.trace.update(
+                tags=list(dict.fromkeys(new_tags)),
+                metadata=trace_meta,
+            )
+        if hasattr(handler, "flush") and callable(handler.flush):
             handler.flush()
-        except Exception as exc:
-            logger.debug("Failed to flush Langfuse handler: %s", exc)
+    except Exception as exc:
+        logger.debug("Failed to flush Langfuse handler: %s", exc)
 
 
 @contextlib.contextmanager

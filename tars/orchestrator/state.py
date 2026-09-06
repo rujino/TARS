@@ -69,12 +69,15 @@ class TARSState(TypedDict, total=False):
     system_prompt: str
 
     # 5. ReAct 실행 및 도구 추적
+    disabled_tools: list[str]
     tool_calls: list[ToolCallData]
     tool_results: list[dict[str, Any]]
     iteration_count: int
     final_response: str
     tools_used: list[str]
     error_message: str | None
+    engine: str | None
+    model_name: str | None
 
 
 __all__ = [

@@ -183,3 +183,47 @@ Reference document: `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 1: Short-Term Ha
 - [ ] mypy 타입 검사 및 ruff 린트 검사가 오류 0건으로 통과해야 합니다.
 
 
+
+## 2026-09-06T17:18:19Z
+
+Implement an interactive MCP server and tool management interface in TARS, including a sidebar accordion list, tool active/disabled toggles, Google OAuth2 redirect account linking, and LangGraph agent runtime filtering.
+
+Working directory: /home/ryuji/Workspace/TARS
+Integrity mode: demo
+
+## Requirements
+
+### R1. MCP Server & Tool Discovery Accordion UI
+Add a scrollable section in the TARS HUD sidebar displaying connected MCP servers and builtin Google Workspace integrations. Each server must render as an accordion item showing its connection status (connected, offline, mock), active tool count, and a collapsible list of tools.
+
+### R2. Tool Activation/Deactivation & Agent Runtime Filtering
+Provide per-tool toggle switches in the UI to enable or disable individual tools. Persist disabled tool preferences in the database (`TARSSettings`). In the LangGraph ReAct agent pipeline (`llm_node` and `tool_node`), disabled tools must be excluded from LLM function calling schema declarations and blocked from execution.
+
+### R3. Account Linking & Configuration Modal (Google OAuth2 Redirect)
+Implement a HUD modal dialog accessible from server and tool entries. For Google Workspace, support an OAuth2 authorization redirect flow (authorization URL generation, callback code exchange, and refresh token storage), along with a deterministic one-click Mock linking toggle for offline testing. For MCP servers, allow inspecting and updating server transport endpoints, headers, and running connection tests.
+
+### R4. Automated Testing & Verification
+Implement automated unit and integration tests covering the tool management REST API, ToolRegistry schema filtering, OAuth2 redirect and callback endpoints, and agent runtime isolation for disabled tools.
+
+## Acceptance Criteria
+
+### API & Tool Registry
+- [ ] `GET /api/v1/tools/servers` returns all registered servers and their tools with accurate active/disabled states.
+- [ ] `PATCH /api/v1/tools/{tool_name}/toggle` toggles and persists the tool's enabled state in `TARSSettings`.
+- [ ] `ToolRegistry.export_gemini_declarations()` excludes disabled tools when requested by the agent runtime.
+- [ ] `tool_node` blocks execution of disabled tools and returns an informative error message.
+
+### Account Linking & OAuth2
+- [ ] `GET /api/v1/tools/auth/google/url` returns a valid Google OAuth2 authorization URL with required scopes.
+- [ ] `GET /api/v1/tools/auth/google/callback` exchanges authorization code for tokens and updates user credentials in the database.
+- [ ] `POST /api/v1/tools/auth/google/mock-link` toggles mock Google credentials for offline development.
+
+### UI & Interaction
+- [ ] TARS sidebar includes a scrollable `[ MCP & TOOLS ]` section below the persona controls.
+- [ ] Accordion collapses and expands tool lists smoothly with visual state indicators (status dot, active badge).
+- [ ] Each tool row displays an active/disabled status badge and interactive toggle switch.
+- [ ] Clicking a server or tool opens the HUD configuration modal for OAuth linking and settings.
+
+### Test Suite
+- [ ] All new tests in `tests/tier1_unit/test_tools_management.py` pass.
+- [ ] All existing tier 1 unit tests pass (`.venv/bin/pytest tests/tier1_unit/`).

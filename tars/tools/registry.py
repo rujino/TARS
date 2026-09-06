@@ -119,17 +119,47 @@ class ToolRegistry:
         """Return the names of all registered tools."""
         return list(self._tools.keys())
 
-    def export_gemini_declarations(self) -> list[dict[str, Any]]:
-        """Export all tool declarations in Google Gemini function calling format."""
-        return [tool.to_gemini_declaration() for tool in self._tools.values()]
+    def export_gemini_declarations(
+        self, disabled_tools: Sequence[str] | set[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Export all tool declarations in Google Gemini function calling format.
 
-    def export_openai_schemas(self) -> list[dict[str, Any]]:
-        """Export all tool schemas in OpenAI function calling format."""
-        return [tool.to_openai_schema() for tool in self._tools.values()]
+        Args:
+            disabled_tools: Optional sequence or set of tool names to exclude.
 
-    def export_schemas(self) -> list[dict[str, Any]]:
+        Returns:
+            List of Gemini FunctionDeclaration dictionaries for active tools.
+        """
+        disabled = set(disabled_tools) if disabled_tools else set()
+        return [
+            tool.to_gemini_declaration()
+            for name, tool in self._tools.items()
+            if name not in disabled
+        ]
+
+    def export_openai_schemas(
+        self, disabled_tools: Sequence[str] | set[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Export all tool schemas in OpenAI function calling format.
+
+        Args:
+            disabled_tools: Optional sequence or set of tool names to exclude.
+
+        Returns:
+            List of OpenAI function schema dictionaries for active tools.
+        """
+        disabled = set(disabled_tools) if disabled_tools else set()
+        return [
+            tool.to_openai_schema()
+            for name, tool in self._tools.items()
+            if name not in disabled
+        ]
+
+    def export_schemas(
+        self, disabled_tools: Sequence[str] | set[str] | None = None
+    ) -> list[dict[str, Any]]:
         """Default schema export (Gemini FunctionDeclaration format)."""
-        return self.export_gemini_declarations()
+        return self.export_gemini_declarations(disabled_tools=disabled_tools)
 
     async def execute_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         """Execute a registered tool by name asynchronously.

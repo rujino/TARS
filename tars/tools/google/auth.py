@@ -32,15 +32,13 @@ class GoogleAuthHelper:
         self._http_client = http_client
         self._owns_http_client = http_client is None
 
-        # Determine mock mode: explicit flag -> env var -> config -> missing credentials
+        # Determine mock mode: explicit flag -> env var -> config
         env_mock = os.environ.get("TARS_GOOGLE_MOCK_MODE", "").lower() in ("true", "1", "yes")
         if mock_mode is not None:
             self.mock_mode = mock_mode
         elif env_mock:
             self.mock_mode = True
         elif settings.google_mock_mode:
-            self.mock_mode = True
-        elif not (self.client_id and self.client_secret and self.refresh_token):
             self.mock_mode = True
         else:
             self.mock_mode = False
@@ -61,6 +59,47 @@ class GoogleAuthHelper:
         """
         if self.mock_mode:
             return "mock_google_oauth2_access_token"
+
+        # Try loading credentials from DB if missing
+        if not (self.refresh_token and self.client_id and self.client_secret):
+            try:
+                from sqlalchemy import select
+
+                from tars.db.models import TARSSettings
+                from tars.db.session import get_session_factory
+
+                factory = get_session_factory()
+                async with factory() as session:
+                    stmt = (
+                        select(TARSSettings)
+                        .where(
+                            (TARSSettings.google_refresh_token.is_not(None))
+                            | (TARSSettings.google_client_id.is_not(None))
+                        )
+                        .order_by(TARSSettings.updated_at.desc())
+                        .limit(1)
+                    )
+                    res = await session.execute(stmt)
+                    s = res.scalar_one_or_none()
+                    if s:
+                        if not self.refresh_token and s.google_refresh_token:
+                            self.refresh_token = s.google_refresh_token
+                        if not self.client_id and s.google_client_id:
+                            self.client_id = s.google_client_id
+                        if not self.client_secret and s.google_client_secret:
+                            self.client_secret = s.google_client_secret
+            except Exception as exc:
+                logger.debug("Could not query TARSSettings for Google credentials: %s", exc)
+
+        if not (self.client_id and self.client_secret):
+            raise RuntimeError(
+                "Google OAuth2 클라이언트 설정(Client ID / Secret)이 누락되었습니다. MCP & TOOLS 설정에서 등록해 주세요."
+            )
+
+        if not self.refresh_token:
+            raise RuntimeError(
+                "Google Workspace 계정이 연동되지 않았습니다. MCP & TOOLS 설정에서 Google 계정을 연동해 주세요."
+            )
 
         now = time.time()
         if self._cached_token and now < (self._token_expires_at - 60):
@@ -86,11 +125,10 @@ class GoogleAuthHelper:
             logger.info("Renewed Google OAuth2 access token (expires in %ds)", expires_in)
             return access_token
         except Exception as exc:
-            logger.warning(
-                "Failed to refresh Google OAuth2 access token (%s). Falling back to mock token.",
-                exc,
-            )
-            return "mock_google_oauth2_access_token_fallback"
+            logger.error("Failed to refresh Google OAuth2 access token: %s", exc)
+            raise RuntimeError(
+                f"Google OAuth2 토큰 갱신에 실패했습니다 ({exc}). MCP & TOOLS 설정에서 계정을 다시 연동해 주세요."
+            ) from exc
 
     async def get_auth_headers(self) -> dict[str, str]:
         """Generate Authorization headers dict for Google API REST requests."""
