@@ -425,12 +425,10 @@
   async function openGoogleWorkspaceModal(server) {
     toolState.activeModal = { type: 'google', serverId: server.id };
     openModal('SERVER CONFIG // GOOGLE WORKSPACE', async (body) => {
-      body.innerHTML = '<div class="tools-loading" style="padding: 24px; text-align: center;">[ LOADING CONFIGURATION... ]</div>';
+      body.innerHTML = '<div class="tools-loading" style="padding: 24px; text-align: center;">[ LOADING STATUS... ]</div>';
 
       let creds = {
-        client_id: '',
-        has_client_secret: false,
-        is_configured: false,
+        is_configured: true,
         is_linked: false,
         account_email: null,
       };
@@ -438,7 +436,7 @@
       try {
         creds = await api.getGoogleCredentials();
       } catch (err) {
-        console.warn('Failed to load Google credentials:', err);
+        console.warn('Failed to load Google credentials status:', err);
       }
 
       const isConnected = creds.is_linked || (server.status === 'connected');
@@ -446,8 +444,6 @@
       const statusDotClass = isConnected ? 'connected' : 'offline';
       const email = creds.account_email || server.account_email || 'None';
       const safeEmail = escapeHtml(email);
-      const safeClientId = escapeHtml(creds.client_id || '');
-      const redirectUri = `${window.location.origin}/api/v1/tools/auth/google/callback`;
 
       body.innerHTML = `
         <div class="modal-status-box">
@@ -461,51 +457,26 @@
         </div>
 
         <div class="modal-action-block">
-          <div class="modal-section-title">[ GOOGLE OAUTH2 ACCOUNT LINKING ]</div>
+          <div class="modal-section-title">[ GOOGLE WORKSPACE ACCOUNT LINKING ]</div>
           <div class="modal-desc-box">
             ${isConnected 
               ? 'Google 계정이 정상적으로 연동되어 있습니다. TARS가 Calendar 일정 및 Gmail 메일을 관리할 수 있습니다.' 
               : 'Google 계정을 연동하여 TARS가 Calendar 일정 및 Gmail 메일을 관리할 수 있도록 승인합니다.'}
           </div>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
-            <button id="btn-modal-google-oauth" class="hud-btn primary" style="flex: 1; justify-content: center; height: 38px; font-weight: 700;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+            <button id="btn-modal-google-oauth" class="hud-btn primary" style="flex: 1; justify-content: center; height: 40px; font-weight: 700;">
               🌐 ${isConnected ? 'RE-AUTHORIZE WITH GOOGLE' : 'AUTHORIZE VIA GOOGLE'}
             </button>
             ${isConnected ? `
-            <button id="btn-modal-google-disconnect" class="hud-btn" style="height: 38px; font-weight: 700; border-color: var(--tars-red); color: var(--tars-red);">
+            <button id="btn-modal-google-disconnect" class="hud-btn" style="height: 40px; font-weight: 700; border-color: var(--tars-red); color: var(--tars-red);">
               🚪 DISCONNECT ACCOUNT
             </button>
             ` : ''}
           </div>
         </div>
 
-        <div class="modal-action-block">
-          <div class="modal-section-title">[ OAUTH2 CLIENT CONFIGURATION ]</div>
-          <div class="modal-desc-box" style="margin-bottom: 8px;">
-            Google Cloud Console의 <b>OAuth 2.0 클라이언트 ID</b> 설정값을 등록합니다.
-            <div style="margin-top: 6px; font-size: 10px; color: var(--text-muted); word-break: break-all;">
-              승인된 리디렉션 URI: <code style="color: var(--tars-cyan); user-select: all;">${escapeHtml(redirectUri)}</code>
-            </div>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div>
-              <label style="font-size: 10px; color: var(--text-secondary); display: block; margin-bottom: 2px;">CLIENT ID</label>
-              <input id="input-google-client-id" type="text" class="hud-input" placeholder="xxxx.apps.googleusercontent.com" value="${safeClientId}" style="width: 100%; box-sizing: border-box; font-family: monospace; font-size: 11px; padding: 6px 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary);" />
-            </div>
-            <div>
-              <label style="font-size: 10px; color: var(--text-secondary); display: block; margin-bottom: 2px;">
-                CLIENT SECRET ${creds.has_client_secret ? '<span style="color: var(--tars-green); font-weight: 600;">(CONFIGURED)</span>' : '<span style="color: var(--tars-amber); font-weight: 600;">(NOT SET)</span>'}
-              </label>
-              <input id="input-google-client-secret" type="password" class="hud-input" placeholder="${creds.has_client_secret ? '•••••••••••••••• (Leave blank to keep existing)' : 'Enter Client Secret'}" style="width: 100%; box-sizing: border-box; font-family: monospace; font-size: 11px; padding: 6px 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary);" />
-            </div>
-            <button id="btn-save-google-creds" class="hud-btn" style="justify-content: center; height: 34px; font-weight: 600; margin-top: 4px;">
-              💾 SAVE CREDENTIALS
-            </button>
-          </div>
-        </div>
-
-        <div style="font-size: 11px; color: var(--text-muted);">
-          AVAILABLE TOOLS:
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 16px;">
+          AVAILABLE INTEGRATIONS:
           <ul style="padding-left: 18px; margin-top: 4px; line-height: 1.6;">
             <li>Google Calendar (calendar_list_events, calendar_create_event, calendar_delete_event)</li>
             <li>Google Gmail (gmail_search_messages, gmail_get_message, gmail_send_message)</li>
@@ -517,16 +488,6 @@
       const oauthBtn = body.querySelector('#btn-modal-google-oauth');
       if (oauthBtn) {
         oauthBtn.addEventListener('click', async () => {
-          const clientIdInput = body.querySelector('#input-google-client-id');
-          if (!creds.client_id && (!clientIdInput || !clientIdInput.value.trim())) {
-            showNotification(
-              '⚠️ Google Client ID가 비어 있습니다. 먼저 아래 [OAUTH2 CLIENT CONFIGURATION]에서 Client ID와 Secret을 입력하고 저장해 주세요.',
-              'error'
-            );
-            if (clientIdInput) clientIdInput.focus();
-            return;
-          }
-
           oauthBtn.disabled = true;
           oauthBtn.textContent = 'CONNECTING TO GOOGLE AUTH...';
           try {
@@ -563,36 +524,6 @@
             showNotification(`Disconnect Error: ${err.message}`, 'error');
             disconnectBtn.disabled = false;
             disconnectBtn.textContent = '🚪 DISCONNECT ACCOUNT';
-          }
-        });
-      }
-
-      // Wire Save Credentials button
-      const saveCredsBtn = body.querySelector('#btn-save-google-creds');
-      if (saveCredsBtn) {
-        saveCredsBtn.addEventListener('click', async () => {
-          const clientIdInput = body.querySelector('#input-google-client-id');
-          const clientSecretInput = body.querySelector('#input-google-client-secret');
-          const clientId = clientIdInput ? clientIdInput.value.trim() : '';
-          const clientSecret = clientSecretInput ? clientSecretInput.value.trim() : '';
-
-          saveCredsBtn.disabled = true;
-          saveCredsBtn.textContent = 'SAVING...';
-          try {
-            await api.updateGoogleCredentials(
-              clientId,
-              clientSecret || undefined
-            );
-            showNotification('Google OAuth credentials updated successfully.', 'success');
-            await loadToolServers();
-            const updated = toolState.servers.find((s) => s.id === 'google_workspace');
-            if (updated && toolState.activeModal && toolState.activeModal.type === 'google') {
-              openGoogleWorkspaceModal(updated);
-            }
-          } catch (err) {
-            showNotification(`Save Error: ${err.message}`, 'error');
-            saveCredsBtn.disabled = false;
-            saveCredsBtn.textContent = '💾 SAVE CREDENTIALS';
           }
         });
       }
