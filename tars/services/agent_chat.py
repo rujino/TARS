@@ -20,6 +20,11 @@ from tars.db.session import get_session_factory
 from tars.extractor.worker import SelfEvolvingKnowledgeWorker
 from tars.orchestrator.graph import build_tars_graph
 from tars.orchestrator.models import AgentStreamEvent
+from tars.orchestrator.observability import (
+    flush_langfuse_handler,
+    get_langfuse_callback_handler,
+    trace_attributes_context,
+)
 from tars.orchestrator.state import TARSState
 from tars.orchestrator.stream_bridge import LangGraphStreamBridge
 from tars.persona.prompts import TARSPersonaManager
@@ -147,12 +152,28 @@ class AgentChatService:
             "tools_used": [],
         }
 
-        async for event in LangGraphStreamBridge.stream_graph_events(
-            graph=graph,
-            initial_state=initial_state,
-            background_tasks=background_tasks,
-        ):
-            yield event
+        lf_handler = get_langfuse_callback_handler(
+            user_id=user_id,
+            session_id=session_id or "",
+            tags=["tars", "chat"],
+        )
+        stream_config = {"callbacks": [lf_handler]} if lf_handler else None
+
+        try:
+            with trace_attributes_context(
+                user_id=user_id,
+                session_id=session_id or "",
+                tags=["tars", "chat"],
+            ):
+                async for event in LangGraphStreamBridge.stream_graph_events(
+                    graph=graph,
+                    initial_state=initial_state,
+                    background_tasks=background_tasks,
+                    config=stream_config,
+                ):
+                    yield event
+        finally:
+            flush_langfuse_handler(lf_handler)
 
 
 __all__ = [

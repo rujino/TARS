@@ -74,7 +74,8 @@ class AgentStreamEvent(BaseModel):
             )
             return f"event: stream_end\ndata: {payload}\n\n"
         elif self.type == "error":
-            payload = json.dumps({"error": self.error or self.content}, ensure_ascii=False)
+            err_msg = self.error or self.content or "Stream error occurred"
+            payload = json.dumps({"error": err_msg, "message": err_msg}, ensure_ascii=False)
             return f"event: error\ndata: {payload}\n\n"
         elif self.type == "done":
             return "event: done\ndata: [DONE]\n\n"
@@ -102,6 +103,7 @@ class AgentStreamEvent(BaseModel):
             data["result"] = self.result
         if self.error is not None:
             data["error"] = self.error
+            data["message"] = self.error
         if self.tools_used is not None:
             data["tools_used"] = self.tools_used
         return data

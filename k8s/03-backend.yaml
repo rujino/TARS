@@ -93,6 +93,38 @@ spec:
                 secretKeyRef:
                   name: tars-secret
                   key: TARS_GEMINI_API_KEY
+            - name: TARS_GEMINI_MODEL_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_GEMINI_MODEL_NAME
+            - name: TARS_LLAMACPP_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_LLAMACPP_BASE_URL
+            - name: TARS_LANGFUSE_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_LANGFUSE_ENABLED
+            - name: TARS_LANGFUSE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_LANGFUSE_HOST
+            - name: TARS_LANGFUSE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tars-secret
+                  key: TARS_LANGFUSE_PUBLIC_KEY
+                  optional: true
+            - name: TARS_LANGFUSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tars-secret
+                  key: TARS_LANGFUSE_SECRET_KEY
+                  optional: true
           volumeMounts:
             - name: storage-data
               mountPath: /app/storage

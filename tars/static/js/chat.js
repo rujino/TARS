@@ -52,7 +52,7 @@ class TARSStreamClient {
           } else if (frame.type === 'stream_end') {
             this.callbacks.onEnd?.(frame.content || '');
           } else if (frame.type === 'error') {
-            this.callbacks.onError?.(frame.message || 'Stream error occurred');
+            this.callbacks.onError?.(frame.error || frame.message || 'Stream error occurred');
           }
         } catch (err) {
           console.error('[Stream] WS JSON Parse Error:', err);

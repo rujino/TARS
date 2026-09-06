@@ -23,6 +23,8 @@ dependencies = [
     "prometheus-client>=0.20.0",
     "sqlalchemy[asyncio]>=2.0.28",
     "uvicorn[standard]>=0.28.0",
+    "langfuse>=2.60.0,<3.0.0",
+    "langchain>=1.4.0",
 ]
 
 [project.optional-dependencies]

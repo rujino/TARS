@@ -27,6 +27,7 @@ class LangGraphStreamBridge:
         graph: Any,
         initial_state: dict[str, Any] | TARSState,
         background_tasks: BackgroundTasks | None = None,
+        config: dict[str, Any] | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Consume LangGraph astream_events(version='v2') and yield AgentStreamEvents.
 
@@ -42,6 +43,7 @@ class LangGraphStreamBridge:
             graph: Compiled LangGraph instance supporting astream_events.
             initial_state: Initial state dictionary containing user_id, session_id, messages, etc.
             background_tasks: Optional FastAPI BackgroundTasks for async execution.
+            config: Optional RunnableConfig dictionary containing callbacks or tracing metadata.
 
         Yields:
             AgentStreamEvent frames matching the SSE/WS wire protocol.
@@ -59,7 +61,11 @@ class LangGraphStreamBridge:
             if not hasattr(graph, "astream_events"):
                 raise AttributeError("Graph instance must implement 'astream_events'")
 
-            async for event in graph.astream_events(initial_state, version="v2"):
+            stream_kwargs: dict[str, Any] = {"version": "v2"}
+            if config:
+                stream_kwargs["config"] = config
+
+            async for event in graph.astream_events(initial_state, **stream_kwargs):
                 ev_type = str(event.get("event", ""))
                 ev_name = str(event.get("name", ""))
                 data: dict[str, Any] = event.get("data", {}) or {}
