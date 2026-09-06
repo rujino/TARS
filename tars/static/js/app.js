@@ -517,6 +517,16 @@
       const oauthBtn = body.querySelector('#btn-modal-google-oauth');
       if (oauthBtn) {
         oauthBtn.addEventListener('click', async () => {
+          const clientIdInput = body.querySelector('#input-google-client-id');
+          if (!creds.client_id && (!clientIdInput || !clientIdInput.value.trim())) {
+            showNotification(
+              '⚠️ Google Client ID가 비어 있습니다. 먼저 아래 [OAUTH2 CLIENT CONFIGURATION]에서 Client ID와 Secret을 입력하고 저장해 주세요.',
+              'error'
+            );
+            if (clientIdInput) clientIdInput.focus();
+            return;
+          }
+
           oauthBtn.disabled = true;
           oauthBtn.textContent = 'CONNECTING TO GOOGLE AUTH...';
           try {

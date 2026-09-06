@@ -1,5 +1,5 @@
-// TARS PWA Service Worker v2.6.0
-const CACHE_NAME = 'tars-pwa-v2.6';
+// TARS PWA Service Worker v2.7.0
+const CACHE_NAME = 'tars-pwa-v2.7';
 
 const ASSETS_TO_CACHE = [
   '/',

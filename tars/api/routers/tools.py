@@ -422,11 +422,13 @@ async def get_google_auth_url(
     """Generate Google OAuth2 authorization redirect URL with required scopes and CSRF state token."""
     user_settings = await _get_or_create_settings(db, current_user.id)
     app_settings = get_settings()
-    client_id = (
-        user_settings.google_client_id
-        or app_settings.google_client_id
-        or "tars_google_client_id"
-    )
+    client_id = user_settings.google_client_id or app_settings.google_client_id
+
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google OAuth2 Client ID가 설정되지 않았습니다. 먼저 아래 [OAUTH2 CLIENT CONFIGURATION]에서 Client ID와 Secret을 입력하고 저장해 주세요.",
+        )
 
     if not redirect_uri:
         proto = request.headers.get("x-forwarded-proto", request.url.scheme)

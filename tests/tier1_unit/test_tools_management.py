@@ -393,15 +393,31 @@ async def test_google_auth_url_endpoint(
     tools_api_client: AsyncClient,
     test_user_token: str,
     test_user: User,
+    async_db_session: AsyncSession,
 ) -> None:
-    """GET /auth/google/url returns valid authorization redirect URL with scopes and signed state."""
+    """GET /auth/google/url returns 400 if client_id missing, and valid URL when configured."""
     headers = {"Authorization": f"Bearer {test_user_token}"}
+
+    # 1. Missing client ID -> 400 Bad Request
+    resp_missing = await tools_api_client.get("/api/v1/tools/auth/google/url", headers=headers)
+    assert resp_missing.status_code == 400
+    assert "Google OAuth2 Client ID가 설정되지 않았습니다" in resp_missing.json()["detail"]
+
+    # 2. Configure client ID in DB
+    stmt = select(TARSSettings).where(TARSSettings.user_id == test_user.id)
+    res = await async_db_session.execute(stmt)
+    settings = res.scalar_one()
+    settings.google_client_id = "test_client_id_123.apps.googleusercontent.com"
+    await async_db_session.commit()
+
+    # 3. Successful URL generation
     resp = await tools_api_client.get("/api/v1/tools/auth/google/url", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
 
     assert "url" in data
     assert "accounts.google.com/o/oauth2/v2/auth" in data["url"]
+    assert "client_id=test_client_id_123.apps.googleusercontent.com" in data["url"]
     assert "response_type=code" in data["url"]
     assert "state=" in data["url"]
     assert "access_type=offline" in data["url"]
