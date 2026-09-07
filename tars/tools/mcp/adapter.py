@@ -32,10 +32,11 @@ class MCPToolAdapter(BaseTool):
             parameters_schema=meta.inputSchema,
         )
 
-    async def aexecute(self, **kwargs: Any) -> Any:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> Any:
         """Execute the remote MCP tool and return result or raise on error.
 
         Args:
+            user_id: Optional user ID (absorbed for interface consistency).
             **kwargs: Arguments corresponding to tool inputSchema.
 
         Returns:

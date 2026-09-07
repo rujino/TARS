@@ -17,8 +17,23 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
+from tars.core.security import decrypt_secret, encrypt_secret
 from tars.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+
+
+class EncryptedString(TypeDecorator[str]):
+    """SQLAlchemy TypeDecorator that encrypts data on bind and decrypts on load."""
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value: Any, dialect: Any) -> Any:
+        return encrypt_secret(value) if value is not None else value
+
+    def process_result_value(self, value: Any, dialect: Any) -> Any:
+        return decrypt_secret(value) if value is not None else value
 
 
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -83,10 +98,10 @@ class TARSSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         JSON, default=list, nullable=False
     )
     google_refresh_token: Mapped[str | None] = mapped_column(
-        String(512), nullable=True
+        EncryptedString(512), nullable=True
     )
     google_access_token: Mapped[str | None] = mapped_column(
-        String(1024), nullable=True
+        EncryptedString(1024), nullable=True
     )
     google_linked_email: Mapped[str | None] = mapped_column(
         String(128), nullable=True
@@ -98,7 +113,7 @@ class TARSSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         String(256), nullable=True
     )
     google_client_secret: Mapped[str | None] = mapped_column(
-        String(256), nullable=True
+        EncryptedString(256), nullable=True
     )
 
     # Relationships

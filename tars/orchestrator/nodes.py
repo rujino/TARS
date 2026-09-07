@@ -536,7 +536,10 @@ async def tool_node(
             if tool_registry is None:
                 raise RuntimeError("ToolRegistry is not configured in tool_node.")
 
-            exec_result = await tool_registry.execute_tool(tc.name, tc.arguments)
+            user_id = state.get("user_id")
+            exec_result = await tool_registry.execute_tool(
+                tc.name, tc.arguments, user_id=user_id
+            )
             try:
                 await adispatch_custom_event(
                     "tool_result",

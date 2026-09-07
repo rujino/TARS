@@ -69,10 +69,11 @@ class BaseTool(ABC):
             self.parameters_schema = {"type": "object", "properties": {}, "required": []}
 
     @abstractmethod
-    async def aexecute(self, **kwargs: Any) -> Any:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> Any:
         """Execute the tool asynchronously with supplied arguments.
 
         Args:
+            user_id: Optional authenticated user ID executing the tool (for multi-tenant isolation).
             **kwargs: Arguments matching parameters_schema.
 
         Returns:

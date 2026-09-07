@@ -68,9 +68,13 @@ class GmailAdapter:
         self,
         query: str,
         max_results: int = 5,
+        user_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Search messages matching query."""
-        if self.auth_helper.mock_mode:
+        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
+        if (
+            self.auth_helper.mock_mode
+            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
+        ):
             q_lower = query.lower()
             results: list[dict[str, Any]] = []
             for msg in self._mock_messages.values():
@@ -106,7 +110,6 @@ class GmailAdapter:
                     )
             return results[:max_results]
 
-        headers = await self.auth_helper.get_auth_headers()
         url = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
         params: dict[str, str | int] = {"q": query, "maxResults": max_results}
         client = self.auth_helper._get_http_client()
@@ -116,14 +119,19 @@ class GmailAdapter:
         messages: list[dict[str, Any]] = data.get("messages", [])
         return messages
 
-    async def get_message(self, message_id: str) -> dict[str, Any]:
+    async def get_message(
+        self, message_id: str, user_id: str | None = None
+    ) -> dict[str, Any]:
         """Retrieve message details by ID."""
-        if self.auth_helper.mock_mode:
+        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
+        if (
+            self.auth_helper.mock_mode
+            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
+        ):
             if message_id in self._mock_messages:
                 return self._mock_messages[message_id]
             raise KeyError(f"Gmail message ID '{message_id}' not found.")
 
-        headers = await self.auth_helper.get_auth_headers()
         url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
         client = self.auth_helper._get_http_client()
         resp = await client.get(url, headers=headers)
@@ -131,9 +139,15 @@ class GmailAdapter:
         result: dict[str, Any] = resp.json()
         return result
 
-    async def send_message(self, to: str, subject: str, body: str) -> dict[str, Any]:
+    async def send_message(
+        self, to: str, subject: str, body: str, user_id: str | None = None
+    ) -> dict[str, Any]:
         """Send an email message."""
-        if self.auth_helper.mock_mode:
+        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
+        if (
+            self.auth_helper.mock_mode
+            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
+        ):
             msg_id = f"msg_{uuid.uuid4().hex[:8]}"
             sent_msg = {
                 "id": msg_id,
@@ -158,7 +172,7 @@ class GmailAdapter:
         msg.set_content(body)
         raw_b64 = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
 
-        headers = await self.auth_helper.get_auth_headers()
+        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
         url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
         client = self.auth_helper._get_http_client()
         resp = await client.post(url, headers=headers, json={"raw": raw_b64})
@@ -200,10 +214,12 @@ class GmailSearchMessagesTool(BaseTool):
             },
         )
 
-    async def aexecute(self, **kwargs: Any) -> list[dict[str, Any]]:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> list[dict[str, Any]]:
         query = str(kwargs.get("query", ""))
         max_results = int(kwargs.get("max_results", 5))
-        return await self.adapter.search_messages(query=query, max_results=max_results)
+        return await self.adapter.search_messages(
+            query=query, max_results=max_results, user_id=user_id
+        )
 
 
 class GmailGetMessageTool(BaseTool):
@@ -226,9 +242,9 @@ class GmailGetMessageTool(BaseTool):
             },
         )
 
-    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> dict[str, Any]:
         message_id = str(kwargs.get("message_id", ""))
-        return await self.adapter.get_message(message_id=message_id)
+        return await self.adapter.get_message(message_id=message_id, user_id=user_id)
 
 
 class GmailSendMessageTool(BaseTool):
@@ -259,11 +275,13 @@ class GmailSendMessageTool(BaseTool):
             },
         )
 
-    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> dict[str, Any]:
         to = str(kwargs.get("to", ""))
         subject = str(kwargs.get("subject", ""))
         body = str(kwargs.get("body", ""))
-        return await self.adapter.send_message(to=to, subject=subject, body=body)
+        return await self.adapter.send_message(
+            to=to, subject=subject, body=body, user_id=user_id
+        )
 
 
 __all__ = [

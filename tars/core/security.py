@@ -89,9 +89,58 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
         return None
 
 
+def _get_fernet() -> Any:
+    """Derive deterministic Fernet cipher instance from jwt_secret_key."""
+    import base64
+    import hashlib
+    from cryptography.fernet import Fernet
+
+    settings = get_settings()
+    digest = hashlib.sha256(settings.jwt_secret_key.encode("utf-8")).digest()
+    fernet_key = base64.urlsafe_b64encode(digest)
+    return Fernet(fernet_key)
+
+
+def encrypt_secret(plaintext: str | None) -> str | None:
+    """Encrypt a sensitive plaintext secret string with AES-128-CBC (Fernet)."""
+    if not plaintext:
+        return plaintext
+    if plaintext.startswith("enc:"):
+        return plaintext
+    try:
+        f = _get_fernet()
+        ciphertext = f.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+        return f"enc:{ciphertext}"
+    except Exception as exc:
+        logger.error("Failed to encrypt secret: %s", exc)
+        return plaintext
+
+
+def decrypt_secret(ciphertext: str | None) -> str | None:
+    """Decrypt a sensitive secret, transparently handling legacy plaintext tokens."""
+    if not ciphertext:
+        return ciphertext
+    if not ciphertext.startswith("enc:"):
+        return ciphertext
+    try:
+        from cryptography.fernet import InvalidToken
+
+        f = _get_fernet()
+        raw_b64 = ciphertext[4:]
+        return f.decrypt(raw_b64.encode("utf-8")).decode("utf-8")
+    except InvalidToken:
+        logger.warning("Invalid token during secret decryption, returning raw value")
+        return ciphertext
+    except Exception as exc:
+        logger.error("Secret decryption error: %s", exc)
+        return ciphertext
+
+
 __all__ = [
     "create_access_token",
     "decode_access_token",
+    "decrypt_secret",
+    "encrypt_secret",
     "get_password_hash",
     "get_password_hash_async",
     "hash_password",

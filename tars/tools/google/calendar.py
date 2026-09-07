@@ -69,9 +69,14 @@ class GoogleCalendarAdapter:
         time_min: str | None = None,
         time_max: str | None = None,
         max_results: int = 10,
+        user_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """List events in calendar."""
-        if self.auth_helper.mock_mode:
+        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
+        if (
+            self.auth_helper.mock_mode
+            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
+        ):
             events = list(self._mock_events.values())
             if time_min:
                 events = [e for e in events if e.get("start", {}).get("dateTime", "") >= time_min]
@@ -79,7 +84,6 @@ class GoogleCalendarAdapter:
                 events = [e for e in events if e.get("end", {}).get("dateTime", "") <= time_max]
             return events[:max_results]
 
-        headers = await self.auth_helper.get_auth_headers()
         url = f"https://www.googleapis.com/calendar/v3/calendars/{self.calendar_id}/events"
         params: dict[str, str | int | bool] = {
             "maxResults": max_results,
@@ -105,8 +109,10 @@ class GoogleCalendarAdapter:
         end_time: str,
         description: str = "",
         attendees: list[str] | None = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         """Create a new event in calendar."""
+        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
         attendee_list = [{"email": email} for email in (attendees or [])]
         event_body = {
             "summary": summary,
@@ -116,7 +122,10 @@ class GoogleCalendarAdapter:
             "attendees": attendee_list,
         }
 
-        if self.auth_helper.mock_mode:
+        if (
+            self.auth_helper.mock_mode
+            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
+        ):
             event_id = f"evt_{uuid.uuid4().hex[:8]}"
             created_event = {
                 "id": event_id,
@@ -127,7 +136,6 @@ class GoogleCalendarAdapter:
             logger.info("Mock created calendar event: %s (%s)", event_id, summary)
             return created_event
 
-        headers = await self.auth_helper.get_auth_headers()
         url = f"https://www.googleapis.com/calendar/v3/calendars/{self.calendar_id}/events"
         client = self.auth_helper._get_http_client()
         resp = await client.post(url, headers=headers, json=event_body)
@@ -135,15 +143,20 @@ class GoogleCalendarAdapter:
         result: dict[str, Any] = resp.json()
         return result
 
-    async def delete_event(self, event_id: str) -> dict[str, Any]:
+    async def delete_event(
+        self, event_id: str, user_id: str | None = None
+    ) -> dict[str, Any]:
         """Delete an event from calendar."""
-        if self.auth_helper.mock_mode:
+        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
+        if (
+            self.auth_helper.mock_mode
+            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
+        ):
             if event_id in self._mock_events:
                 del self._mock_events[event_id]
                 return {"status": "deleted", "event_id": event_id}
             raise KeyError(f"Event ID '{event_id}' not found.")
 
-        headers = await self.auth_helper.get_auth_headers()
         url = (
             f"https://www.googleapis.com/calendar/v3/calendars/{self.calendar_id}/events/{event_id}"
         )
@@ -190,12 +203,15 @@ class CalendarListEventsTool(BaseTool):
             },
         )
 
-    async def aexecute(self, **kwargs: Any) -> list[dict[str, Any]]:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> list[dict[str, Any]]:
         time_min = kwargs.get("time_min")
         time_max = kwargs.get("time_max")
         max_results = int(kwargs.get("max_results", 10))
         return await self.adapter.list_events(
-            time_min=time_min, time_max=time_max, max_results=max_results
+            time_min=time_min,
+            time_max=time_max,
+            max_results=max_results,
+            user_id=user_id,
         )
 
 
@@ -238,7 +254,7 @@ class CalendarCreateEventTool(BaseTool):
             },
         )
 
-    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> dict[str, Any]:
         summary = str(kwargs.get("summary", ""))
         start_time = str(kwargs.get("start_time", ""))
         end_time = str(kwargs.get("end_time", ""))
@@ -250,6 +266,7 @@ class CalendarCreateEventTool(BaseTool):
             end_time=end_time,
             description=description,
             attendees=attendees,
+            user_id=user_id,
         )
 
 
@@ -273,9 +290,9 @@ class CalendarDeleteEventTool(BaseTool):
             },
         )
 
-    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> dict[str, Any]:
         event_id = str(kwargs.get("event_id", ""))
-        return await self.adapter.delete_event(event_id=event_id)
+        return await self.adapter.delete_event(event_id=event_id, user_id=user_id)
 
 
 __all__ = [

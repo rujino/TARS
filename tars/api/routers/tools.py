@@ -682,6 +682,7 @@ async def update_google_credentials(
 async def disconnect_google(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> dict[str, Any]:
     """Revoke and remove linked Google credentials for the current user."""
     user_settings = await _get_or_create_settings(db, current_user.id)
@@ -698,6 +699,9 @@ async def disconnect_google(
                 )
         except Exception as exc:
             logger.debug("Failed to revoke token at Google revoke endpoint: %s", exc)
+
+    # Invalidate cached in-memory token for this user
+    tool_registry.invalidate_user_google_cache(current_user.id)
 
     user_settings.google_refresh_token = None
     user_settings.google_access_token = None

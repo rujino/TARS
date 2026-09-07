@@ -33,6 +33,13 @@ class ToolRegistry:
         if client not in self._managed_clients:
             self._managed_clients.append(client)
 
+    def invalidate_user_google_cache(self, user_id: str) -> None:
+        """Evict cached Google tokens for a specific user across managed adapters."""
+        for client in self._managed_clients:
+            auth_helper = getattr(client, "auth_helper", None)
+            if auth_helper and hasattr(auth_helper, "invalidate_user_cache"):
+                auth_helper.invalidate_user_cache(user_id)
+
     async def aclose(self) -> None:
         """Gracefully close all managed HTTP clients and connections."""
         for client in list(self._managed_clients):
@@ -161,12 +168,18 @@ class ToolRegistry:
         """Default schema export (Gemini FunctionDeclaration format)."""
         return self.export_gemini_declarations(disabled_tools=disabled_tools)
 
-    async def execute_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+    async def execute_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        user_id: str | None = None,
+    ) -> Any:
         """Execute a registered tool by name asynchronously.
 
         Args:
             name: Name of the tool to execute.
             arguments: Dictionary of arguments passed to tool.
+            user_id: Optional user ID for multi-tenant context and authentication.
 
         Returns:
             Result of tool execution.
@@ -179,8 +192,22 @@ class ToolRegistry:
         if tool is None:
             raise KeyError(f"Tool '{name}' is not registered in ToolRegistry.")
 
-        logger.info("Executing tool '%s' with arguments: %s", name, arguments)
-        return await tool.aexecute(**arguments)
+        logger.info(
+            "Executing tool '%s' with arguments: %s (user_id: %s)",
+            name,
+            arguments,
+            user_id,
+        )
+        import inspect
+
+        sig = inspect.signature(tool.aexecute)
+        call_kwargs = dict(arguments)
+        if "user_id" in sig.parameters or any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        ):
+            call_kwargs["user_id"] = user_id
+
+        return await tool.aexecute(**call_kwargs)
 
     def clear(self) -> None:
         """Clear all registered tools."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -15,7 +16,7 @@ logger = logging.getLogger("tars.tools.google.auth")
 
 
 class GoogleAuthHelper:
-    """Helper managing Google Workspace OAuth2 Access Tokens and Mock Mode."""
+    """Helper managing Google Workspace OAuth2 Access Tokens with multi-tenant user isolation and mock mode."""
 
     def __init__(
         self,
@@ -43,16 +44,28 @@ class GoogleAuthHelper:
         else:
             self.mock_mode = False
 
+        # Multi-tenant per-user token cache: user_id -> (access_token, expires_at)
+        self._user_token_cache: dict[str, tuple[str, float]] = {}
+        # Single-user / test fallback cache
         self._cached_token: str | None = None
         self._token_expires_at: float = 0.0
+        self._cache_lock = asyncio.Lock()
 
     def _get_http_client(self) -> httpx.AsyncClient:
         if self._http_client is None:
             self._http_client = httpx.AsyncClient(timeout=10.0)
         return self._http_client
 
-    async def get_access_token(self) -> str:
-        """Obtain a valid OAuth2 access token, renewing via refresh token if necessary.
+    def invalidate_user_cache(self, user_id: str) -> None:
+        """Evict cached token for a specific user upon disconnect or token change."""
+        self._user_token_cache.pop(user_id, None)
+
+    async def get_access_token(self, user_id: str | None = None) -> str:
+        """Obtain a valid OAuth2 access token for the given user, renewing via refresh token if necessary.
+
+        Args:
+            user_id: Optional user ID for multi-tenant isolation. If provided, strictly fetches
+                     and caches credentials belonging only to this user.
 
         Returns:
             str: Valid Bearer access token string.
@@ -60,8 +73,20 @@ class GoogleAuthHelper:
         if self.mock_mode:
             return "mock_google_oauth2_access_token"
 
-        # Try loading credentials from DB if missing
-        if not (self.refresh_token and self.client_id and self.client_secret):
+        now = time.time()
+        effective_client_id = self.client_id
+        effective_client_secret = self.client_secret
+        effective_refresh_token = self.refresh_token
+
+        if user_id:
+            # 1. Check user-specific in-memory cache
+            async with self._cache_lock:
+                if user_id in self._user_token_cache:
+                    cached_tok, exp = self._user_token_cache[user_id]
+                    if now < (exp - 60):
+                        return cached_tok
+
+            # 2. Strict DB lookup for this specific user only
             try:
                 from sqlalchemy import select
 
@@ -70,47 +95,52 @@ class GoogleAuthHelper:
 
                 factory = get_session_factory()
                 async with factory() as session:
-                    stmt = (
-                        select(TARSSettings)
-                        .where(
-                            (TARSSettings.google_refresh_token.is_not(None))
-                            | (TARSSettings.google_client_id.is_not(None))
-                        )
-                        .order_by(TARSSettings.updated_at.desc())
-                        .limit(1)
-                    )
+                    stmt = select(TARSSettings).where(TARSSettings.user_id == user_id)
                     res = await session.execute(stmt)
                     s = res.scalar_one_or_none()
-                    if s:
-                        if not self.refresh_token and s.google_refresh_token:
-                            self.refresh_token = s.google_refresh_token
-                        if not self.client_id and s.google_client_id:
-                            self.client_id = s.google_client_id
-                        if not self.client_secret and s.google_client_secret:
-                            self.client_secret = s.google_client_secret
+
+                    if not s or not (s.google_refresh_token or s.google_access_token or s.google_mock_linked):
+                        raise RuntimeError(
+                            f"Google Workspace 계정이 연동되지 않았습니다. [MCP & TOOLS]에서 Google 계정을 연동해 주세요."
+                        )
+
+                    if s.google_mock_linked:
+                        return "mock_google_oauth2_access_token"
+
+                    effective_refresh_token = s.google_refresh_token
+                    if not effective_client_id and s.google_client_id:
+                        effective_client_id = s.google_client_id
+                    if not effective_client_secret and s.google_client_secret:
+                        effective_client_secret = s.google_client_secret
+            except RuntimeError:
+                raise
             except Exception as exc:
-                logger.debug("Could not query TARSSettings for Google credentials: %s", exc)
+                logger.error("Could not query TARSSettings for user %s: %s", user_id, exc)
+                raise RuntimeError(
+                    f"사용자 Google 계정 설정을 불러오는데 실패했습니다: {exc}"
+                ) from exc
+        else:
+            # Single-user fallback without user_id (e.g. CLI or unit tests)
+            if self._cached_token and now < (self._token_expires_at - 60):
+                return self._cached_token
 
-        if not (self.client_id and self.client_secret):
+        if not (effective_client_id and effective_client_secret):
             raise RuntimeError(
-                "Google OAuth2 클라이언트 설정(Client ID / Secret)이 누락되었습니다. MCP & TOOLS 설정에서 등록해 주세요."
+                "Google OAuth2 클라이언트 설정(Client ID / Secret)이 누락되었습니다. 관리자에게 문의하거나 설정을 확인해 주세요."
             )
 
-        if not self.refresh_token:
+        if not effective_refresh_token:
             raise RuntimeError(
-                "Google Workspace 계정이 연동되지 않았습니다. MCP & TOOLS 설정에서 Google 계정을 연동해 주세요."
+                "Google Workspace 계정이 연동되지 않았습니다. [MCP & TOOLS]에서 Google 계정을 연동해 주세요."
             )
 
-        now = time.time()
-        if self._cached_token and now < (self._token_expires_at - 60):
-            return self._cached_token
-
+        # Exchange refresh token for new access token
         client = self._get_http_client()
         token_url = "https://oauth2.googleapis.com/token"
         payload: dict[str, Any] = {
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "refresh_token": self.refresh_token,
+            "client_id": effective_client_id,
+            "client_secret": effective_client_secret,
+            "refresh_token": effective_refresh_token,
             "grant_type": "refresh_token",
         }
 
@@ -120,19 +150,29 @@ class GoogleAuthHelper:
             data = resp.json()
             access_token = str(data["access_token"])
             expires_in = int(data.get("expires_in", 3600))
-            self._cached_token = access_token
-            self._token_expires_at = now + expires_in
-            logger.info("Renewed Google OAuth2 access token (expires in %ds)", expires_in)
+
+            async with self._cache_lock:
+                if user_id:
+                    self._user_token_cache[user_id] = (access_token, now + expires_in)
+                else:
+                    self._cached_token = access_token
+                    self._token_expires_at = now + expires_in
+
+            logger.info("Renewed Google OAuth2 access token for user %s (expires in %ds)", user_id or "default", expires_in)
             return access_token
         except Exception as exc:
-            logger.error("Failed to refresh Google OAuth2 access token: %s", exc)
+            logger.error("Failed to refresh Google OAuth2 access token for user %s: %s", user_id or "default", exc)
             raise RuntimeError(
-                f"Google OAuth2 토큰 갱신에 실패했습니다 ({exc}). MCP & TOOLS 설정에서 계정을 다시 연동해 주세요."
+                f"Google OAuth2 토큰 갱신에 실패했습니다 ({exc}). [MCP & TOOLS] 설정에서 계정을 다시 연동해 주세요."
             ) from exc
 
-    async def get_auth_headers(self) -> dict[str, str]:
-        """Generate Authorization headers dict for Google API REST requests."""
-        token = await self.get_access_token()
+    async def get_auth_headers(self, user_id: str | None = None) -> dict[str, str]:
+        """Generate Authorization headers dict for Google API REST requests.
+
+        Args:
+            user_id: Optional user ID for multi-tenant isolation.
+        """
+        token = await self.get_access_token(user_id=user_id)
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
