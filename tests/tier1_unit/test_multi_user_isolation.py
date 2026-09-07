@@ -216,3 +216,97 @@ async def test_cache_invalidation_per_user():
     assert "user_1" not in helper._user_token_cache
     assert "user_2" in helper._user_token_cache
     assert helper._user_token_cache["user_2"][0] == "token_2"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_token_refresh_single_execution(monkeypatch, multi_user_db):
+    """Verify that multiple concurrent calls for the same user only trigger ONE token refresh request (no thundering herd)."""
+    session_maker = multi_user_db
+    monkeypatch.setattr("tars.db.session.get_session_factory", lambda: session_maker)
+
+    # Seed User C with active refresh token and credentials
+    async with session_maker() as session:
+        user_c = User(id="user_c_id", username="user_c", email="user_c@test.com", hashed_password="dummy_hash")
+        session.add(user_c)
+        await session.commit()
+
+        settings_c = TARSSettings(
+            user_id=user_c.id,
+            google_refresh_token="refresh_token_c",
+            google_access_token=None,
+            google_mock_linked=False,
+            google_client_id="client_id_c",
+            google_client_secret="client_secret_c",
+        )
+        session.add(settings_c)
+        await session.commit()
+
+    network_call_count = 0
+
+    class MockResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"access_token": "newly_refreshed_access_token_c", "expires_in": 3600}
+
+    class MockHttpClient:
+        async def post(self, url, data=None, **kwargs):
+            nonlocal network_call_count
+            network_call_count += 1
+            # Simulate real network roundtrip latency
+            await asyncio.sleep(0.05)
+            return MockResponse()
+
+        async def aclose(self):
+            pass
+
+    helper = GoogleAuthHelper(mock_mode=False, http_client=MockHttpClient())
+
+    # Launch 10 concurrent requests for User C
+    tokens = await asyncio.gather(
+        *[helper.get_access_token(user_id="user_c_id") for _ in range(10)]
+    )
+
+    # All 10 requests should receive the exact same refreshed access token
+    assert len(tokens) == 10
+    assert all(t == "newly_refreshed_access_token_c" for t in tokens)
+
+    # Thanks to per-user lock and double-checked locking, network call happened strictly ONCE
+    assert network_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_endpoint_cache_invalidation_on_credential_update_and_mock(monkeypatch, multi_user_db):
+    """Verify that updating credentials and toggling mock link evicts cached tokens via tool_registry."""
+    from unittest.mock import MagicMock
+    from tars.api.routers.tools import GoogleCredentialsRequest, mock_link_google, update_google_credentials
+
+    session_maker = multi_user_db
+    async with session_maker() as session:
+        user = (await session.execute(select(User).where(User.id == "user_a_id"))).scalar_one()
+
+        mock_registry = MagicMock(spec=ToolRegistry)
+
+        # 1. Update credentials should trigger invalidate_user_google_cache
+        req = GoogleCredentialsRequest(client_id="new_id", client_secret="new_secret")
+        await update_google_credentials(
+            payload=req,
+            current_user=user,
+            db=session,
+            tool_registry=mock_registry,
+        )
+        mock_registry.invalidate_user_google_cache.assert_called_with("user_a_id")
+
+        mock_registry.reset_mock()
+
+        # 2. Mock link toggle should also trigger invalidate_user_google_cache
+        await mock_link_google(
+            current_user=user,
+            db=session,
+            tool_registry=mock_registry,
+        )
+        mock_registry.invalidate_user_google_cache.assert_called_with("user_a_id")
+

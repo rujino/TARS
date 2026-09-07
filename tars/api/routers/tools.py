@@ -472,6 +472,7 @@ async def google_auth_callback(
     format: str | None = Query(default=None, description="Response format: 'json' or 'redirect'"),
     redirect_uri: str | None = Query(default=None, description="Callback redirect URI"),
     db: AsyncSession = Depends(get_db_session),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> Any:
     """Exchange authorization code for tokens and update user credentials in DB."""
     accept_header = request.headers.get("accept", "").lower()
@@ -585,6 +586,10 @@ async def google_auth_callback(
         user_settings.google_refresh_token = refresh_token
     if account_email:
         user_settings.google_linked_email = account_email
+
+    # Evict any previous in-memory cached tokens for this user
+    tool_registry.invalidate_user_google_cache(target_user_id)
+
     user_settings.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(user_settings)
@@ -644,6 +649,7 @@ async def update_google_credentials(
     payload: GoogleCredentialsRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> GoogleCredentialsResponse:
     """Save custom Google OAuth2 Client ID and Client Secret in user's settings."""
     user_settings = await _get_or_create_settings(db, current_user.id)
@@ -653,6 +659,9 @@ async def update_google_credentials(
         user_settings.google_client_id = payload.client_id.strip() or None
     if payload.client_secret is not None:
         user_settings.google_client_secret = payload.client_secret.strip() or None
+
+    # Invalidate cached in-memory token for this user so next access uses new credentials
+    tool_registry.invalidate_user_google_cache(current_user.id)
 
     user_settings.updated_at = datetime.now(UTC)
     await db.commit()
@@ -726,6 +735,7 @@ async def disconnect_google(
 async def mock_link_google(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> GoogleMockLinkResponse:
     """Toggle deterministic mock Google credentials in DB for offline development."""
     user_settings = await _get_or_create_settings(db, current_user.id)
@@ -742,6 +752,9 @@ async def mock_link_google(
         user_settings.google_access_token = None
         user_settings.google_linked_email = None
         message = "Mock Google Workspace account unlinked."
+
+    # Invalidate cached in-memory token for this user
+    tool_registry.invalidate_user_google_cache(current_user.id)
 
     user_settings.updated_at = datetime.now(UTC)
     await db.commit()
