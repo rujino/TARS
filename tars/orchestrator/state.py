@@ -5,6 +5,7 @@ Defines the central state dictionary that transitions through the StateGraph.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any
 
 from langchain_core.messages import BaseMessage
@@ -78,6 +79,8 @@ class TARSState(TypedDict, total=False):
     error_message: str | None
     engine: str | None
     model_name: str | None
+    client_timezone: str | None
+    reference_time: datetime | None
 
 
 __all__ = [

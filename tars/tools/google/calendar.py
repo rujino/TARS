@@ -137,6 +137,14 @@ class GoogleCalendarAdapter:
         }
         if norm_time_min:
             params["timeMin"] = norm_time_min
+        elif not norm_time_max and not query:
+            import datetime
+
+            params["timeMin"] = (
+                datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
         if norm_time_max:
             params["timeMax"] = norm_time_max
         if query:
@@ -386,17 +394,17 @@ class CalendarListEventsTool(BaseTool):
         self.adapter = adapter
         super().__init__(
             name="calendar_list_events",
-            description="List scheduled events from Google Calendar with optional date-range filter, keyword query, and concise/detailed formatting.",
+            description="List scheduled events from Google Calendar in chronological ascending order (earliest first). When querying upcoming/current events, time_min defaults to the current time. To search for past events or historical records, explicitly specify time_min (and optionally time_max).",
             parameters_schema={
                 "type": "object",
                 "properties": {
                     "time_min": {
                         "type": "string",
-                        "description": "Lower bound RFC3339 timestamp (e.g. '2026-08-30T00:00:00Z') or date ('2026-08-30')",
+                        "description": "Lower bound RFC3339 timestamp (e.g. '2026-09-08T00:00:00Z') or date ('2026-09-08'). Defaults to current time if omitted (returning upcoming events). If looking for past events, explicitly specify an earlier timestamp.",
                     },
                     "time_max": {
                         "type": "string",
-                        "description": "Upper bound RFC3339 timestamp (e.g. '2026-08-31T23:59:59Z') or date ('2026-08-31')",
+                        "description": "Upper bound RFC3339 timestamp (e.g. '2026-09-08T23:59:59Z') or date ('2026-09-08')",
                     },
                     "max_results": {
                         "type": "integer",
@@ -405,7 +413,7 @@ class CalendarListEventsTool(BaseTool):
                     },
                     "query": {
                         "type": "string",
-                        "description": "Optional keyword to search across event summary and description",
+                        "description": "Optional keyword to search across event summary and description (e.g. '충무병원')",
                     },
                     "detailed": {
                         "type": "boolean",

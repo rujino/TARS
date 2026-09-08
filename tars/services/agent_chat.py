@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from datetime import datetime
 
 from fastapi import BackgroundTasks
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -130,6 +131,8 @@ class AgentChatService:
         user_id: str,
         message: str,
         session_id: str | None = None,
+        client_timezone: str | None = None,
+        reference_time: datetime | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Execute full agent turn with session routing, dynamic slicing, ReAct tools, and token streaming."""
@@ -150,6 +153,8 @@ class AgentChatService:
             "messages": [HumanMessage(content=message)],
             "iteration_count": 0,
             "tools_used": [],
+            "client_timezone": client_timezone or "Asia/Seoul",
+            "reference_time": reference_time,
         }
 
         lf_handler = get_langfuse_callback_handler(

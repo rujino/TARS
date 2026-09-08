@@ -294,12 +294,17 @@ async def prompt_node(
             sanitized_doc = OKFDocument(metadata=doc.metadata, content=safe_body)
         sanitized_wikis.append(sanitized_doc)
 
-    # 2. Build system prompt using TARSPersonaManager (includes SYSTEM DIRECTIVE PRIORITY)
+    client_timezone = str(state.get("client_timezone") or "Asia/Seoul")
+    reference_time = state.get("reference_time")
+
+    # 2. Build system prompt using TARSPersonaManager (includes SYSTEM DIRECTIVE PRIORITY & TEMPORAL CONTEXT)
     system_prompt = manager.build_system_prompt(
         humor_level=humor_level,
         honesty_level=honesty_level,
         mode=mode,
         context_docs=sanitized_wikis,
+        client_timezone=client_timezone,
+        reference_time=reference_time,
     )
 
     # Ensure system directive priority is present in prompt
