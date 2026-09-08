@@ -125,7 +125,7 @@ class GoogleAuthHelper:
 
                         if not s or not (s.google_refresh_token or s.google_access_token or s.google_mock_linked):
                             raise RuntimeError(
-                                f"Google Workspace 계정이 연동되지 않았습니다. [MCP & TOOLS]에서 Google 계정을 연동해 주세요."
+                                "Google Workspace 계정이 연동되지 않았습니다. [MCP & TOOLS]에서 Google 계정을 연동해 주세요."
                             )
 
                         if s.google_mock_linked:

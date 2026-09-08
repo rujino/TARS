@@ -280,7 +280,7 @@ async def test_postprocess_node_records_turn_and_dispatches_bg(
         background_tasks=bg_tasks,
     )
 
-    assert result == {}
+    assert result == {"engine": None, "model_name": None}
     # Verify turn was recorded in DB
     refreshed_session = await session_mgr.get_session_by_id(session.id, user_id=seed_test_user.id)
     assert refreshed_session is not None

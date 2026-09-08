@@ -8,10 +8,38 @@ Provides:
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+
+
+def coerce_json_str_to_list(v: Any) -> Any:
+    """Coerce a JSON-encoded string to a list if passed as string by an LLM client."""
+    if not isinstance(v, str):
+        return v
+    try:
+        parsed = json.loads(v)
+        return parsed if isinstance(parsed, list) else v
+    except (json.JSONDecodeError, TypeError):
+        return v
+
+
+def coerce_json_str_to_dict(v: Any) -> Any:
+    """Coerce a JSON-encoded string to a dict if passed as string by an LLM client."""
+    if not isinstance(v, str):
+        return v
+    try:
+        parsed = json.loads(v)
+        return parsed if isinstance(parsed, dict) else v
+    except (json.JSONDecodeError, TypeError):
+        return v
+
+
+StringList = Annotated[list[str], BeforeValidator(coerce_json_str_to_list)]
+DictList = Annotated[list[dict[str, Any]], BeforeValidator(coerce_json_str_to_list)]
+JsonDict = Annotated[dict[str, Any], BeforeValidator(coerce_json_str_to_dict)]
 
 
 class ToolParameter(BaseModel):
@@ -110,6 +138,11 @@ class BaseTool(ABC):
 
 __all__ = [
     "BaseTool",
+    "DictList",
+    "JsonDict",
+    "StringList",
     "ToolDefinition",
     "ToolParameter",
+    "coerce_json_str_to_dict",
+    "coerce_json_str_to_list",
 ]
