@@ -20,7 +20,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from tars.tools.base import BaseTool
+from tars.tools.base import BaseTool, coerce_to_string_list
 from tars.tools.google.auth import GoogleAuthHelper
 
 logger = logging.getLogger("tars.tools.google.gmail")
@@ -63,6 +63,12 @@ def html_to_plain_text(html_content: str) -> str:
         return parser.get_text()
     except Exception:
         return html_content
+
+
+def normalize_recipients(recipients: Any) -> str | None:
+    """Normalize recipient input (single email, list, JSON string, or comma-separated) into comma-separated string."""
+    emails = coerce_to_string_list(recipients)
+    return ", ".join(emails) if emails else None
 
 
 class GmailAdapter:
@@ -250,12 +256,15 @@ class GmailAdapter:
     ) -> email.message.EmailMessage:
         """Assemble a complete RFC 2822 MIME EmailMessage object."""
         msg = email.message.EmailMessage()
-        msg["To"] = to
+        norm_to = normalize_recipients(to) or ""
+        msg["To"] = norm_to
         msg["Subject"] = subject
-        if cc:
-            msg["Cc"] = cc
-        if bcc:
-            msg["Bcc"] = bcc
+        norm_cc = normalize_recipients(cc)
+        if norm_cc:
+            msg["Cc"] = norm_cc
+        norm_bcc = normalize_recipients(bcc)
+        if norm_bcc:
+            msg["Bcc"] = norm_bcc
         if in_reply_to:
             msg["In-Reply-To"] = in_reply_to
         if references:
@@ -269,6 +278,9 @@ class GmailAdapter:
             msg.set_content(body)
 
         # Process attachments if provided
+        MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB limit for Gmail
+        total_attachment_bytes = 0
+
         for att in attachments or []:
             file_path = att.get("path")
             content_b64 = att.get("content")
@@ -291,6 +303,12 @@ class GmailAdapter:
                     logger.warning("Failed to decode base64 attachment: %s", exc)
 
             if data:
+                total_attachment_bytes += len(data)
+                if total_attachment_bytes > MAX_ATTACHMENT_SIZE_BYTES:
+                    raise ValueError(
+                        f"Total attachment size ({total_attachment_bytes / (1024 * 1024):.1f}MB) "
+                        "exceeds Gmail's 25MB limit."
+                    )
                 main_type, sub_type = (
                     mime_type.split("/", 1)
                     if mime_type and "/" in mime_type
@@ -322,14 +340,40 @@ class GmailAdapter:
     ) -> dict[str, Any]:
         """Send an email message via Gmail with HTML, attachments, and thread reply support."""
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
+        norm_to = normalize_recipients(to) or ""
+        norm_cc = normalize_recipients(cc)
+        norm_bcc = normalize_recipients(bcc)
         effective_body = body
 
-        if quote_original and thread_id and (self.auth_helper.mock_mode or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"):
-            matching = [m for m in self._mock_messages.values() if m.get("threadId") == thread_id]
-            if matching:
-                orig = matching[-1]
-                quote = f"\n\nOn {orig.get('date', '')}, {orig.get('from', 'sender')} wrote:\n> " + orig.get("body", "").replace("\n", "\n> ")
-                effective_body = body + quote
+        if quote_original and thread_id:
+            if (
+                self.auth_helper.mock_mode
+                or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
+            ):
+                matching = [m for m in self._mock_messages.values() if m.get("threadId") == thread_id]
+                if matching:
+                    orig = matching[-1]
+                    quote = f"\n\nOn {orig.get('date', '')}, {orig.get('from', 'sender')} wrote:\n> " + orig.get("body", "").replace("\n", "\n> ")
+                    effective_body = body + quote
+            else:
+                try:
+                    thread_data = await self.get_thread(thread_id, include_analysis=False, user_id=user_id)
+                    raw_msgs = thread_data.get("messages", [])
+                    if raw_msgs:
+                        last_raw = raw_msgs[-1]
+                        headers_list = last_raw.get("payload", {}).get("headers", [])
+                        h_map = {
+                            h.get("name", "").lower(): h.get("value", "")
+                            for h in headers_list
+                            if isinstance(h, dict)
+                        }
+                        orig_date = h_map.get("date") or last_raw.get("date", "")
+                        orig_from = h_map.get("from") or last_raw.get("from", "sender")
+                        orig_text = last_raw.get("snippet", "")
+                        quote = f"\n\nOn {orig_date}, {orig_from} wrote:\n> " + orig_text.replace("\n", "\n> ")
+                        effective_body = body + quote
+                except Exception as exc:
+                    logger.warning("Could not fetch thread %s for quote_original: %s", thread_id, exc)
 
         if (
             self.auth_helper.mock_mode
@@ -341,9 +385,9 @@ class GmailAdapter:
                 "id": msg_id,
                 "threadId": th_id,
                 "from": "tars@endurance.space",
-                "to": to,
-                "cc": cc,
-                "bcc": bcc,
+                "to": norm_to,
+                "cc": norm_cc,
+                "bcc": norm_bcc,
                 "subject": subject,
                 "snippet": effective_body[:50],
                 "body": effective_body,
@@ -353,16 +397,16 @@ class GmailAdapter:
                 "status": "sent",
             }
             self._mock_messages[msg_id] = sent_msg
-            logger.info("Mock sent email: %s to %s ('%s')", msg_id, to, subject)
-            return {"id": msg_id, "threadId": th_id, "status": "sent", "to": to, "subject": subject}
+            logger.info("Mock sent email: %s to %s ('%s')", msg_id, norm_to, subject)
+            return {"id": msg_id, "threadId": th_id, "status": "sent", "to": norm_to, "subject": subject}
 
         mime_msg = self._assemble_mime_message(
-            to=to,
+            to=norm_to,
             subject=subject,
             body=effective_body,
             body_format=body_format,
-            cc=cc,
-            bcc=bcc,
+            cc=norm_cc,
+            bcc=norm_bcc,
             in_reply_to=in_reply_to,
             references=references,
             attachments=attachments,
@@ -395,6 +439,10 @@ class GmailAdapter:
     ) -> dict[str, Any]:
         """Create a draft message in Gmail for user inspection before sending."""
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
+        norm_to = normalize_recipients(to) or ""
+        norm_cc = normalize_recipients(cc)
+        norm_bcc = normalize_recipients(bcc)
+
         if (
             self.auth_helper.mock_mode
             or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
@@ -406,25 +454,26 @@ class GmailAdapter:
                 "message": {
                     "id": f"msg_draft_{uuid.uuid4().hex[:6]}",
                     "threadId": th_id,
-                    "to": to,
+                    "to": norm_to,
                     "subject": subject,
                     "body": body,
                     "body_format": body_format,
-                    "cc": cc,
+                    "cc": norm_cc,
+                    "bcc": norm_bcc,
                 },
                 "status": "draft_created",
             }
             self._mock_drafts[draft_id] = draft_entry
             logger.info("Mock created email draft: %s ('%s')", draft_id, subject)
-            return {"id": draft_id, "threadId": th_id, "status": "draft_created", "to": to, "subject": subject}
+            return {"id": draft_id, "threadId": th_id, "status": "draft_created", "to": norm_to, "subject": subject}
 
         mime_msg = self._assemble_mime_message(
-            to=to,
+            to=norm_to,
             subject=subject,
             body=body,
             body_format=body_format,
-            cc=cc,
-            bcc=bcc,
+            cc=norm_cc,
+            bcc=norm_bcc,
             in_reply_to=in_reply_to,
             references=references,
             attachments=attachments,
@@ -558,7 +607,7 @@ class GmailSendMessageTool(BaseTool):
                 "properties": {
                     "to": {
                         "type": "string",
-                        "description": "Recipient email address (e.g. 'cooper@endurance.space')",
+                        "description": "Recipient email address or comma-separated list of addresses (e.g. 'cooper@endurance.space, brand@endurance.space')",
                     },
                     "subject": {
                         "type": "string",
@@ -576,11 +625,11 @@ class GmailSendMessageTool(BaseTool):
                     },
                     "cc": {
                         "type": "string",
-                        "description": "Optional CC recipient email address",
+                        "description": "Optional CC recipient email address or comma-separated addresses",
                     },
                     "bcc": {
                         "type": "string",
-                        "description": "Optional BCC recipient email address",
+                        "description": "Optional BCC recipient email address or comma-separated addresses",
                     },
                     "thread_id": {
                         "type": "string",
@@ -650,7 +699,7 @@ class GmailDraftMessageTool(BaseTool):
                 "properties": {
                     "to": {
                         "type": "string",
-                        "description": "Recipient email address",
+                        "description": "Recipient email address or comma-separated list of addresses",
                     },
                     "subject": {
                         "type": "string",
@@ -668,11 +717,11 @@ class GmailDraftMessageTool(BaseTool):
                     },
                     "cc": {
                         "type": "string",
-                        "description": "Optional CC recipient email address",
+                        "description": "Optional CC recipient email address or comma-separated addresses",
                     },
                     "bcc": {
                         "type": "string",
-                        "description": "Optional BCC recipient email address",
+                        "description": "Optional BCC recipient email address or comma-separated addresses",
                     },
                     "thread_id": {
                         "type": "string",
@@ -730,4 +779,5 @@ __all__ = [
     "GmailSearchMessagesTool",
     "GmailSendMessageTool",
     "html_to_plain_text",
+    "normalize_recipients",
 ]

@@ -14,6 +14,7 @@ import pytest
 from tars.tools.base import (
     coerce_json_str_to_dict,
     coerce_json_str_to_list,
+    coerce_to_string_list,
 )
 from tars.tools.google.auth import GoogleAuthHelper
 from tars.tools.google.calendar import (
@@ -37,6 +38,7 @@ from tars.tools.google.gmail import (
     GmailSearchMessagesTool,
     GmailSendMessageTool,
     html_to_plain_text,
+    normalize_recipients,
 )
 from tars.tools.registry import ToolRegistry
 
@@ -67,7 +69,7 @@ async def test_google_auth_helper_mock_mode_behavior() -> None:
 
 
 def test_coercion_helpers() -> None:
-    """Verify JSON string coercion into native Python containers."""
+    """Verify JSON string and container coercion into native Python containers."""
     # List coercion
     assert coerce_json_str_to_list('["alice@test.com", "bob@test.com"]') == [
         "alice@test.com",
@@ -79,6 +81,35 @@ def test_coercion_helpers() -> None:
     # Dict coercion
     assert coerce_json_str_to_dict('{"key": "value"}') == {"key": "value"}
     assert coerce_json_str_to_dict({"already": "dict"}) == {"already": "dict"}
+
+    # coerce_to_string_list
+    assert coerce_to_string_list("alice@test.com") == ["alice@test.com"]
+    assert coerce_to_string_list("alice@test.com, bob@test.com") == [
+        "alice@test.com",
+        "bob@test.com",
+    ]
+    assert coerce_to_string_list('["alice@test.com", "bob@test.com"]') == [
+        "alice@test.com",
+        "bob@test.com",
+    ]
+    assert coerce_to_string_list(["alice@test.com", "bob@test.com"]) == [
+        "alice@test.com",
+        "bob@test.com",
+    ]
+    assert coerce_to_string_list(None) == []
+    assert coerce_to_string_list("   ") == []
+
+    # normalize_recipients
+    assert (
+        normalize_recipients(["alice@test.com", "bob@test.com"])
+        == "alice@test.com, bob@test.com"
+    )
+    assert (
+        normalize_recipients("alice@test.com, bob@test.com")
+        == "alice@test.com, bob@test.com"
+    )
+    assert normalize_recipients("alice@test.com") == "alice@test.com"
+    assert normalize_recipients(None) is None
 
 
 def test_datetime_and_timezone_utilities() -> None:
@@ -152,14 +183,27 @@ async def test_google_calendar_adapter_lifecycle() -> None:
     assert updated["description"] == "Manual navigation burn at 100% engine thrust."
     assert len(updated["attendees"]) == 2
 
-    # 4. Query FreeBusy
+    # 4. Query FreeBusy across multiple calendars
     fb = await calendar_adapter.query_freebusy(
         time_min="2026-09-02T00:00:00Z",
         time_max="2026-09-02T23:59:59Z",
+        calendar_ids=["primary", "external@other.space"],
     )
     assert fb["kind"] == "calendar#freeBusy"
-    cal_id = list(fb["calendars"].keys())[0]
-    assert len(fb["calendars"][cal_id]["busy"]) >= 1
+    assert len(fb["calendars"]["primary"]["busy"]) >= 1
+    assert fb["calendars"]["external@other.space"]["busy"] == []
+
+    # Verify comma-separated string for attendees
+    csv_attendee_event = await calendar_adapter.create_event(
+        summary="Docking Maneuver",
+        start_time="2026-09-03T10:00:00Z",
+        end_time="2026-09-03T11:00:00Z",
+        attendees="cooper@endurance.space, brand@endurance.space",
+    )
+    assert len(csv_attendee_event["attendees"]) == 2
+    assert csv_attendee_event["attendees"][0]["email"] == "cooper@endurance.space"
+    assert csv_attendee_event["attendees"][1]["email"] == "brand@endurance.space"
+    await calendar_adapter.delete_event(csv_attendee_event["id"])
 
     # 5. Delete the event
     del_result = await calendar_adapter.delete_event(new_event["id"])
@@ -355,3 +399,47 @@ def test_html_to_plain_text() -> None:
     assert "Review trajectory." in plain
     assert "Check telemetry." in plain
     assert "<p>" not in plain
+
+
+@pytest.mark.asyncio
+async def test_gmail_advanced_features() -> None:
+    """Verify multi-recipient parsing, attachment 25MB limit rejection, and MIME assembly."""
+    auth_helper = GoogleAuthHelper(mock_mode=True)
+    gmail_adapter = GmailAdapter(auth_helper=auth_helper)
+
+    # 1. Multi-recipient sending (comma-separated & list)
+    res_csv = await gmail_adapter.send_message(
+        to="cooper@endurance.space, brand@endurance.space",
+        cc=["tars@endurance.space", "case@endurance.space"],
+        subject="Status Report",
+        body="All systems operational.",
+    )
+    assert res_csv["to"] == "cooper@endurance.space, brand@endurance.space"
+    sent_msg = await gmail_adapter.get_message(res_csv["id"])
+    assert sent_msg["cc"] == "tars@endurance.space, case@endurance.space"
+
+    # 2. Attachment limit check (25MB limit)
+    oversized_data = b"x" * (26 * 1024 * 1024)  # 26 MB
+    import base64
+    b64_oversized = base64.b64encode(oversized_data).decode("utf-8")
+
+    with pytest.raises(ValueError, match="exceeds Gmail's 25MB limit"):
+        gmail_adapter._assemble_mime_message(
+            to="test@test.com",
+            subject="Heavy File",
+            body="Too big",
+            attachments=[{"content": b64_oversized, "filename": "huge.bin"}],
+        )
+
+    # 3. Normal size attachment MIME assembly
+    normal_b64 = base64.b64encode(b"hello world").decode("utf-8")
+    mime = gmail_adapter._assemble_mime_message(
+        to="cooper@endurance.space",
+        subject="Payload Data",
+        body="Attached file",
+        attachments=[{"content": normal_b64, "filename": "log.txt", "mime_type": "text/plain"}],
+    )
+    assert mime["To"] == "cooper@endurance.space"
+    attachments_list = list(mime.iter_attachments())
+    assert len(attachments_list) == 1
+    assert attachments_list[0].get_filename() == "log.txt"

@@ -23,6 +23,7 @@ from tars.tools.google.gmail import (
     GmailSearchMessagesTool,
     GmailSendMessageTool,
     html_to_plain_text,
+    normalize_recipients,
 )
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "build_time_boundary",
     "html_to_plain_text",
     "normalize_calendar_time",
+    "normalize_recipients",
     "resolve_conference_data",
     "strip_utc_offset",
 ]

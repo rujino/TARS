@@ -37,6 +37,36 @@ def coerce_json_str_to_dict(v: Any) -> Any:
         return v
 
 
+def coerce_to_string_list(v: Any) -> list[str]:
+    """Coerce input (list, JSON array string, comma-separated string, or single string) to list[str].
+
+    Handles cases where LLMs provide:
+    - Native list: ['a', 'b']
+    - JSON-encoded list: '["a", "b"]'
+    - Comma-separated string: 'a, b'
+    - Single string: 'a'
+    - None or empty values: returns []
+    """
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(item).strip() for item in v if str(item).strip()]
+    if isinstance(v, str):
+        cleaned = v.strip()
+        if not cleaned:
+            return []
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except (json.JSONDecodeError, TypeError):
+            pass
+        if "," in cleaned:
+            return [part.strip() for part in cleaned.split(",") if part.strip()]
+        return [cleaned]
+    return [str(v).strip()] if str(v).strip() else []
+
+
 StringList = Annotated[list[str], BeforeValidator(coerce_json_str_to_list)]
 DictList = Annotated[list[dict[str, Any]], BeforeValidator(coerce_json_str_to_list)]
 JsonDict = Annotated[dict[str, Any], BeforeValidator(coerce_json_str_to_dict)]
@@ -145,4 +175,5 @@ __all__ = [
     "ToolParameter",
     "coerce_json_str_to_dict",
     "coerce_json_str_to_list",
+    "coerce_to_string_list",
 ]

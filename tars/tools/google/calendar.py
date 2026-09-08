@@ -16,7 +16,7 @@ import uuid
 from typing import Any
 
 from tars.config import get_settings
-from tars.tools.base import BaseTool, coerce_json_str_to_list
+from tars.tools.base import BaseTool, coerce_to_string_list
 from tars.tools.google.auth import GoogleAuthHelper
 from tars.tools.google.datetime_utils import (
     build_time_boundary,
@@ -195,8 +195,7 @@ class GoogleCalendarAdapter:
     ) -> dict[str, Any]:
         """Create a new event in calendar with timezone, all-day, and Google Meet support."""
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
-        attendees_coerced = coerce_json_str_to_list(attendees) or []
-        attendee_list = [{"email": email} for email in attendees_coerced]
+        attendee_list = [{"email": email} for email in coerce_to_string_list(attendees)]
 
         start_boundary = build_time_boundary(start_time, timezone)
         end_boundary = build_time_boundary(end_time, timezone)
@@ -264,8 +263,7 @@ class GoogleCalendarAdapter:
 
         # Attendees
         if attendees is not None:
-            attendees_coerced = coerce_json_str_to_list(attendees) or []
-            patch_body["attendees"] = [{"email": email} for email in attendees_coerced]
+            patch_body["attendees"] = [{"email": email} for email in coerce_to_string_list(attendees)]
 
         # Conferencing
         conf_data, conf_params = resolve_conference_data(add_google_meet=bool(add_google_meet))
@@ -328,7 +326,7 @@ class GoogleCalendarAdapter:
         if not norm_time_min or not norm_time_max:
             raise ValueError("time_min and time_max are required for freebusy query.")
 
-        cal_ids = coerce_json_str_to_list(calendar_ids) or [self.calendar_id or "primary"]
+        cal_ids = coerce_to_string_list(calendar_ids) or [self.calendar_id or "primary"]
 
         if (
             self.auth_helper.mock_mode
@@ -343,7 +341,14 @@ class GoogleCalendarAdapter:
                     if evt_start < norm_time_max and evt_end > norm_time_min:
                         busy_slots.append({"start": evt_start, "end": evt_end})
 
-            calendars_busy = {cal_id: {"busy": busy_slots} for cal_id in cal_ids}
+            primary_id = self.calendar_id or "primary"
+            calendars_busy: dict[str, dict[str, list[dict[str, str]]]] = {}
+            for cal_id in cal_ids:
+                if cal_id in ("primary", primary_id):
+                    calendars_busy[cal_id] = {"busy": busy_slots}
+                else:
+                    calendars_busy[cal_id] = {"busy": []}
+
             return {
                 "kind": "calendar#freeBusy",
                 "timeMin": norm_time_min,
@@ -463,7 +468,7 @@ class CalendarCreateEventTool(BaseTool):
                     "attendees": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Optional list of attendee email addresses",
+                        "description": "Optional list or comma-separated string of attendee email addresses",
                         "default": [],
                     },
                     "add_google_meet": {
@@ -534,7 +539,7 @@ class CalendarUpdateEventTool(BaseTool):
                     "attendees": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Optional replacement list of attendee email addresses",
+                        "description": "Optional replacement list or comma-separated string of attendee email addresses",
                     },
                     "add_google_meet": {
                         "type": "boolean",
@@ -607,7 +612,7 @@ class CalendarQueryFreeBusyTool(BaseTool):
                     "calendar_ids": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of calendar identifiers to check (defaults to primary user calendar)",
+                        "description": "List or comma-separated string of calendar identifiers to check (defaults to primary user calendar)",
                         "default": [],
                     },
                 },
