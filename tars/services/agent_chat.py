@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from datetime import datetime
 
 from fastapi import BackgroundTasks
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -20,6 +21,11 @@ from tars.db.session import get_session_factory
 from tars.extractor.worker import SelfEvolvingKnowledgeWorker
 from tars.orchestrator.graph import build_tars_graph
 from tars.orchestrator.models import AgentStreamEvent
+from tars.orchestrator.observability import (
+    flush_langfuse_handler,
+    get_langfuse_callback_handler,
+    trace_attributes_context,
+)
 from tars.orchestrator.state import TARSState
 from tars.orchestrator.stream_bridge import LangGraphStreamBridge
 from tars.persona.prompts import TARSPersonaManager
@@ -125,6 +131,8 @@ class AgentChatService:
         user_id: str,
         message: str,
         session_id: str | None = None,
+        client_timezone: str | None = None,
+        reference_time: datetime | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Execute full agent turn with session routing, dynamic slicing, ReAct tools, and token streaming."""
@@ -145,14 +153,43 @@ class AgentChatService:
             "messages": [HumanMessage(content=message)],
             "iteration_count": 0,
             "tools_used": [],
+            "client_timezone": client_timezone or "Asia/Seoul",
+            "reference_time": reference_time,
         }
 
-        async for event in LangGraphStreamBridge.stream_graph_events(
-            graph=graph,
-            initial_state=initial_state,
-            background_tasks=background_tasks,
-        ):
-            yield event
+        lf_handler = get_langfuse_callback_handler(
+            user_id=user_id,
+            session_id=session_id or "",
+            tags=["tars", "chat"],
+        )
+        stream_config = {"callbacks": [lf_handler]} if lf_handler else None
+
+        captured_engine: str | None = None
+        captured_model_name: str | None = None
+
+        try:
+            with trace_attributes_context(
+                user_id=user_id,
+                session_id=session_id or "",
+                tags=["tars", "chat"],
+            ):
+                async for event in LangGraphStreamBridge.stream_graph_events(
+                    graph=graph,
+                    initial_state=initial_state,
+                    background_tasks=background_tasks,
+                    config=stream_config,
+                ):
+                    if event.engine:
+                        captured_engine = event.engine
+                    if event.model_name:
+                        captured_model_name = event.model_name
+                    yield event
+        finally:
+            flush_langfuse_handler(
+                lf_handler,
+                engine=captured_engine,
+                model_name=captured_model_name,
+            )
 
 
 __all__ = [

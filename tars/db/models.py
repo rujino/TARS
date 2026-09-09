@@ -17,8 +17,23 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
+from tars.core.security import decrypt_secret, encrypt_secret
 from tars.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+
+
+class EncryptedString(TypeDecorator[str]):
+    """SQLAlchemy TypeDecorator that encrypts data on bind and decrypts on load."""
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value: Any, dialect: Any) -> Any:
+        return encrypt_secret(value) if value is not None else value
+
+    def process_result_value(self, value: Any, dialect: Any) -> Any:
+        return decrypt_secret(value) if value is not None else value
 
 
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -78,8 +93,63 @@ class TARSSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         String(32), default="companion", nullable=False
     )  # "companion" | "work"
 
+    # Tool preferences and Google OAuth account linking
+    disabled_tools: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    google_refresh_token: Mapped[str | None] = mapped_column(
+        EncryptedString(512), nullable=True
+    )
+    google_access_token: Mapped[str | None] = mapped_column(
+        EncryptedString(1024), nullable=True
+    )
+    google_linked_email: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    google_mock_linked: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    google_client_id: Mapped[str | None] = mapped_column(
+        String(256), nullable=True
+    )
+    google_client_secret: Mapped[str | None] = mapped_column(
+        EncryptedString(256), nullable=True
+    )
+
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="settings")
+
+    @property
+    def google_linked(self) -> bool:
+        return bool(
+            self.google_mock_linked
+            or self.google_refresh_token
+            or self.google_access_token
+        )
+
+    @google_linked.setter
+    def google_linked(self, value: bool) -> None:
+        if not value:
+            self.google_mock_linked = False
+            self.google_refresh_token = None
+            self.google_access_token = None
+            self.google_linked_email = None
+
+    @property
+    def google_is_mock(self) -> bool:
+        return bool(self.google_mock_linked)
+
+    @google_is_mock.setter
+    def google_is_mock(self, value: bool) -> None:
+        self.google_mock_linked = bool(value)
+
+    @property
+    def google_account_email(self) -> str | None:
+        return self.google_linked_email
+
+    @google_account_email.setter
+    def google_account_email(self, value: str | None) -> None:
+        self.google_linked_email = value
 
     def __repr__(self) -> str:
         return (

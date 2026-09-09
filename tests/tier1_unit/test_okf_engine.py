@@ -15,8 +15,8 @@ from pydantic import ValidationError
 
 from tars.core.okf.models import (
     OKFDocument,
-    OKFFrontmatter,
     OKFImportance,
+    OKFMetadata,
     OKFRelations,
     OKFSource,
     OKFType,
@@ -188,7 +188,7 @@ def test_serialize_okf_document_roundtrip(sample_okf_doc: OKFDocument) -> None:
 
 def test_serialize_canonical_key_ordering() -> None:
     """Verify that serialized YAML frontmatter maintains predictable canonical key order."""
-    frontmatter = OKFFrontmatter(
+    frontmatter = OKFMetadata(
         okf_version="1.0",
         id="order_test_doc",
         type=OKFType.RULE,
@@ -226,7 +226,7 @@ def test_okf_id_slug_validation() -> None:
     """Verify that document IDs adhere strictly to the slug format ^[a-zA-Z0-9_-]{1,128}$."""
     # Valid slugs
     for valid_slug in ["user_pref_001", "my-doc-123", "RULE_ALPHA_99", "simple"]:
-        fm = OKFFrontmatter(
+        fm = OKFMetadata(
             id=valid_slug,
             type=OKFType.RULE,
             title="Valid Slug Test",
@@ -244,7 +244,7 @@ def test_okf_id_slug_validation() -> None:
         "a" * 129,
     ]:
         with pytest.raises((ValueError, ValidationError)):
-            OKFFrontmatter(
+            OKFMetadata(
                 id=invalid_slug,
                 type=OKFType.RULE,
                 title="Invalid Slug Test",
@@ -269,7 +269,7 @@ def test_okf_enum_coverage_all_values() -> None:
 
 def test_okf_tags_normalization_and_deduplication() -> None:
     """Verify that tags are trimmed, lowercased, and deduplicated while preserving order."""
-    fm = OKFFrontmatter(
+    fm = OKFMetadata(
         id="tag_norm_doc",
         type=OKFType.CONCEPT,
         title="Tag Normalization",

@@ -15,6 +15,7 @@ from tars.api.routers.auth import router as auth_router
 from tars.api.routers.chat import router as chat_router
 from tars.api.routers.config import router as config_router
 from tars.api.routers.health import health_router
+from tars.api.routers.tools import router as tools_router
 from tars.config import get_settings
 from tars.core.telemetry import CorrelationIdMiddleware, setup_telemetry_logging
 from tars.db.base import Base
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(chat_router, prefix="/api/v1")
+    app.include_router(tools_router, prefix="/api/v1")
 
     # Include Health & Telemetry Router (OBS-03, OBS-04: /health, /health/readiness, /metrics)
     app.include_router(health_router)

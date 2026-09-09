@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     # External LLM / SLM Endpoints
     gemini_api_key: str = Field(default="", description="Google Gemini API key")
     gemini_model_name: str = Field(
-        default="gemini-2.0-flash", description="Google Gemini model identifier"
+        default="gemini-3.7-flash", description="Google Gemini model identifier"
     )
     llamacpp_base_url: str = Field(
         default="http://localhost:8080/v1", description="Local llama.cpp OpenAI-compatible base URL"
@@ -120,7 +120,7 @@ class Settings(BaseSettings):
 
     # Google Workspace Settings
     google_mock_mode: bool = Field(
-        default=True,
+        default=False,
         description="Enable deterministic offline mock mode for Google Workspace APIs",
     )
     google_client_id: str = Field(default="", description="Google OAuth2 Client ID")
@@ -152,6 +152,24 @@ class Settings(BaseSettings):
         default=3600,
         ge=60,
         description="TTL in seconds for static CAG context cache",
+    )
+
+    # Langfuse Observability Settings
+    langfuse_enabled: bool = Field(
+        default=False,
+        description="Enable Langfuse tracing for agent runs",
+    )
+    langfuse_public_key: str = Field(
+        default="",
+        description="Langfuse project public key (pk-lf-...)",
+    )
+    langfuse_secret_key: str = Field(
+        default="",
+        description="Langfuse project secret key (sk-lf-...)",
+    )
+    langfuse_host: str = Field(
+        default="http://langfuse-web:3000",
+        description="Langfuse server base URL endpoint",
     )
 
 

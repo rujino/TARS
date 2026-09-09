@@ -35,6 +35,12 @@ class AgentStreamEvent(BaseModel):
     tools_used: list[str] | None = Field(
         default=None, description="List of tools utilized in this turn"
     )
+    engine: str | None = Field(
+        default=None, description="Engine that produced the turn response (gemini or slm)"
+    )
+    model_name: str | None = Field(
+        default=None, description="Model identifier that produced the turn response"
+    )
 
     def to_sse_event(self) -> str:
         """Format as Server-Sent Event (SSE) wire protocol frame."""
@@ -64,17 +70,20 @@ class AgentStreamEvent(BaseModel):
             )
             return f"event: token\ndata: {payload}\n\n"
         elif self.type == "stream_end":
-            payload = json.dumps(
-                {
-                    "session_id": self.session_id,
-                    "content": self.content,
-                    "tools_used": self.tools_used or [],
-                },
-                ensure_ascii=False,
-            )
+            payload_dict: dict[str, Any] = {
+                "session_id": self.session_id,
+                "content": self.content,
+                "tools_used": self.tools_used or [],
+            }
+            if self.engine is not None:
+                payload_dict["engine"] = self.engine
+            if self.model_name is not None:
+                payload_dict["model_name"] = self.model_name
+            payload = json.dumps(payload_dict, ensure_ascii=False)
             return f"event: stream_end\ndata: {payload}\n\n"
         elif self.type == "error":
-            payload = json.dumps({"error": self.error or self.content}, ensure_ascii=False)
+            err_msg = self.error or self.content or "Stream error occurred"
+            payload = json.dumps({"error": err_msg, "message": err_msg}, ensure_ascii=False)
             return f"event: error\ndata: {payload}\n\n"
         elif self.type == "done":
             return "event: done\ndata: [DONE]\n\n"
@@ -102,8 +111,13 @@ class AgentStreamEvent(BaseModel):
             data["result"] = self.result
         if self.error is not None:
             data["error"] = self.error
+            data["message"] = self.error
         if self.tools_used is not None:
             data["tools_used"] = self.tools_used
+        if self.engine is not None:
+            data["engine"] = self.engine
+        if self.model_name is not None:
+            data["model_name"] = self.model_name
         return data
 
 

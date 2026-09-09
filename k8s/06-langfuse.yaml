@@ -1,0 +1,206 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: langfuse-db-pvc
+  namespace: tars
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: langfuse-secret
+  namespace: tars
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://langfuse:langfusepassword@langfuse-db:5432/langfuse"
+  POSTGRES_USER: "langfuse"
+  POSTGRES_PASSWORD: "langfusepassword"
+  POSTGRES_DB: "langfuse"
+  NEXTAUTH_SECRET: "119d717cf2fc0781cc448a77b24204bf00cbc832ae8100c5c7b68c51f9f4e1a3"
+  SALT: "10420300dac61ba235cd7fd2524c10e35f914af73d1856bdcd47511a82617807"
+  ENCRYPTION_KEY: "cb4abe3e6f4e0cb210ddd506f4273b303c4b8728f44e831235445d8ba8219431"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langfuse-config
+  namespace: tars
+data:
+  TELEMETRY_ENABLED: "false"
+  NEXTAUTH_URL: "http://192.168.0.2:3000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-db
+  namespace: tars
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: langfuse-db
+  template:
+    metadata:
+      labels:
+        app: langfuse-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secret
+                  key: POSTGRES_DB
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          volumeMounts:
+            - name: langfuse-db-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: langfuse-db-storage
+          persistentVolumeClaim:
+            claimName: langfuse-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-db
+  namespace: tars
+spec:
+  selector:
+    app: langfuse-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-web
+  namespace: tars
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: langfuse-web
+  template:
+    metadata:
+      labels:
+        app: langfuse-web
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: langfuse-web
+          image: ghcr.io/langfuse/langfuse:2
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secret
+                  key: DATABASE_URL
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secret
+                  key: NEXTAUTH_SECRET
+            - name: SALT
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secret
+                  key: SALT
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secret
+                  key: ENCRYPTION_KEY
+            - name: NEXTAUTH_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: langfuse-config
+                  key: NEXTAUTH_URL
+            - name: TELEMETRY_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: langfuse-config
+                  key: TELEMETRY_ENABLED
+          ports:
+            - containerPort: 3000
+              name: http
+          resources:
+            requests:
+              cpu: 150m
+              memory: 384Mi
+            limits:
+              cpu: 1500m
+              memory: 1.5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-web
+  namespace: tars
+spec:
+  type: ClusterIP
+  selector:
+    app: langfuse-web
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: langfuse-ingress
+  namespace: tars
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  tls:
+    - hosts:
+        - langfuse.nyoru.kr
+      secretName: langfuse-tls-secret
+  rules:
+    - host: langfuse.nyoru.kr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: langfuse-web
+                port:
+                  number: 3000

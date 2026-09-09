@@ -13,13 +13,13 @@ echo "📂 Project Root: ${PROJECT_ROOT}"
 echo "================================================================="
 
 # 1. Build Local Backend Image
-echo "🔨 Step 1: Building local Docker image (tars-backend:latest)..."
+echo "🔨 Step 1: Building local Docker image (127.0.0.1:5000/tars-backend:latest)..."
 cd "${PROJECT_ROOT}"
-docker build -t tars-backend:latest .
+docker build -t 127.0.0.1:5000/tars-backend:latest -t tars-backend:latest .
 
-# 2. Import Image to K3s Containerd Engine
-echo "📦 Step 2: Importing Docker image into K3s containerd runtime..."
-docker save tars-backend:latest | sudo k3s ctr -n k8s.io images import -
+# 2. Push Image to Local Registry
+echo "📦 Step 2: Pushing Docker image to local registry (127.0.0.1:5000)..."
+docker push 127.0.0.1:5000/tars-backend:latest
 
 # 3. Apply Kubernetes Manifests
 echo "⚙️  Step 3: Applying Kubernetes manifests..."

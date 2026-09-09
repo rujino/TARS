@@ -1,11 +1,12 @@
-// TARS PWA Service Worker v1.0.0
-const CACHE_NAME = 'tars-pwa-v1';
+// TARS PWA Service Worker v2.8.0
+const CACHE_NAME = 'tars-pwa-v2.8';
 
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
   '/static/css/hud.css',
   '/static/css/components.css',
+  '/static/css/style.css',
   '/static/js/app.js',
   '/static/js/api.js',
   '/static/js/chat.js',
@@ -53,27 +54,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Cache-first strategy with network fallback for App Shell and static assets
+  // 2. Network-first strategy with cache fallback for App Shell and static assets
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
         return networkResponse;
-      }).catch(() => {
-        // Fallback for offline HTML navigation
-        if (event.request.mode === 'navigate') {
-          return caches.match('/');
-        }
-      });
-    })
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (event.request.mode === 'navigate') {
+            return caches.match('/');
+          }
+        });
+      })
   );
 });

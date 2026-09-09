@@ -22,6 +22,15 @@
   let currentTarsText = '';
   let configDebounceTimer = null;
 
+  // --- Tool & MCP State (G5) ---
+  const toolState = {
+    servers: [],
+    expandedServerIds: new Set(['google_workspace']),
+    updatingTools: new Set(),
+    activeModal: null
+  };
+  let previouslyActiveElement = null;
+
   // --- DOM Elements ---
   const dom = {
     // Views
@@ -58,6 +67,23 @@
     modeCompanion: document.getElementById('mode-companion'),
     modeWork: document.getElementById('mode-work'),
     btnResetConfig: document.getElementById('btn-reset-config'),
+
+    // Tools & MCP Management (G5)
+    toolsServerList: document.getElementById('tools-server-list'),
+    toolsGlobalBadge: document.getElementById('tools-global-badge'),
+    btnRefreshTools: document.getElementById('btn-refresh-tools'),
+
+    // Modal (G5)
+    modalOverlay: document.getElementById('hud-modal-overlay'),
+    modalCard: document.getElementById('hud-modal-card'),
+    modalTitle: document.getElementById('modal-title'),
+    modalBodyContent: document.getElementById('modal-body-content'),
+    modalCloseBtn: document.getElementById('modal-close-btn'),
+    modalFooter: document.getElementById('modal-footer'),
+    modalBtnCancel: document.getElementById('modal-btn-cancel'),
+
+    // Toast Container (G5)
+    toastContainer: document.getElementById('hud-toast-container'),
 
     // Chat
     messagesContainer: document.getElementById('messages-container'),
@@ -271,7 +297,7 @@
         if (currentTarsBubble) {
           currentTarsBubble.innerHTML =
             renderMarkdown(currentTarsText) +
-            `<div style="color: var(--tars-red); margin-top: 8px; font-size: 12px;">[ERROR: ${errorMsg}]</div>`;
+            `<div style="color: var(--tars-red); margin-top: 8px; font-size: 12px;">[ERROR: ${escapeHtml(errorMsg)}]</div>`;
           scrollToBottom();
         }
         tts.stop();
@@ -308,9 +334,644 @@
     }
   }
 
+  // --- HTML Escaping & Sanitization (G5 Remediation) ---
+  function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // --- HUD Notifications (Toasts) ---
+  function showNotification(message, type = 'info') {
+    if (!dom.toastContainer) return;
+    const toast = document.createElement('div');
+    toast.className = `hud-toast ${type}`;
+    let icon = 'ℹ';
+    if (type === 'success') icon = '✓';
+    else if (type === 'error') icon = '⚠';
+    else if (type === 'warning') icon = '⚡';
+
+    const iconSpan = document.createElement('span');
+    iconSpan.style.fontWeight = '700';
+    iconSpan.textContent = `[ ${icon} ]`;
+
+    const msgSpan = document.createElement('span');
+    msgSpan.textContent = String(message ?? '');
+
+    toast.appendChild(iconSpan);
+    toast.appendChild(msgSpan);
+    dom.toastContainer.appendChild(toast);
+    setTimeout(() => {
+      toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(20px)';
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 250);
+    }, 4000);
+  }
+
+  // --- HUD Modal Dialog Management (G5) ---
+  function openModal(title, renderContentFn, footerButtons = null) {
+    if (!dom.modalOverlay) return;
+    previouslyActiveElement = document.activeElement;
+    dom.modalTitle.textContent = title;
+    dom.modalBodyContent.innerHTML = '';
+    renderContentFn(dom.modalBodyContent);
+
+    if (footerButtons && footerButtons.length > 0) {
+      dom.modalFooter.innerHTML = '';
+      footerButtons.forEach((btn) => dom.modalFooter.appendChild(btn));
+    } else {
+      dom.modalFooter.innerHTML = '<button id="modal-btn-cancel" class="hud-btn">DISMISS</button>';
+      const cancelBtn = dom.modalFooter.querySelector('#modal-btn-cancel');
+      if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    }
+
+    dom.modalOverlay.style.display = 'flex';
+
+    // Focus management: focus close button or first interactive element
+    requestAnimationFrame(() => {
+      if (dom.modalCloseBtn) {
+        dom.modalCloseBtn.focus();
+      } else if (dom.modalCard) {
+        const firstFocusable = dom.modalCard.querySelector('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        if (firstFocusable) firstFocusable.focus();
+      }
+    });
+  }
+
+  function closeModal() {
+    if (!dom.modalOverlay) return;
+    dom.modalOverlay.style.display = 'none';
+    dom.modalBodyContent.innerHTML = '';
+    toolState.activeModal = null;
+
+    // Restore focus to previously active element
+    if (previouslyActiveElement && typeof previouslyActiveElement.focus === 'function') {
+      try {
+        previouslyActiveElement.focus();
+      } catch (err) {
+        console.debug('Failed to restore focus:', err);
+      }
+      previouslyActiveElement = null;
+    }
+  }
+
+  async function openGoogleWorkspaceModal(server) {
+    toolState.activeModal = { type: 'google', serverId: server.id };
+    openModal('SERVER CONFIG // GOOGLE WORKSPACE', async (body) => {
+      body.innerHTML = '<div class="tools-loading" style="padding: 24px; text-align: center;">[ LOADING STATUS... ]</div>';
+
+      let creds = {
+        is_configured: true,
+        is_linked: false,
+        account_email: null,
+      };
+
+      try {
+        creds = await api.getGoogleCredentials();
+      } catch (err) {
+        console.warn('Failed to load Google credentials status:', err);
+      }
+
+      const isConnected = creds.is_linked || (server.status === 'connected');
+      const statusLabel = isConnected ? 'CONNECTED' : 'OFFLINE / NOT LINKED';
+      const statusDotClass = isConnected ? 'connected' : 'offline';
+      const email = creds.account_email || server.account_email || 'None';
+      const safeEmail = escapeHtml(email);
+
+      body.innerHTML = `
+        <div class="modal-status-box">
+          <div class="modal-status-row">
+            <span class="status-dot ${statusDotClass}"></span>
+            <span style="font-weight: 700;">STATUS: ${statusLabel}</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+            LINKED ACCOUNT: <span style="color: var(--tars-cyan); font-weight: 600;">${safeEmail}</span>
+          </div>
+        </div>
+
+        <div class="modal-action-block">
+          <div class="modal-section-title">[ GOOGLE WORKSPACE ACCOUNT LINKING ]</div>
+          <div class="modal-desc-box">
+            ${isConnected 
+              ? 'Google 계정이 정상적으로 연동되어 있습니다. TARS가 Calendar 일정 및 Gmail 메일을 관리할 수 있습니다.' 
+              : 'Google 계정을 연동하여 TARS가 Calendar 일정 및 Gmail 메일을 관리할 수 있도록 승인합니다.'}
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+            <button id="btn-modal-google-oauth" class="hud-btn primary" style="flex: 1; justify-content: center; height: 40px; font-weight: 700;">
+              🌐 ${isConnected ? 'RE-AUTHORIZE WITH GOOGLE' : 'AUTHORIZE VIA GOOGLE'}
+            </button>
+            ${isConnected ? `
+            <button id="btn-modal-google-disconnect" class="hud-btn" style="height: 40px; font-weight: 700; border-color: var(--tars-red); color: var(--tars-red);">
+              🚪 DISCONNECT ACCOUNT
+            </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 16px;">
+          AVAILABLE INTEGRATIONS:
+          <ul style="padding-left: 18px; margin-top: 4px; line-height: 1.6;">
+            <li>Google Calendar (calendar_list_events, calendar_create_event, calendar_delete_event)</li>
+            <li>Google Gmail (gmail_search_messages, gmail_get_message, gmail_send_message)</li>
+          </ul>
+        </div>
+      `;
+
+      // Wire OAuth redirect button
+      const oauthBtn = body.querySelector('#btn-modal-google-oauth');
+      if (oauthBtn) {
+        oauthBtn.addEventListener('click', async () => {
+          oauthBtn.disabled = true;
+          oauthBtn.textContent = 'CONNECTING TO GOOGLE AUTH...';
+          try {
+            const res = await api.getGoogleAuthUrl();
+            if (res && res.url) {
+              window.location.href = res.url;
+            } else {
+              throw new Error('No authorization URL returned from server.');
+            }
+          } catch (err) {
+            showNotification(`OAuth Error: ${err.message}`, 'error');
+            oauthBtn.disabled = false;
+            oauthBtn.textContent = isConnected ? '🌐 RE-AUTHORIZE WITH GOOGLE' : '🌐 AUTHORIZE VIA GOOGLE';
+          }
+        });
+      }
+
+      // Wire Disconnect button
+      const disconnectBtn = body.querySelector('#btn-modal-google-disconnect');
+      if (disconnectBtn) {
+        disconnectBtn.addEventListener('click', async () => {
+          if (!confirm('정말로 Google Workspace 계정 연동을 해제하시겠습니까?')) return;
+          disconnectBtn.disabled = true;
+          disconnectBtn.textContent = 'DISCONNECTING...';
+          try {
+            const res = await api.disconnectGoogle();
+            showNotification(res.message || 'Google account disconnected.', 'success');
+            await loadToolServers();
+            const updated = toolState.servers.find((s) => s.id === 'google_workspace');
+            if (updated && toolState.activeModal && toolState.activeModal.type === 'google') {
+              openGoogleWorkspaceModal(updated);
+            }
+          } catch (err) {
+            showNotification(`Disconnect Error: ${err.message}`, 'error');
+            disconnectBtn.disabled = false;
+            disconnectBtn.textContent = '🚪 DISCONNECT ACCOUNT';
+          }
+        });
+      }
+    });
+  }
+
+  function openMCPServerModal(server) {
+    toolState.activeModal = { type: 'mcp', serverId: server.id };
+    const safeServerName = escapeHtml(server.name || 'Server');
+    openModal(`MCP SERVER CONFIG // ${safeServerName.toUpperCase()}`, (body) => {
+      const isConnected = server.status === 'connected';
+      const isMock = server.status === 'mock' || server.is_mock;
+      const statusLabel = isMock ? 'MOCK MODE' : isConnected ? 'CONNECTED' : 'OFFLINE';
+      const statusDotClass = isMock ? 'mock' : isConnected ? 'connected' : 'offline';
+      const safeTransport = escapeHtml((server.transport || 'SSE').toUpperCase());
+      const safeUrl = escapeHtml(server.url || 'N/A');
+
+      body.innerHTML = `
+        <div class="modal-status-box">
+          <div class="modal-status-row">
+            <span class="status-dot ${statusDotClass}"></span>
+            <span style="font-weight: 700;">SERVER STATUS: ${statusLabel}</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary);">
+            PROTOCOL: <span style="color: var(--tars-cyan); font-weight: 600;">${safeTransport}</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">ENDPOINT URL</label>
+          <input type="text" class="hud-input" value="${safeUrl}" readonly style="font-family: var(--font-mono); font-size: 12px;">
+        </div>
+
+        <div class="form-group">
+          <label style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">CUSTOM REQUEST HEADERS (JSON)</label>
+          <textarea class="hud-input" readonly rows="3" style="font-family: var(--font-mono); font-size: 11px; resize: none;">{\n  "User-Agent": "TARS-MCP-Client/2.4"\n}</textarea>
+        </div>
+
+        <div class="modal-action-block">
+          <div class="modal-section-title">[ CONNECTION HEALTH & DIAGNOSTICS ]</div>
+          <div id="mcp-test-result" style="font-size: 11.5px; color: var(--text-secondary);">
+            Click below to execute a real-time connectivity ping to this MCP server.
+          </div>
+          <button id="btn-modal-test-mcp" class="hud-btn primary" style="justify-content: center; height: 38px; font-weight: 700;">
+            ⚡ TEST CONNECTION
+          </button>
+        </div>
+      `;
+
+      const testBtn = body.querySelector('#btn-modal-test-mcp');
+      const testResultBox = body.querySelector('#mcp-test-result');
+      if (testBtn) {
+        testBtn.addEventListener('click', async () => {
+          testBtn.disabled = true;
+          testBtn.textContent = 'RUNNING PING...';
+          testResultBox.innerHTML = '<span style="color: var(--tars-cyan);">[ PINGING ENDPOINT... ]</span>';
+          try {
+            const res = await api.testServerConnection(server.id);
+            const statusColor = res.status === 'offline' ? 'var(--tars-red)' : 'var(--tars-green)';
+            const safeStatus = escapeHtml((res.status || '').toUpperCase());
+            const safeLatency = escapeHtml(Number(res.latency_ms || 0).toFixed(1));
+            const safeMessage = escapeHtml(res.message || '');
+            testResultBox.innerHTML = `
+              <div style="margin-top: 4px; line-height: 1.6;">
+                Status: <span style="color: ${statusColor}; font-weight: 700;">${safeStatus}</span><br>
+                Latency: <span style="color: var(--tars-cyan); font-weight: 700;">${safeLatency} ms</span><br>
+                Message: <span>${safeMessage}</span>
+              </div>
+            `;
+            showNotification(`MCP Test: ${safeStatus} (${safeLatency}ms)`, res.status === 'offline' ? 'error' : 'success');
+            await loadToolServers();
+          } catch (err) {
+            const safeErr = escapeHtml(err.message || 'Connection error');
+            testResultBox.innerHTML = `<span style="color: var(--tars-red);">[ TEST FAILED: ${safeErr} ]</span>`;
+            showNotification(`MCP Test Error: ${err.message}`, 'error');
+          } finally {
+            testBtn.disabled = false;
+            testBtn.textContent = '⚡ TEST CONNECTION';
+          }
+        });
+      }
+    });
+  }
+
+  function openToolInspectorModal(tool, server) {
+    const safeToolName = escapeHtml(tool.name || 'unnamed');
+    const safeServerName = escapeHtml(server.name || 'unknown');
+    openModal(`TOOL // ${safeToolName}`, (body) => {
+      let paramsRows = '';
+      const properties = tool.parameters?.properties || {};
+      const requiredList = tool.parameters?.required || [];
+
+      for (const [paramName, paramInfo] of Object.entries(properties)) {
+        const isReq = requiredList.includes(paramName);
+        const safeParamName = escapeHtml(paramName);
+        const safeType = escapeHtml(paramInfo?.type || 'any');
+        const safeDesc = escapeHtml(paramInfo?.description || '-');
+        paramsRows += `
+          <tr>
+            <td class="param-name">${safeParamName}</td>
+            <td style="color: var(--text-secondary); font-family: var(--font-mono);">${safeType}</td>
+            <td class="${isReq ? 'param-req' : ''}">${isReq ? 'YES' : 'NO'}</td>
+            <td style="color: var(--text-secondary);">${safeDesc}</td>
+          </tr>
+        `;
+      }
+
+      if (!paramsRows) {
+        paramsRows = `<tr><td colspan="4" style="color: var(--text-muted); text-align: center; padding: 12px;">No parameters required.</td></tr>`;
+      }
+
+      const safeToolDesc = escapeHtml(tool.description || 'No description provided.');
+
+      body.innerHTML = `
+        <div class="modal-status-box">
+          <div style="font-size: 11px; color: var(--text-secondary);">
+            SERVER: <span style="color: var(--tars-cyan); font-weight: 700;">${safeServerName}</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary);">
+            STATUS: <span style="color: ${tool.active ? 'var(--tars-green)' : 'var(--text-muted)'}; font-weight: 700;">${tool.active ? 'ACTIVE' : 'DISABLED'}</span>
+          </div>
+        </div>
+
+        <div>
+          <div class="modal-section-title">FUNCTIONAL DESCRIPTION</div>
+          <p style="margin-top: 6px; font-size: 12px; line-height: 1.6; color: var(--text-primary);">${safeToolDesc}</p>
+        </div>
+
+        <div>
+          <div class="modal-section-title">PARAMETER SCHEMA</div>
+          <div style="overflow-x: auto; margin-top: 6px; border: 1px solid var(--border-dim); border-radius: var(--radius-xs);">
+            <table class="param-table">
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Type</th>
+                  <th>Required</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${paramsRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  // --- Tool & Server UI Helpers (G5) ---
+  function updateServerActiveBadge(server, activeBadgeElem) {
+    if (!activeBadgeElem) return;
+    const activeCount = (server.tools || []).filter((t) => t.active).length;
+    const totalCount = (server.tools || []).length;
+    server.active_tools = activeCount;
+    server.active_tools_count = activeCount;
+    server.total_tools = totalCount;
+    server.total_tools_count = totalCount;
+
+    activeBadgeElem.textContent = `${activeCount}/${totalCount} ACTIVE`;
+    activeBadgeElem.className = `active-badge ${
+      activeCount === totalCount ? 'active' : activeCount > 0 ? 'partial' : 'disabled'
+    }`;
+  }
+
+  function updateGlobalActiveBadge() {
+    if (!dom.toolsGlobalBadge) return;
+    let totalActive = 0;
+    let totalTools = 0;
+    toolState.servers.forEach((s) => {
+      totalActive += (s.tools || []).filter((t) => t.active).length;
+      totalTools += (s.tools || []).length;
+    });
+    dom.toolsGlobalBadge.textContent = `${totalActive}/${totalTools}`;
+  }
+
+  async function handleToolToggle(tool, server, checkbox, badgeElem, activeBadgeElem) {
+    const toolName = tool.name;
+    if (toolState.updatingTools.has(toolName)) return;
+
+    toolState.updatingTools.add(toolName);
+    const prevActive = !checkbox.checked;
+    const newActive = checkbox.checked;
+
+    // Optimistic UI updates
+    badgeElem.textContent = newActive ? 'ACTIVE' : 'DISABLED';
+    badgeElem.className = `tool-badge ${newActive ? 'active' : 'disabled'}`;
+    checkbox.disabled = true;
+
+    // Locally update state object
+    tool.active = newActive;
+    tool.enabled = newActive;
+
+    // Recalculate badge counts in UI
+    updateServerActiveBadge(server, activeBadgeElem);
+    updateGlobalActiveBadge();
+
+    try {
+      const res = await api.toggleTool(toolName, newActive);
+      // Ensure local state matches server response
+      const confirmedActive = res.active ?? newActive;
+      tool.active = confirmedActive;
+      tool.enabled = confirmedActive;
+      badgeElem.textContent = confirmedActive ? 'ACTIVE' : 'DISABLED';
+      badgeElem.className = `tool-badge ${confirmedActive ? 'active' : 'disabled'}`;
+      checkbox.checked = confirmedActive;
+      updateServerActiveBadge(server, activeBadgeElem);
+      updateGlobalActiveBadge();
+    } catch (err) {
+      // Rollback on error
+      tool.active = prevActive;
+      tool.enabled = prevActive;
+      checkbox.checked = prevActive;
+      badgeElem.textContent = prevActive ? 'ACTIVE' : 'DISABLED';
+      badgeElem.className = `tool-badge ${prevActive ? 'active' : 'disabled'}`;
+      updateServerActiveBadge(server, activeBadgeElem);
+      updateGlobalActiveBadge();
+      showNotification(`Failed to toggle ${toolName}: ${err.message}`, 'error');
+    } finally {
+      checkbox.disabled = false;
+      toolState.updatingTools.delete(toolName);
+    }
+  }
+
+  function renderToolsAccordion() {
+    if (!dom.toolsServerList) return;
+    dom.toolsServerList.innerHTML = '';
+
+    if (!toolState.servers || toolState.servers.length === 0) {
+      dom.toolsServerList.innerHTML = '<div class="tools-loading">[ NO SERVERS AVAILABLE ]</div>';
+      updateGlobalActiveBadge();
+      return;
+    }
+
+    toolState.servers.forEach((server) => {
+      const isExpanded = toolState.expandedServerIds.has(server.id);
+      const accordionItem = document.createElement('div');
+      accordionItem.className = `server-accordion ${isExpanded ? 'expanded' : ''}`;
+      accordionItem.setAttribute('data-server-id', server.id);
+
+      const isConnected = server.status === 'connected';
+      const isMock = server.status === 'mock' || server.is_mock;
+      const statusDotClass = isMock ? 'mock' : isConnected ? 'connected' : 'offline';
+
+      const activeCount = (server.tools || []).filter((t) => t.active).length;
+      const totalCount = (server.tools || []).length;
+      const badgeClass =
+        activeCount === totalCount ? 'active' : activeCount > 0 ? 'partial' : 'disabled';
+      const serverType = server.type === 'builtin' ? 'BUILTIN' : 'MCP';
+      const safeServerName = escapeHtml(server.name || 'Server');
+      const safeServerStatus = escapeHtml((server.status || 'unknown').toUpperCase());
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'server-accordion-header';
+      header.innerHTML = `
+        <div class="server-header-left">
+          <span class="accordion-chevron">▶</span>
+          <span class="status-dot ${statusDotClass}" title="Status: ${safeServerStatus}"></span>
+          <span class="server-title" title="${safeServerName}">${safeServerName}</span>
+          <span class="server-type-badge ${escapeHtml(server.type || 'mcp')}">${serverType}</span>
+        </div>
+        <div class="server-header-right">
+          <span class="active-badge ${badgeClass}">${activeCount}/${totalCount} ACTIVE</span>
+          <button class="server-gear-btn" title="Configure server" aria-label="Configure ${safeServerName}">⚙️</button>
+        </div>
+      `;
+
+      // Accordion Body
+      const body = document.createElement('div');
+      body.className = 'server-accordion-body';
+
+      const activeBadgeElem = header.querySelector('.active-badge');
+      const gearBtn = header.querySelector('.server-gear-btn');
+
+      // Click on gear button opens config modal without collapsing or toggling accordion
+      gearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (server.id === 'google_workspace') {
+          openGoogleWorkspaceModal(server);
+        } else {
+          openMCPServerModal(server);
+        }
+      });
+
+      // Header click handling: consistently toggle accordion expansion for all servers
+      header.addEventListener('click', () => {
+        if (toolState.expandedServerIds.has(server.id)) {
+          toolState.expandedServerIds.delete(server.id);
+          accordionItem.classList.remove('expanded');
+        } else {
+          toolState.expandedServerIds.add(server.id);
+          accordionItem.classList.add('expanded');
+        }
+      });
+
+      // Render tool rows inside body
+      (server.tools || []).forEach((tool) => {
+        const row = document.createElement('div');
+        row.className = 'tool-row';
+        row.setAttribute('data-tool-name', tool.name);
+
+        const safeToolName = escapeHtml(tool.name || 'tool');
+        const rawDesc = tool.description || 'No description';
+        const shortDesc = rawDesc.length > 40 ? rawDesc.substring(0, 40) + '...' : rawDesc;
+        const safeShortDesc = escapeHtml(shortDesc);
+        const safeFullDesc = escapeHtml(rawDesc);
+
+        row.innerHTML = `
+          <div class="tool-info-col">
+            <div class="tool-name-wrap">
+              <span class="tool-name" title="${safeToolName}">${safeToolName}</span>
+              <button class="tool-info-btn" title="Inspect tool schema" aria-label="Inspect ${safeToolName}">ℹ</button>
+            </div>
+            <div class="tool-desc-short" title="${safeFullDesc}">${safeShortDesc}</div>
+          </div>
+          <div class="tool-action-col">
+            <span class="tool-badge ${tool.active ? 'active' : 'disabled'}">${tool.active ? 'ACTIVE' : 'DISABLED'}</span>
+            <label class="hud-switch" title="Toggle ${safeToolName}">
+              <input type="checkbox" class="tool-toggle-checkbox" ${tool.active ? 'checked' : ''}>
+              <span class="hud-switch-slider"></span>
+            </label>
+          </div>
+        `;
+
+        const infoBtn = row.querySelector('.tool-info-btn');
+        const badgeElem = row.querySelector('.tool-badge');
+        const toggleInput = row.querySelector('.tool-toggle-checkbox');
+
+        infoBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openToolInspectorModal(tool, server);
+        });
+
+        toggleInput.addEventListener('change', () => {
+          handleToolToggle(tool, server, toggleInput, badgeElem, activeBadgeElem);
+        });
+
+        body.appendChild(row);
+      });
+
+      accordionItem.appendChild(header);
+      accordionItem.appendChild(body);
+      dom.toolsServerList.appendChild(accordionItem);
+    });
+
+    updateGlobalActiveBadge();
+  }
+
+  async function loadToolServers() {
+    if (!dom.toolsServerList) return;
+    try {
+      const res = await api.getToolServers();
+      toolState.servers = res.servers || [];
+      renderToolsAccordion();
+    } catch (err) {
+      console.warn('[Tools] Failed to load tool servers:', err);
+      dom.toolsServerList.innerHTML = `
+        <div class="tools-loading" style="color: var(--tars-red);">
+          [ FAILED TO LOAD TOOLS ]<br>
+          <button id="btn-retry-tools" class="hud-btn" style="margin-top: 6px; font-size: 10px;">RETRY</button>
+        </div>
+      `;
+      const retryBtn = dom.toolsServerList.querySelector('#btn-retry-tools');
+      if (retryBtn) retryBtn.addEventListener('click', loadToolServers);
+    }
+  }
+
+  function checkUrlAuthStatus() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authStatus = urlParams.get('auth_status');
+    const authError = urlParams.get('error');
+
+    if (authStatus === 'google_linked') {
+      showNotification('Google Workspace account linked successfully.', 'success');
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } else if (authStatus === 'error' || authError) {
+      const rawError = authError || 'Google authorization failed.';
+      const safeError = escapeHtml(rawError);
+      showNotification(`Google authorization error: ${safeError}`, 'error');
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  }
+
   // --- App Initialization ---
   async function init() {
     registerServiceWorker();
+
+    // Check URL parameters for OAuth2 redirect status (G5)
+    checkUrlAuthStatus();
+
+    // Setup Modal Dialog Event Listeners (G5)
+    if (dom.modalCloseBtn) {
+      dom.modalCloseBtn.addEventListener('click', closeModal);
+    }
+    if (dom.modalBtnCancel) {
+      dom.modalBtnCancel.addEventListener('click', closeModal);
+    }
+    if (dom.modalOverlay) {
+      dom.modalOverlay.addEventListener('click', (e) => {
+        if (e.target === dom.modalOverlay) {
+          closeModal();
+        }
+      });
+    }
+    window.addEventListener('keydown', (e) => {
+      if (!dom.modalOverlay || dom.modalOverlay.style.display !== 'flex') return;
+
+      if (e.key === 'Escape') {
+        closeModal();
+        return;
+      }
+
+      if (e.key === 'Tab' && dom.modalCard) {
+        const focusableSelector =
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const focusables = Array.from(
+          dom.modalCard.querySelectorAll(focusableSelector)
+        ).filter((el) => el.offsetParent !== null);
+
+        if (focusables.length === 0) return;
+
+        const firstElem = focusables[0];
+        const lastElem = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElem) {
+            e.preventDefault();
+            lastElem.focus();
+          }
+        } else {
+          if (document.activeElement === lastElem) {
+            e.preventDefault();
+            firstElem.focus();
+          }
+        }
+      }
+    });
+
+    // Setup Tools Refresh Button (G5)
+    if (dom.btnRefreshTools) {
+      dom.btnRefreshTools.addEventListener('click', () => {
+        loadToolServers();
+      });
+    }
 
     // Setup TTS button state
     dom.btnTts.addEventListener('click', () => {
@@ -344,6 +1005,7 @@
         showView('chat');
         await loadUserConfig();
         initStreamClient();
+        await loadToolServers();
       } catch (err) {
         setAuthError(err.message || 'Login failed.');
       }
@@ -366,6 +1028,7 @@
         showView('chat');
         await loadUserConfig();
         initStreamClient();
+        await loadToolServers();
       } catch (err) {
         setAuthError(err.message || 'Signup failed.');
       }
@@ -376,11 +1039,17 @@
       api.clearToken();
       if (streamClient) streamClient.disconnect();
       tts.stop();
+      toolState.servers = [];
+      if (dom.toolsServerList) {
+        dom.toolsServerList.innerHTML = '<div class="tools-loading">[ DISCOVERING SERVERS & TOOLS... ]</div>';
+      }
+      updateGlobalActiveBadge();
       showView('auth');
     });
 
     // Unauthorized Event Handler
     window.addEventListener('tars:unauthorized', () => {
+      toolState.servers = [];
       showView('auth');
       setAuthError('Session expired. Please log in again.');
     });
@@ -467,6 +1136,7 @@
         showView('chat');
         await loadUserConfig();
         initStreamClient();
+        await loadToolServers();
       } catch {
         api.clearToken();
         showView('auth');

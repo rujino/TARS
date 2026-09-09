@@ -9,6 +9,7 @@ dependencies = [
     "alembic>=1.13.1",
     "asyncpg>=0.29.0",
     "bcrypt>=4.0.0",
+    "cryptography>=42.0.0",
     "fastapi>=0.110.0",
     "google-genai>=0.1.0",
     "httpx>=0.27.0",
@@ -23,6 +24,8 @@ dependencies = [
     "prometheus-client>=0.20.0",
     "sqlalchemy[asyncio]>=2.0.28",
     "uvicorn[standard]>=0.28.0",
+    "langfuse>=2.60.0,<3.0.0",
+    "langchain>=1.4.0",
 ]
 
 [project.optional-dependencies]

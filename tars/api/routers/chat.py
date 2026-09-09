@@ -102,6 +102,7 @@ async def chat_sse_stream(
             user_id=current_user.id,
             message=payload.message,
             session_id=payload.session_id,
+            client_timezone=payload.timezone,
             background_tasks=background_tasks,
         ):
             if await request.is_disconnected():
@@ -179,6 +180,7 @@ async def chat_websocket_endpoint(
             frame_type = data.get("type", "chat_message")
             requested_session_id = data.get("session_id")
             user_content = data.get("content", "")
+            client_timezone = data.get("timezone", "Asia/Seoul")
 
             if frame_type != "chat_message" or not user_content:
                 continue
@@ -194,6 +196,7 @@ async def chat_websocket_endpoint(
                     user_id=user_id,
                     message=user_content,
                     session_id=requested_session_id,
+                    client_timezone=client_timezone,
                 ):
                     if websocket.client_state == WebSocketState.DISCONNECTED:
                         logger.info("Client disconnected from WebSocket during turn; terminating execution.")

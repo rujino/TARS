@@ -18,7 +18,7 @@ import pytest
 
 from tars.core.okf.models import (
     OKFDocument,
-    OKFFrontmatter,
+    OKFMetadata,
     OKFSource,
     OKFType,
 )
@@ -37,7 +37,7 @@ from tars.storage.manager import (
 
 def make_doc(doc_id: str, title: str = "Test Doc", content: str = "Test Content") -> OKFDocument:
     """Create a minimal OKFDocument helper for storage tests."""
-    fm = OKFFrontmatter(
+    fm = OKFMetadata(
         id=doc_id,
         type=OKFType.RULE,
         title=title,

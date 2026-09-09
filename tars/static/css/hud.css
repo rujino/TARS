@@ -152,7 +152,18 @@ body {
   box-shadow: 0 0 6px var(--tars-green);
 }
 
+.status-dot.connected,
+.status-dot.online {
+  background-color: var(--tars-green);
+  box-shadow: 0 0 6px var(--tars-green);
+}
+
 .status-dot.connecting {
+  background-color: var(--tars-amber);
+  box-shadow: 0 0 6px var(--tars-amber);
+}
+
+.status-dot.mock {
   background-color: var(--tars-amber);
   box-shadow: 0 0 6px var(--tars-amber);
 }

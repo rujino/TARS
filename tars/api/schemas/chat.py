@@ -12,6 +12,7 @@ class ChatStreamRequest(BaseModel):
 
     session_id: str = Field(default="default_session", description="Conversation session ID")
     message: str = Field(..., min_length=1, description="Non-empty user query")
+    timezone: str = Field(default="Asia/Seoul", description="Client IANA timezone")
 
 
 class WSMessageIn(BaseModel):
@@ -22,6 +23,7 @@ class WSMessageIn(BaseModel):
     type: str = Field(default="chat_message", description="Message frame type")
     session_id: str = Field(default="ws_session", description="Dialogue session ID")
     content: str = Field(default="", description="User message content")
+    timezone: str = Field(default="Asia/Seoul", description="Client IANA timezone")
 
 
 class WSMessageOut(BaseModel):

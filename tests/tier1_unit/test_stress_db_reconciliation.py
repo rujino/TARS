@@ -27,8 +27,8 @@ from sqlalchemy.ext.asyncio import (
 
 from tars.core.okf.models import (
     OKFDocument,
-    OKFFrontmatter,
     OKFImportance,
+    OKFMetadata,
     OKFRelations,
     OKFSource,
     OKFType,
@@ -74,7 +74,7 @@ def make_doc(
     relations: OKFRelations | None = None,
     category: str | None = "general",
 ) -> OKFDocument:
-    fm = OKFFrontmatter(
+    fm = OKFMetadata(
         okf_version="1.0",
         id=doc_id,
         type=doc_type,

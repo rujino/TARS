@@ -104,6 +104,7 @@ async def session_node(
     humor = float(state.get("humor_level", DEFAULT_HUMOR_LEVEL))
     honesty = float(state.get("honesty_level", DEFAULT_HONESTY_LEVEL))
     mode = str(state.get("mode", DEFAULT_MODE))
+    disabled_tools: list[str] = list(state.get("disabled_tools", []))
 
     if db_session is not None and user_id:
         try:
@@ -117,6 +118,8 @@ async def session_node(
                     honesty = float(settings.honesty_level)
                 if settings.mode is not None:
                     mode = str(settings.mode)
+                if getattr(settings, "disabled_tools", None) is not None:
+                    disabled_tools = list(settings.disabled_tools)
         except Exception as exc:
             logger.warning("Failed to fetch TARSSettings for user %s: %s", user_id, exc)
 
@@ -180,6 +183,7 @@ async def session_node(
         "humor_level": humor,
         "honesty_level": honesty,
         "mode": mode,
+        "disabled_tools": disabled_tools,
         "routing_decision": routing_decision,
         "is_reset": routing_decision.is_reset,
         "messages": message_updates,
@@ -290,12 +294,17 @@ async def prompt_node(
             sanitized_doc = OKFDocument(metadata=doc.metadata, content=safe_body)
         sanitized_wikis.append(sanitized_doc)
 
-    # 2. Build system prompt using TARSPersonaManager (includes SYSTEM DIRECTIVE PRIORITY)
+    client_timezone = str(state.get("client_timezone") or "Asia/Seoul")
+    reference_time = state.get("reference_time")
+
+    # 2. Build system prompt using TARSPersonaManager (includes SYSTEM DIRECTIVE PRIORITY & TEMPORAL CONTEXT)
     system_prompt = manager.build_system_prompt(
         humor_level=humor_level,
         honesty_level=honesty_level,
         mode=mode,
         context_docs=sanitized_wikis,
+        client_timezone=client_timezone,
+        reference_time=reference_time,
     )
 
     # Ensure system directive priority is present in prompt
@@ -328,7 +337,12 @@ async def llm_node(
 
     messages = state.get("messages", [])
     system_prompt = state.get("system_prompt", "")
-    tools_decl = tool_registry.export_gemini_declarations() if tool_registry is not None else []
+    disabled_tools = state.get("disabled_tools")
+    tools_decl = (
+        tool_registry.export_gemini_declarations(disabled_tools=disabled_tools)
+        if tool_registry is not None
+        else []
+    )
 
     # 1. Direct streaming if route_and_stream is explicitly mock-patched for stream tests
     stream_fn = getattr(router, "route_and_stream", None)
@@ -381,15 +395,37 @@ async def llm_node(
     else:
         resp = LLMResponse(content="", tool_calls=[])
 
+    model_name = getattr(resp, "model_name", "") or ""
+    is_slm = (
+        ("slm" in model_name.lower())
+        or ("gemma" in model_name.lower())
+        or resp.content.startswith("[Auxiliary")
+        or resp.content.startswith("[Tactical Uplink")
+    )
+    engine = "slm" if is_slm else "gemini"
+    if not model_name:
+        model_name = "gemma-4-12b" if is_slm else "gemini-3.7-flash"
+
+    response_meta = {
+        "engine": engine,
+        "model_name": model_name,
+    }
+
     if resp.tool_calls:
         langchain_tool_calls = [
             {"id": tc.id, "name": tc.name, "args": tc.arguments} for tc in resp.tool_calls
         ]
-        ai_msg = AIMessage(content=resp.content, tool_calls=langchain_tool_calls)
+        ai_msg = AIMessage(
+            content=resp.content,
+            tool_calls=langchain_tool_calls,
+            response_metadata=response_meta,
+        )
         return {
             "final_response": resp.content,
             "messages": [ai_msg],
             "tool_calls": resp.tool_calls,
+            "engine": engine,
+            "model_name": model_name,
         }
 
     # Emit complete token event for single-turn non-tool responses
@@ -402,11 +438,13 @@ async def llm_node(
         except Exception:
             pass
 
-    ai_msg = AIMessage(content=resp.content)
+    ai_msg = AIMessage(content=resp.content, response_metadata=response_meta)
     return {
         "final_response": resp.content,
         "messages": [ai_msg],
         "tool_calls": [],
+        "engine": engine,
+        "model_name": model_name,
     }
 
 
@@ -450,9 +488,9 @@ async def tool_node(
     results: list[dict[str, Any]] = []
     executed_tools: list[str] = []
     last_error: str | None = None
+    disabled_tools = set(state.get("disabled_tools") or [])
 
     for tc in pending_tool_calls:
-        executed_tools.append(tc.name)
         try:
             await adispatch_custom_event(
                 "tool_start",
@@ -461,11 +499,52 @@ async def tool_node(
         except Exception:
             pass
 
+        # Defense-in-depth guard: block execution if tool is disabled
+        if tc.name in disabled_tools:
+            err_detail = f"Tool '{tc.name}' is disabled by user configuration."
+            logger.warning("Blocked execution of disabled tool '%s'.", tc.name)
+            try:
+                await adispatch_custom_event(
+                    "tool_result",
+                    {
+                        "tool": tc.name,
+                        "call_id": tc.id,
+                        "status": "error",
+                        "error": err_detail,
+                    },
+                )
+            except Exception:
+                pass
+            content_str = f"[Tool Blocked: {tc.name}]\nError: {err_detail}"
+            tool_messages.append(
+                ToolMessage(
+                    content=content_str,
+                    tool_call_id=tc.id,
+                    name=tc.name,
+                )
+            )
+            results.append(
+                {
+                    "tool": tc.name,
+                    "call_id": tc.id,
+                    "args": tc.arguments,
+                    "status": "error",
+                    "error": err_detail,
+                }
+            )
+            last_error = err_detail
+            continue
+
+        executed_tools.append(tc.name)
+
         try:
             if tool_registry is None:
                 raise RuntimeError("ToolRegistry is not configured in tool_node.")
 
-            exec_result = await tool_registry.execute_tool(tc.name, tc.arguments)
+            user_id = state.get("user_id")
+            exec_result = await tool_registry.execute_tool(
+                tc.name, tc.arguments, user_id=user_id
+            )
             try:
                 await adispatch_custom_event(
                     "tool_result",
@@ -637,7 +716,10 @@ async def postprocess_node(
             except Exception as bg_err:
                 logger.error("Failed to dispatch background knowledge extraction: %s", bg_err, exc_info=True)
 
-    return {}
+    return {
+        "engine": state.get("engine"),
+        "model_name": state.get("model_name"),
+    }
 
 
 def should_continue(state: TARSState) -> str:

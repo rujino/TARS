@@ -146,10 +146,6 @@ class OKFMetadata(BaseModel):
         raise ValueError(f"Cannot parse datetime value: {v!r}")
 
 
-# Alias for backward and test specification compatibility
-OKFFrontmatter = OKFMetadata
-
-
 class OKFDocument(BaseModel):
     """Complete 2-layer OKF Document containing Metadata and Markdown Content."""
 

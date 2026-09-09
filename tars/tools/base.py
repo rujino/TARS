@@ -8,10 +8,68 @@ Provides:
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+
+
+def coerce_json_str_to_list(v: Any) -> Any:
+    """Coerce a JSON-encoded string to a list if passed as string by an LLM client."""
+    if not isinstance(v, str):
+        return v
+    try:
+        parsed = json.loads(v)
+        return parsed if isinstance(parsed, list) else v
+    except (json.JSONDecodeError, TypeError):
+        return v
+
+
+def coerce_json_str_to_dict(v: Any) -> Any:
+    """Coerce a JSON-encoded string to a dict if passed as string by an LLM client."""
+    if not isinstance(v, str):
+        return v
+    try:
+        parsed = json.loads(v)
+        return parsed if isinstance(parsed, dict) else v
+    except (json.JSONDecodeError, TypeError):
+        return v
+
+
+def coerce_to_string_list(v: Any) -> list[str]:
+    """Coerce input (list, JSON array string, comma-separated string, or single string) to list[str].
+
+    Handles cases where LLMs provide:
+    - Native list: ['a', 'b']
+    - JSON-encoded list: '["a", "b"]'
+    - Comma-separated string: 'a, b'
+    - Single string: 'a'
+    - None or empty values: returns []
+    """
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(item).strip() for item in v if str(item).strip()]
+    if isinstance(v, str):
+        cleaned = v.strip()
+        if not cleaned:
+            return []
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except (json.JSONDecodeError, TypeError):
+            pass
+        if "," in cleaned:
+            return [part.strip() for part in cleaned.split(",") if part.strip()]
+        return [cleaned]
+    return [str(v).strip()] if str(v).strip() else []
+
+
+StringList = Annotated[list[str], BeforeValidator(coerce_json_str_to_list)]
+DictList = Annotated[list[dict[str, Any]], BeforeValidator(coerce_json_str_to_list)]
+JsonDict = Annotated[dict[str, Any], BeforeValidator(coerce_json_str_to_dict)]
 
 
 class ToolParameter(BaseModel):
@@ -69,10 +127,11 @@ class BaseTool(ABC):
             self.parameters_schema = {"type": "object", "properties": {}, "required": []}
 
     @abstractmethod
-    async def aexecute(self, **kwargs: Any) -> Any:
+    async def aexecute(self, *, user_id: str | None = None, **kwargs: Any) -> Any:
         """Execute the tool asynchronously with supplied arguments.
 
         Args:
+            user_id: Optional authenticated user ID executing the tool (for multi-tenant isolation).
             **kwargs: Arguments matching parameters_schema.
 
         Returns:
@@ -109,6 +168,12 @@ class BaseTool(ABC):
 
 __all__ = [
     "BaseTool",
+    "DictList",
+    "JsonDict",
+    "StringList",
     "ToolDefinition",
     "ToolParameter",
+    "coerce_json_str_to_dict",
+    "coerce_json_str_to_list",
+    "coerce_to_string_list",
 ]

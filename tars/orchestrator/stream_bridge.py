@@ -27,6 +27,7 @@ class LangGraphStreamBridge:
         graph: Any,
         initial_state: dict[str, Any] | TARSState,
         background_tasks: BackgroundTasks | None = None,
+        config: dict[str, Any] | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Consume LangGraph astream_events(version='v2') and yield AgentStreamEvents.
 
@@ -42,6 +43,7 @@ class LangGraphStreamBridge:
             graph: Compiled LangGraph instance supporting astream_events.
             initial_state: Initial state dictionary containing user_id, session_id, messages, etc.
             background_tasks: Optional FastAPI BackgroundTasks for async execution.
+            config: Optional RunnableConfig dictionary containing callbacks or tracing metadata.
 
         Yields:
             AgentStreamEvent frames matching the SSE/WS wire protocol.
@@ -54,12 +56,18 @@ class LangGraphStreamBridge:
         token_count = 0
         stream_started = False
         stream_ended = False
+        current_engine: str | None = None
+        current_model_name: str | None = None
 
         try:
             if not hasattr(graph, "astream_events"):
                 raise AttributeError("Graph instance must implement 'astream_events'")
 
-            async for event in graph.astream_events(initial_state, version="v2"):
+            stream_kwargs: dict[str, Any] = {"version": "v2"}
+            if config:
+                stream_kwargs["config"] = config
+
+            async for event in graph.astream_events(initial_state, **stream_kwargs):
                 ev_type = str(event.get("event", ""))
                 ev_name = str(event.get("name", ""))
                 data: dict[str, Any] = event.get("data", {}) or {}
@@ -237,14 +245,18 @@ class LangGraphStreamBridge:
                                     error=res.get("error"),
                                 )
 
-                # 8. Fallback token extraction from llm_node (non-streaming responses)
-                elif ev_type == "on_chain_end" and ev_name == "llm_node":
+                # 8. Fallback token extraction and model metadata from llm_node & postprocess_node
+                elif ev_type == "on_chain_end" and ev_name in ("llm_node", "postprocess_node"):
                     output = data.get("output", {})
                     if isinstance(output, dict):
+                        if output.get("engine"):
+                            current_engine = str(output["engine"])
+                        if output.get("model_name"):
+                            current_model_name = str(output["model_name"])
                         tool_calls = output.get("tool_calls", [])
                         final_resp = output.get("final_response")
                         # Only emit token if there are no tool calls pending and no tokens have been streamed yet
-                        if not tool_calls and final_resp and token_count == 0:
+                        if not tool_calls and final_resp and token_count == 0 and ev_name == "llm_node":
                             resp_str = str(final_resp)
                             accumulated_chunks.append(resp_str)
                             token_count += 1
@@ -257,6 +269,12 @@ class LangGraphStreamBridge:
                         stream_started = True
 
                     output = data.get("output", {})
+                    if isinstance(output, dict):
+                        if output.get("engine"):
+                            current_engine = str(output["engine"])
+                        if output.get("model_name"):
+                            current_model_name = str(output["model_name"])
+
                     final_text = "".join(accumulated_chunks)
                     if (
                         not final_text
@@ -282,6 +300,8 @@ class LangGraphStreamBridge:
                         session_id=sid,
                         content=final_text,
                         tools_used=used,
+                        engine=current_engine,
+                        model_name=current_model_name,
                     )
                     yield AgentStreamEvent(type="done")
                     stream_ended = True
@@ -294,6 +314,8 @@ class LangGraphStreamBridge:
                     session_id=active_session_id,
                     content=final_text,
                     tools_used=tools_used,
+                    engine=current_engine,
+                    model_name=current_model_name,
                 )
                 yield AgentStreamEvent(type="done")
                 stream_ended = True
