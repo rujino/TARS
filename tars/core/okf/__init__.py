@@ -14,7 +14,6 @@ from tars.core.okf.errors import (
 )
 from tars.core.okf.models import (
     OKFDocument,
-    OKFFrontmatter,
     OKFImportance,
     OKFMetadata,
     OKFRelations,
@@ -35,7 +34,6 @@ __all__ = [
     "OKFSource",
     "OKFRelations",
     "OKFMetadata",
-    "OKFFrontmatter",
     "OKFDocument",
     # Functions
     "parse_okf_text",

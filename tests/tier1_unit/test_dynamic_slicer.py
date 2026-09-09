@@ -21,8 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.core.okf.models import (
     OKFDocument,
-    OKFFrontmatter,
     OKFImportance,
+    OKFMetadata,
     OKFRelations,
     OKFSource,
     OKFType,
@@ -57,7 +57,7 @@ def build_doc(
     category: str | None = None,
 ) -> OKFDocument:
     now = updated_at or datetime.now(UTC)
-    fm = OKFFrontmatter(
+    fm = OKFMetadata(
         id=doc_id,
         type=doc_type,
         title=title,

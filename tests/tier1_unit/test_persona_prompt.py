@@ -15,7 +15,7 @@ import pytest
 
 from tars.core.okf.models import (
     OKFDocument,
-    OKFFrontmatter,
+    OKFMetadata,
     OKFSource,
     OKFType,
 )
@@ -30,7 +30,7 @@ from tars.persona.prompts import (
 
 
 def make_test_okf_doc(doc_id: str, title: str, content: str) -> OKFDocument:
-    fm = OKFFrontmatter(
+    fm = OKFMetadata(
         id=doc_id,
         type=OKFType.RULE,
         title=title,

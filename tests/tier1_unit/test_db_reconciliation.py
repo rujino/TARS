@@ -21,8 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.core.okf.models import (
     OKFDocument,
-    OKFFrontmatter,
     OKFImportance,
+    OKFMetadata,
     OKFSource,
     OKFType,
 )
@@ -41,7 +41,7 @@ from tars.storage.reconciliation import (
 def create_sample_okf(
     doc_id: str, title: str, content: str, importance: OKFImportance = OKFImportance.MEDIUM
 ) -> OKFDocument:
-    fm = OKFFrontmatter(
+    fm = OKFMetadata(
         id=doc_id,
         type=OKFType.RULE,
         title=title,
