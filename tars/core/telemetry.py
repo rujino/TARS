@@ -102,6 +102,7 @@ def update_circuit_breaker_metric(
 # 3. HTTP Observability Middleware
 # ============================================================================
 
+
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     """Middleware ensuring X-Correlation-ID propagation and HTTP metrics recording."""
 

@@ -93,6 +93,7 @@ def _get_fernet() -> Any:
     """Derive deterministic Fernet cipher instance from jwt_secret_key."""
     import base64
     import hashlib
+
     from cryptography.fernet import Fernet
 
     settings = get_settings()
@@ -127,7 +128,8 @@ def decrypt_secret(ciphertext: str | None) -> str | None:
 
         f = _get_fernet()
         raw_b64 = ciphertext[4:]
-        return f.decrypt(raw_b64.encode("utf-8")).decode("utf-8")
+        decrypted = f.decrypt(raw_b64.encode("utf-8"))
+        return str(decrypted.decode("utf-8"))
     except InvalidToken:
         logger.warning("Invalid token during secret decryption, returning raw value")
         return ciphertext

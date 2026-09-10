@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from tars.api.dependencies import get_storage_manager
 from tars.config import get_settings
-from tars.db.session import get_session_factory
+from tars.core.database import get_session_factory
 
 logger = logging.getLogger("tars.api.routers.health")
 

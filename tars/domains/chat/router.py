@@ -1,0 +1,195 @@
+"""Chat Streaming REST (SSE), WebSocket real-time communication, and Proactive Greeting routers.
+
+Thin Controller pattern: Delegates orchestration and session workflows to AgentChatService and ProactiveGreetingService.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from collections.abc import AsyncIterator
+
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+from starlette.websockets import WebSocketState
+
+from tars.api.dependencies import (
+    get_agent_chat_service,
+    get_current_user,
+    get_proactive_greeting_service,
+    get_storage_manager,
+    get_tool_registry,
+)
+from tars.core.database import get_session_factory
+from tars.core.security import decode_access_token
+from tars.domains.auth.models import User
+from tars.domains.chat.schemas import (
+    ChatStreamRequest,
+    GreetingResponse,
+)
+from tars.domains.chat.services.agent_chat import AgentChatService
+from tars.domains.chat.services.greeting import ProactiveGreetingService
+from tars.domains.knowledge.storage.manager import FileStorageManager
+from tars.domains.tools.registry import ToolRegistry
+
+logger = logging.getLogger("tars.domains.chat.router")
+router = APIRouter(prefix="/chat", tags=["Chat & Streaming"])
+
+
+@router.get(
+    "/greeting",
+    response_model=GreetingResponse,
+    summary="Fetch proactive situational greeting upon app startup or foreground entry",
+)
+async def get_proactive_greeting(
+    timezone: str = Query(default="Asia/Seoul", description="Client IANA timezone"),
+    current_user: User = Depends(get_current_user),
+    greeting_service: ProactiveGreetingService = Depends(get_proactive_greeting_service),
+) -> GreetingResponse:
+    """Generate a 5-factor proactive, witty 1-2 sentence opening greeting in Korean."""
+    return await greeting_service.generate_greeting(
+        user_id=current_user.id,
+        client_timezone=timezone,
+    )
+
+
+@router.post(
+    "/stream",
+    summary="Stream real-time tokens via Server-Sent Events (SSE)",
+)
+async def chat_sse_stream(
+    request: Request,
+    payload: ChatStreamRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    agent_service: AgentChatService = Depends(get_agent_chat_service),
+) -> StreamingResponse:
+    """Stream model response tokens using standard SSE protocol with unified Agent ReAct pipeline."""
+
+    async def sse_event_generator() -> AsyncIterator[str]:
+        async for event in agent_service.stream_chat(
+            user_id=current_user.id,
+            message=payload.message,
+            session_id=payload.session_id,
+            client_timezone=payload.timezone,
+            background_tasks=background_tasks,
+        ):
+            if await request.is_disconnected():
+                logger.info("Client disconnected from SSE stream; terminating graph execution")
+                break
+            yield event.to_sse_event()
+
+    return StreamingResponse(
+        sse_event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.websocket("/ws")
+async def chat_websocket_endpoint(
+    websocket: WebSocket,
+    token: str | None = Query(default=None),
+    storage: FileStorageManager = Depends(get_storage_manager),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+) -> None:
+    """양방향 실시간 WebSocket 대화 엔드포인트 (Thin Controller)."""
+    if not token:
+        logger.warning("WebSocket rejected: missing token query param")
+        await websocket.close(code=4001)
+        return
+
+    payload = decode_access_token(token)
+    if payload is None or "sub" not in payload:
+        logger.warning("WebSocket rejected: invalid or expired token")
+        await websocket.close(code=4001)
+        return
+
+    user_id = str(payload["sub"])
+
+    session_factory = get_session_factory()
+    async with session_factory() as db:
+        stmt = select(User).where(User.id == user_id)
+        res = await db.execute(stmt)
+        user = res.scalar_one_or_none()
+        if user is None or not user.is_active:
+            logger.warning("WebSocket rejected: user not found or inactive (%s)", user_id)
+            await websocket.close(code=4001)
+            return
+
+    await websocket.accept()
+    logger.info("WebSocket connected for user %s", user_id)
+
+    try:
+        while True:
+            try:
+                raw_data = await websocket.receive_text()
+            except WebSocketDisconnect:
+                logger.info("WebSocket disconnected normally by client")
+                break
+
+            try:
+                data = json.loads(raw_data)
+            except Exception:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Malformed JSON payload received",
+                    }
+                )
+                continue
+
+            frame_type = data.get("type", "chat_message")
+            requested_session_id = data.get("session_id")
+            user_content = data.get("content", "")
+            client_timezone = data.get("timezone", "Asia/Seoul")
+
+            if frame_type != "chat_message" or not user_content:
+                continue
+
+            async with session_factory() as db:
+                agent_service = AgentChatService(
+                    db_session=db,
+                    storage_manager=storage,
+                    tool_registry=tool_registry,
+                )
+                async for event in agent_service.stream_chat(
+                    user_id=user_id,
+                    message=user_content,
+                    session_id=requested_session_id,
+                    client_timezone=client_timezone,
+                ):
+                    if websocket.client_state == WebSocketState.DISCONNECTED:
+                        logger.info(
+                            "Client disconnected from WebSocket during turn; terminating execution."
+                        )
+                        break
+                    if event.type != "done":
+                        await websocket.send_json(event.to_ws_dict())
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket connection closed for user %s", user_id)
+    except Exception as exc:
+        logger.error("Unexpected WebSocket exception: %s", exc, exc_info=True)
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+    finally:
+        logger.debug("WebSocket handler connection cleaned up for user %s", user_id)
+
+
+__all__ = ["router"]

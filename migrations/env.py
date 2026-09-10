@@ -12,9 +12,12 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-import tars.db.models  # noqa: F401 - Ensure all models are registered on Base.metadata
+import tars.domains.auth.models  # noqa: F401 - Ensure all models are registered on Base.metadata
+import tars.domains.chat.models  # noqa: F401
+import tars.domains.knowledge.models  # noqa: F401
+import tars.domains.persona.models  # noqa: F401
 from tars.config import get_settings
-from tars.db.base import Base
+from tars.core.database import Base
 
 # Alembic Config object, which provides access to values in alembic.ini
 config = context.config
@@ -26,18 +29,19 @@ if config.config_file_name is not None:
 
 def get_target_db_url() -> str:
     """Resolve database URL dynamically from environment, config, or settings."""
-    explicit_url = config.get_main_option("sqlalchemy.url")
-    if explicit_url:
-        return explicit_url
-
     env_url = os.environ.get("TARS_DATABASE_URL")
     if env_url:
         return env_url
 
     try:
-        return get_settings().database_url
+        settings_url = get_settings().database_url
+        if settings_url:
+            return settings_url
     except Exception:
-        return explicit_url or "postgresql+asyncpg://tarsuser:tarspassword@localhost:5432/tars"
+        pass
+
+    explicit_url = config.get_main_option("sqlalchemy.url")
+    return explicit_url or "postgresql+asyncpg://tarsuser:tarspassword@localhost:5432/tars"
 
 
 # Target metadata for autogenerate support

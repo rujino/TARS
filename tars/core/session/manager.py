@@ -14,14 +14,14 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from tars.adapters.base import BaseLLMAdapter
+from tars.core.database import get_session_factory
 from tars.core.session.detector import TopicShiftDetector
 from tars.core.session.models import SessionRoutingAction, SessionRoutingDecision
-from tars.db.models import ChatMessage, ChatSession
-from tars.db.session import get_session_factory
-from tars.extractor.worker import SelfEvolvingKnowledgeWorker
-from tars.persona.prompts import build_bridge_summary_prompt
-from tars.storage.manager import FileStorageManager
+from tars.domains.chat.models import ChatMessage, ChatSession
+from tars.domains.knowledge.extractor.worker import SelfEvolvingKnowledgeWorker
+from tars.domains.knowledge.storage.manager import FileStorageManager
+from tars.domains.persona.prompts import build_bridge_summary_prompt
+from tars.engine.adapters.base import BaseLLMAdapter
 
 logger = logging.getLogger("tars.core.session.manager")
 
@@ -219,7 +219,7 @@ class SmartSessionManager:
         else:
             # Fallback for persistent WebSocket sessions where background_tasks is None
             try:
-                from tars.orchestrator.nodes import _background_node_tasks
+                from tars.engine.orchestrator.nodes import _background_node_tasks
 
                 task = asyncio.create_task(
                     _run_async_knowledge_extraction(
