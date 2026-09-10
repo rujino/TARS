@@ -26,6 +26,8 @@ dependencies = [
     "uvicorn[standard]>=0.28.0",
     "langfuse>=2.60.0,<3.0.0",
     "langchain>=1.4.0",
+    "aioboto3>=13.0.0",
+    "boto3>=1.34.0",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +74,9 @@ warn_unreachable = true
 module = [
     "google.*",
     "langchain_google_genai.*",
+    "aioboto3.*",
+    "botocore.*",
+    "boto3.*",
 ]
 ignore_missing_imports = true
 

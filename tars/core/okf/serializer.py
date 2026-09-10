@@ -45,6 +45,9 @@ def serialize_okf_document(doc: OKFDocument) -> str:
             "title": meta.title,
         }
 
+        if meta.description is not None:
+            frontmatter_dict["description"] = meta.description
+
         if meta.category is not None:
             frontmatter_dict["category"] = meta.category
 

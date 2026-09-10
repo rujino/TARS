@@ -13,3 +13,8 @@ data:
   POSTGRES_USER: "tarsuser"
   TARS_LANGFUSE_ENABLED: "true"
   TARS_LANGFUSE_HOST: "http://langfuse-web:3000"
+  TARS_STORAGE_BACKEND: "s3"
+  TARS_S3_ENDPOINT_URL: "http://seaweedfs-s3.tars.svc.cluster.local:8333"
+  TARS_S3_BUCKET_NAME: "tars-okf"
+  TARS_S3_REGION: "us-east-1"
+

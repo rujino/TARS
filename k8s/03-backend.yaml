@@ -137,6 +137,42 @@ spec:
                   name: tars-secret
                   key: TARS_GOOGLE_CLIENT_SECRET
                   optional: true
+            - name: TARS_STORAGE_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_STORAGE_BACKEND
+                  optional: true
+            - name: TARS_S3_ENDPOINT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_S3_ENDPOINT_URL
+                  optional: true
+            - name: TARS_S3_BUCKET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_S3_BUCKET_NAME
+                  optional: true
+            - name: TARS_S3_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_S3_REGION
+                  optional: true
+            - name: TARS_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tars-secret
+                  key: TARS_S3_ACCESS_KEY
+                  optional: true
+            - name: TARS_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tars-secret
+                  key: TARS_S3_SECRET_KEY
+                  optional: true
           volumeMounts:
             - name: storage-data
               mountPath: /app/storage
