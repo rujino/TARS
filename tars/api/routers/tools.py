@@ -10,14 +10,26 @@ from typing import Any, Literal
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.api.dependencies import get_current_user, get_db_session, get_tool_registry
+from tars.api.schemas.tools import (
+    GoogleAuthCallbackResponse,
+    GoogleAuthUrlResponse,
+    GoogleCredentialsRequest,
+    GoogleCredentialsResponse,
+    GoogleMockLinkResponse,
+    ServerInfo,
+    ServerTestResponse,
+    ToolItem,
+    ToolsServersResponse,
+    ToolToggleRequest,
+    ToolToggleResponse,
+)
 from tars.config import get_settings
 from tars.core.security import create_access_token, decode_access_token
 from tars.db.models import TARSSettings, User
+from tars.services.user_settings import UserSettingsService
 from tars.tools.mcp.adapter import MCPToolAdapter
 from tars.tools.mcp.client import AsyncMCPClient
 from tars.tools.mcp.models import MCPTransportType
@@ -35,142 +47,7 @@ GOOGLE_SCOPES: list[str] = [
 ]
 
 
-# ============================================================================
-# Pydantic Response & Request Schemas
-# ============================================================================
 
-
-class ToolItem(BaseModel):
-    """Metadata and status for an individual tool."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    name: str = Field(..., description="Unique tool identifier")
-    description: str = Field(default="", description="Functional description")
-    active: bool = Field(default=True, description="Whether tool is active for user")
-    enabled: bool = Field(default=True, description="Alias for active")
-    parameters: dict[str, Any] = Field(
-        default_factory=dict, description="JSON Schema parameters"
-    )
-
-
-class ServerInfo(BaseModel):
-    """Server status and tool inventory item."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    id: str = Field(..., description="Server identifier")
-    name: str = Field(..., description="Display name")
-    type: Literal["builtin", "mcp"] = Field(..., description="Server type")
-    status: Literal["connected", "offline", "mock"] = Field(
-        ..., description="Connection status"
-    )
-    transport: str | None = Field(default=None, description="Transport type")
-    url: str | None = Field(default=None, description="Server endpoint URL")
-    description: str = Field(default="", description="Description of integration")
-    total_tools: int = Field(default=0, description="Total tools provided")
-    total_tools_count: int = Field(default=0, description="Total tools count")
-    active_tools: int = Field(default=0, description="Active tools count")
-    active_tools_count: int = Field(default=0, description="Active tools count")
-    auth_required: bool = Field(
-        default=False, description="Whether OAuth linking is supported"
-    )
-    is_linked: bool = Field(
-        default=False, description="Whether account credentials are linked"
-    )
-    is_mock: bool = Field(
-        default=False, description="Whether server is running in mock mode"
-    )
-    account_email: str | None = Field(
-        default=None, description="Linked account email"
-    )
-    tools: list[ToolItem] = Field(
-        default_factory=list, description="List of tools"
-    )
-
-
-class ToolsServersResponse(BaseModel):
-    """Payload returning all registered tool servers."""
-
-    servers: list[ServerInfo] = Field(default_factory=list)
-
-
-class ToolToggleRequest(BaseModel):
-    """Request payload for setting explicit enabled/active state."""
-
-    model_config = ConfigDict(extra="ignore")
-    active: bool | None = Field(default=None, description="Explicit active state")
-    enabled: bool | None = Field(default=None, description="Explicit enabled state")
-
-
-class ToolToggleResponse(BaseModel):
-    """Result of tool toggle action."""
-
-    tool_name: str
-    active: bool
-    enabled: bool
-    disabled_tools: list[str]
-    user_id: str
-    message: str
-
-
-class GoogleAuthUrlResponse(BaseModel):
-    """OAuth2 authorization URL payload."""
-
-    url: str
-    state: str
-    scopes: list[str]
-
-
-class GoogleAuthCallbackResponse(BaseModel):
-    """OAuth2 callback result."""
-
-    status: str
-    provider: str = "google"
-    linked: bool
-    is_mock: bool = False
-    account_email: str | None = None
-    message: str
-
-
-class GoogleMockLinkResponse(BaseModel):
-    """Mock linking toggle result."""
-
-    status: str = "success"
-    provider: str = "google"
-    linked: bool
-    mock_linked: bool
-    is_mock: bool
-    account_email: str | None = None
-    message: str
-
-
-class GoogleCredentialsRequest(BaseModel):
-    """Payload to configure user or custom Google OAuth2 credentials."""
-
-    model_config = ConfigDict(extra="ignore")
-    client_id: str | None = Field(default=None, description="Google OAuth2 Client ID")
-    client_secret: str | None = Field(default=None, description="Google OAuth2 Client Secret")
-
-
-class GoogleCredentialsResponse(BaseModel):
-    """Configuration status for Google OAuth credentials."""
-
-    model_config = ConfigDict(extra="ignore")
-    client_id: str = ""
-    has_client_secret: bool = False
-    is_configured: bool = False
-    is_linked: bool = False
-    account_email: str | None = None
-
-
-class ServerTestResponse(BaseModel):
-    """Result of server connection test."""
-
-    server_id: str
-    status: Literal["connected", "offline", "mock"]
-    latency_ms: float
-    message: str
 
 
 # ============================================================================
@@ -179,28 +56,8 @@ class ServerTestResponse(BaseModel):
 
 
 async def _get_or_create_settings(db: AsyncSession, user_id: str) -> TARSSettings:
-    """Helper to fetch active settings or seed defaults."""
-    stmt = select(TARSSettings).where(TARSSettings.user_id == user_id)
-    res = await db.execute(stmt)
-    settings = res.scalar_one_or_none()
-
-    if settings is None:
-        now = datetime.now(UTC)
-        settings = TARSSettings(
-            user_id=user_id,
-            humor_level=0.90,
-            honesty_level=0.95,
-            mode="companion",
-            disabled_tools=[],
-            google_mock_linked=False,
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(settings)
-        await db.commit()
-        await db.refresh(settings)
-
-    return settings
+    """Helper delegating to UserSettingsService."""
+    return await UserSettingsService(db).get_or_create_settings(user_id)
 
 
 # ============================================================================
@@ -219,7 +76,6 @@ async def list_servers(
     tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> ToolsServersResponse:
     """Return all registered servers (Google Workspace and MCP servers) with active/disabled tool states."""
-    app_settings = get_settings()
     user_settings = await _get_or_create_settings(db, current_user.id)
     disabled_set = set(user_settings.disabled_tools or [])
 

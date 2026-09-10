@@ -17,17 +17,42 @@ from tars.api.schemas.config import (
     TARSConfigResponse,
     TARSConfigUpdateRequest,
 )
+from tars.api.schemas.tools import (
+    GoogleAuthCallbackResponse,
+    GoogleAuthUrlResponse,
+    GoogleCredentialsRequest,
+    GoogleCredentialsResponse,
+    GoogleMockLinkResponse,
+    ServerInfo,
+    ServerTestResponse,
+    ToolItem,
+    ToolsServersResponse,
+    ToolToggleRequest,
+    ToolToggleResponse,
+)
 
 __all__ = [
     "ChatStreamRequest",
+    "GoogleAuthCallbackResponse",
+    "GoogleAuthUrlResponse",
+    "GoogleCredentialsRequest",
+    "GoogleCredentialsResponse",
+    "GoogleMockLinkResponse",
     "GreetingResponse",
+    "ServerInfo",
+    "ServerTestResponse",
     "SessionInfoResponse",
     "TARSConfigResponse",
     "TARSConfigUpdateRequest",
     "TokenResponse",
+    "ToolItem",
+    "ToolToggleRequest",
+    "ToolToggleResponse",
+    "ToolsServersResponse",
     "UserLoginRequest",
     "UserResponse",
     "UserSignupRequest",
     "WSMessageIn",
     "WSMessageOut",
 ]
+
