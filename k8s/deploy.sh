@@ -43,6 +43,8 @@ kubectl apply -f "${PROJECT_ROOT}/k8s/00-namespace.yaml"
 kubectl apply -f "${PROJECT_ROOT}/k8s/01-config.yaml"
 kubectl apply -f "${PROJECT_ROOT}/k8s/01-secret.yaml"
 kubectl apply -f "${PROJECT_ROOT}/k8s/02-db.yaml"
+echo "📦 Applying SeaweedFS S3 Storage..."
+kubectl apply -f "${PROJECT_ROOT}/k8s/07-seaweedfs.yaml"
 kubectl apply -f "${PROJECT_ROOT}/k8s/03-backend.yaml"
 
 if [ -f "${PROJECT_ROOT}/k8s/04-cluster-issuer.yaml" ]; then

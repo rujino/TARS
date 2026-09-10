@@ -57,3 +57,19 @@ class OKFSerializationError(OKFError):
 
 class OKFVersionError(OKFValidationError):
     """Raised when an unsupported OKF specification version is encountered."""
+
+
+class OKFStorageError(OKFError):
+    """Raised when an underlying storage read/write operation fails."""
+
+    def __init__(self, message: str, path: str | None = None) -> None:
+        super().__init__(message)
+        self.path = path
+
+
+class OKFNotFoundError(OKFStorageError):
+    """Raised when a requested OKF document or index does not exist."""
+
+
+class OKFDocumentAlreadyExistsError(OKFStorageError):
+    """Raised when attempting to create a document that already exists without overwrite flag."""

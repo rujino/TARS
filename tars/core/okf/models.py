@@ -76,6 +76,7 @@ class OKFMetadata(BaseModel):
     id: str = Field(..., min_length=1, max_length=128, description="Unique slug ID")
     type: OKFType = Field(..., description="Knowledge type")
     title: str = Field(..., min_length=1, max_length=256, description="Document title")
+    description: str | None = Field(default=None, description="Short summary/description")
     category: str | None = Field(default=None, max_length=64, description="High-level category")
     tags: list[str] = Field(default_factory=list, description="Keyword tags")
     importance: OKFImportance = Field(default=OKFImportance.MEDIUM, description="Importance level")
@@ -201,3 +202,8 @@ class OKFDocument(BaseModel):
     @property
     def category(self) -> str | None:
         return self.metadata.category
+
+    @property
+    def description(self) -> str | None:
+        return self.metadata.description
+

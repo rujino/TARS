@@ -20,16 +20,12 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocketState
 
-from tars.adapters.gemini import GeminiAdapter
-from tars.adapters.llamacpp import LlamaCppAdapter
-from tars.adapters.router import HybridLLMRouter
 from tars.api.dependencies import (
     get_agent_chat_service,
     get_current_user,
-    get_db_session,
+    get_proactive_greeting_service,
     get_storage_manager,
     get_tool_registry,
 )
@@ -55,11 +51,6 @@ router = APIRouter(prefix="/chat", tags=["Chat & Streaming"])
 _execute_background_knowledge_extraction = execute_background_knowledge_extraction
 
 
-def _get_default_router() -> HybridLLMRouter:
-    """Create default HybridLLMRouter with Gemini and local SLM adapters."""
-    return HybridLLMRouter(gemini_adapter=GeminiAdapter(), slm_adapter=LlamaCppAdapter())
-
-
 @router.get(
     "/greeting",
     response_model=GreetingResponse,
@@ -68,16 +59,9 @@ def _get_default_router() -> HybridLLMRouter:
 async def get_proactive_greeting(
     timezone: str = Query(default="Asia/Seoul", description="Client IANA timezone"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session),
-    storage: FileStorageManager = Depends(get_storage_manager),
+    greeting_service: ProactiveGreetingService = Depends(get_proactive_greeting_service),
 ) -> GreetingResponse:
     """Generate a 5-factor proactive, witty 1-2 sentence opening greeting in Korean."""
-    llm_router = _get_default_router()
-    greeting_service = ProactiveGreetingService(
-        db_session=db,
-        storage_manager=storage,
-        llm_adapter=llm_router,
-    )
     return await greeting_service.generate_greeting(
         user_id=current_user.id,
         client_timezone=timezone,

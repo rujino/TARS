@@ -33,6 +33,31 @@ class Settings(BaseSettings):
         default=Path("./storage"),
         description="Root directory for multi-tenant file storage",
     )
+    storage_backend: Literal["local", "s3"] = Field(
+        default="local",
+        description="Storage backend type ('local' or 's3')",
+    )
+    s3_endpoint_url: str = Field(
+        default="http://seaweedfs-s3.tars.svc.cluster.local:8333",
+        description="S3 endpoint URL (SeaweedFS / AWS S3)",
+    )
+    s3_bucket_name: str = Field(
+        default="tars-okf",
+        description="Target S3 bucket name for OKF knowledge storage",
+    )
+    s3_region: str = Field(
+        default="us-east-1",
+        description="S3 region name",
+    )
+    s3_access_key: str = Field(
+        default="tars-admin-access-key",
+        description="S3 access key",
+    )
+    s3_secret_key: str = Field(
+        default="tars-admin-secret-key-at-least-16-chars",
+        description="S3 secret key",
+    )
+
 
     # Static files settings
     static_dir: Path = Field(
