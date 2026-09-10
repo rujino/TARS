@@ -11,9 +11,9 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
-from tars.adapters.base import BaseLLMAdapter
 from tars.core.session.models import TopicShiftResult
-from tars.db.models import ChatMessage
+from tars.domains.chat.models import ChatMessage
+from tars.engine.adapters.base import BaseLLMAdapter
 
 logger = logging.getLogger("tars.core.session.detector")
 

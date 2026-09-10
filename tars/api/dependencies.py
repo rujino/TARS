@@ -12,16 +12,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.config import get_settings
+from tars.core.database import get_session_factory
 from tars.core.security import decode_access_token
-from tars.db.models import User
-from tars.db.session import get_session_factory
-from tars.storage.manager import FileStorageManager
-from tars.tools.google.calendar import GoogleCalendarAdapter
-from tars.tools.google.gmail import GmailAdapter
-from tars.tools.mcp.adapter import register_mcp_server_tools
-from tars.tools.mcp.client import AsyncMCPClient
-from tars.tools.mcp.models import MCPServerConfig
-from tars.tools.registry import ToolRegistry
+from tars.domains.auth.models import User
+from tars.domains.knowledge.storage.manager import FileStorageManager
+from tars.domains.tools.google.calendar import GoogleCalendarAdapter
+from tars.domains.tools.google.gmail import GmailAdapter
+from tars.domains.tools.mcp.adapter import register_mcp_server_tools
+from tars.domains.tools.mcp.client import AsyncMCPClient
+from tars.domains.tools.mcp.models import MCPServerConfig
+from tars.domains.tools.registry import ToolRegistry
 
 logger = logging.getLogger("tars.api.dependencies")
 
@@ -52,7 +52,7 @@ async def build_tool_registry() -> ToolRegistry:
     settings = get_settings()
     registry = ToolRegistry()
 
-    # 1. Google Workspace tools (Auto-configured with mock/real mode based on credentials)
+    # 1. Google Workspace tools
     calendar_adapter = GoogleCalendarAdapter()
     gmail_adapter = GmailAdapter()
     registry.register_many(calendar_adapter.get_tools())
@@ -137,7 +137,7 @@ async def get_agent_chat_service(
     tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> Any:
     """Provide initialized AgentChatService instance."""
-    from tars.services.agent_chat import AgentChatService
+    from tars.domains.chat.services.agent_chat import AgentChatService
 
     return AgentChatService(
         db_session=db,
@@ -151,14 +151,12 @@ async def get_proactive_greeting_service(
     storage: FileStorageManager = Depends(get_storage_manager),
 ) -> Any:
     """Provide initialized ProactiveGreetingService instance."""
-    from tars.adapters.gemini import GeminiAdapter
-    from tars.adapters.llamacpp import LlamaCppAdapter
-    from tars.adapters.router import HybridLLMRouter
-    from tars.services.greeting import ProactiveGreetingService
+    from tars.domains.chat.services.greeting import ProactiveGreetingService
+    from tars.engine.adapters.gemini import GeminiAdapter
+    from tars.engine.adapters.llamacpp import LlamaCppAdapter
+    from tars.engine.adapters.router import HybridLLMRouter
 
-    llm_router = HybridLLMRouter(
-        gemini_adapter=GeminiAdapter(), slm_adapter=LlamaCppAdapter()
-    )
+    llm_router = HybridLLMRouter(gemini_adapter=GeminiAdapter(), slm_adapter=LlamaCppAdapter())
     return ProactiveGreetingService(
         db_session=db,
         storage_manager=storage,
@@ -170,7 +168,7 @@ async def get_auth_service(
     db: AsyncSession = Depends(get_db_session),
 ) -> Any:
     """Provide initialized AuthService instance."""
-    from tars.services.auth import AuthService
+    from tars.domains.auth.service import AuthService
 
     return AuthService(db=db)
 
@@ -179,7 +177,7 @@ async def get_user_settings_service(
     db: AsyncSession = Depends(get_db_session),
 ) -> Any:
     """Provide initialized UserSettingsService instance."""
-    from tars.services.user_settings import UserSettingsService
+    from tars.domains.persona.service import UserSettingsService
 
     return UserSettingsService(db=db)
 
@@ -189,11 +187,9 @@ async def get_tool_service(
     tool_registry: ToolRegistry = Depends(get_tool_registry),
 ) -> Any:
     """Provide initialized ToolService instance."""
-    from tars.api.routers import tools as tools_router_mod
-    from tars.services.tool_service import ToolService
+    from tars.domains.tools.service import ToolService
 
-    settings_fn = getattr(tools_router_mod, "get_settings", get_settings)
-    return ToolService(db=db, tool_registry=tool_registry, settings=settings_fn())
+    return ToolService(db=db, tool_registry=tool_registry, settings=get_settings())
 
 
 __all__ = [
