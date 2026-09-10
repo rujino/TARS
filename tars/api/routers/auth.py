@@ -1,6 +1,7 @@
 """Authentication and user management REST router.
 
 Thin Controller pattern: Delegates registration, verification, and token issuance to AuthService.
+Maps domain-level exceptions to HTTP status codes.
 """
 
 from __future__ import annotations
@@ -8,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from tars.api.dependencies import get_auth_service, get_current_user
 from tars.api.schemas import (
@@ -17,7 +18,13 @@ from tars.api.schemas import (
     UserSignupRequest,
 )
 from tars.db.models import User
-from tars.services.auth import AuthService
+from tars.services.auth import (
+    AuthService,
+    EmailAlreadyRegisteredError,
+    InactiveUserError,
+    InvalidCredentialsError,
+    UsernameAlreadyTakenError,
+)
 
 logger = logging.getLogger("tars.api.routers.auth")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -34,7 +41,18 @@ async def signup(
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict[str, Any]:
     """Register a new user, create default TARS settings, and return access token."""
-    return await auth_service.signup(payload)
+    try:
+        return await auth_service.signup(payload)
+    except UsernameAlreadyTakenError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already taken",
+        )
+    except EmailAlreadyRegisteredError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email address already registered",
+        )
 
 
 @router.post(
@@ -47,7 +65,19 @@ async def login(
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict[str, Any]:
     """Verify username and password and generate fresh JWT token."""
-    return await auth_service.login(payload)
+    try:
+        return await auth_service.login(payload)
+    except InvalidCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except InactiveUserError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User account is inactive",
+        )
 
 
 @router.get(

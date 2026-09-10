@@ -22,9 +22,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from starlette.websockets import WebSocketState
 
-from tars.adapters.gemini import GeminiAdapter
-from tars.adapters.llamacpp import LlamaCppAdapter
-from tars.adapters.router import HybridLLMRouter
 from tars.api.dependencies import (
     get_agent_chat_service,
     get_current_user,
@@ -52,11 +49,6 @@ router = APIRouter(prefix="/chat", tags=["Chat & Streaming"])
 
 # Compatibility alias for backward test references
 _execute_background_knowledge_extraction = execute_background_knowledge_extraction
-
-
-def _get_default_router() -> HybridLLMRouter:
-    """Create default HybridLLMRouter with Gemini and local SLM adapters."""
-    return HybridLLMRouter(gemini_adapter=GeminiAdapter(), slm_adapter=LlamaCppAdapter())
 
 
 @router.get(

@@ -8,23 +8,17 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.api.dependencies import get_current_user, get_user_settings_service
 from tars.api.schemas import (
     TARSConfigResponse,
     TARSConfigUpdateRequest,
 )
-from tars.db.models import TARSSettings, User
+from tars.db.models import User
 from tars.services.user_settings import UserSettingsService
 
 logger = logging.getLogger("tars.api.routers.config")
 router = APIRouter(prefix="/tars/config", tags=["TARS Persona Configuration"])
-
-
-async def _get_or_create_settings(db: AsyncSession, user_id: str) -> TARSSettings:
-    """Backward compatibility helper delegating to UserSettingsService."""
-    return await UserSettingsService(db).get_or_create_settings(user_id)
 
 
 @router.get(

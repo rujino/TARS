@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +19,35 @@ from tars.core.security import (
     verify_password_async,
 )
 from tars.db.models import TARSSettings, User
+
+# ============================================================================
+# Domain Exceptions (Decoupled from HTTP / Web Framework)
+# ============================================================================
+
+
+class AuthError(Exception):
+    """Base exception for authentication service errors."""
+
+
+class UsernameAlreadyTakenError(AuthError):
+    """Raised when signup username is already registered."""
+
+
+class EmailAlreadyRegisteredError(AuthError):
+    """Raised when signup email is already registered."""
+
+
+class InvalidCredentialsError(AuthError):
+    """Raised when username or password does not match."""
+
+
+class InactiveUserError(AuthError):
+    """Raised when an authenticated user account is disabled."""
+
+
+# ============================================================================
+# Service
+# ============================================================================
 
 
 class AuthService:
@@ -36,14 +64,8 @@ class AuthService:
 
         if existing is not None:
             if existing.username == payload.username:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Username already taken",
-                )
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email address already registered",
-            )
+                raise UsernameAlreadyTakenError("Username already taken")
+            raise EmailAlreadyRegisteredError("Email address already registered")
 
         now = datetime.now(UTC)
         hashed_pwd = await get_password_hash_async(payload.password)
@@ -86,17 +108,10 @@ class AuthService:
         user = res.scalar_one_or_none()
 
         if user is None or not await verify_password_async(payload.password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid username or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise InvalidCredentialsError("Invalid username or password")
 
         if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User account is inactive",
-            )
+            raise InactiveUserError("User account is inactive")
 
         token = create_access_token(data={"sub": user.id})
         user_resp = UserResponse.model_validate(user).model_dump()
@@ -107,4 +122,11 @@ class AuthService:
         }
 
 
-__all__ = ["AuthService"]
+__all__ = [
+    "AuthError",
+    "AuthService",
+    "EmailAlreadyRegisteredError",
+    "InactiveUserError",
+    "InvalidCredentialsError",
+    "UsernameAlreadyTakenError",
+]

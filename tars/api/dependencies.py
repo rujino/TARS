@@ -184,6 +184,18 @@ async def get_user_settings_service(
     return UserSettingsService(db=db)
 
 
+async def get_tool_service(
+    db: AsyncSession = Depends(get_db_session),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+) -> Any:
+    """Provide initialized ToolService instance."""
+    from tars.api.routers import tools as tools_router_mod
+    from tars.services.tool_service import ToolService
+
+    settings_fn = getattr(tools_router_mod, "get_settings", get_settings)
+    return ToolService(db=db, tool_registry=tool_registry, settings=settings_fn())
+
+
 __all__ = [
     "close_tool_registry",
     "get_agent_chat_service",
@@ -193,5 +205,6 @@ __all__ = [
     "get_proactive_greeting_service",
     "get_storage_manager",
     "get_tool_registry",
+    "get_tool_service",
     "get_user_settings_service",
 ]
