@@ -1,7 +1,7 @@
 """TARS Knowledge Curator Package."""
 
 from tars.domains.knowledge.curator.agent import KnowledgeCuratorAgent
-from tars.domains.knowledge.curator.models import (
+from tars.domains.knowledge.curator.schemas import (
     AutoAcceptReviewHandler,
     CurationProposal,
     ICurationReviewHandler,

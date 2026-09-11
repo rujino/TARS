@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from tars.domains.tools.mcp.models import (
+from tars.domains.tools.mcp.schemas import (
     MCPCallResult,
     MCPServerConfig,
     MCPToolMeta,

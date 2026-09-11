@@ -2,7 +2,7 @@
 
 from tars.domains.tools.mcp.adapter import MCPToolAdapter, register_mcp_server_tools
 from tars.domains.tools.mcp.client import AsyncMCPClient
-from tars.domains.tools.mcp.models import (
+from tars.domains.tools.mcp.schemas import (
     MCPCallResult,
     MCPServerConfig,
     MCPToolMeta,

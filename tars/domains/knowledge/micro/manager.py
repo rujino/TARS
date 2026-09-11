@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from tars.config import get_settings
-from tars.domains.knowledge.micro.models import MicroFact, UserMicroFactProfile
+from tars.domains.knowledge.micro.schemas import MicroFact, UserMicroFactProfile
 from tars.domains.knowledge.storage.manager import (
     FileStorageManager,
     StorageIOError,

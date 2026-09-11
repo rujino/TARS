@@ -8,7 +8,7 @@ from tars.engine.orchestrator.graph import (
     compile_tars_graph,
     create_tars_graph,
 )
-from tars.engine.orchestrator.models import AgentStreamEvent
+from tars.engine.orchestrator.schemas import AgentStreamEvent
 from tars.engine.orchestrator.nodes import (
     llm_node,
     postprocess_node,

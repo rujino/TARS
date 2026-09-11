@@ -11,7 +11,7 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
-from tars.core.session.models import TopicShiftResult
+from tars.core.session.schemas import TopicShiftResult
 from tars.domains.chat.models import ChatMessage
 from tars.engine.adapters.base import BaseLLMAdapter
 

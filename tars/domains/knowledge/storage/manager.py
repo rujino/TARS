@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 from tars.config import get_settings
-from tars.domains.knowledge.spec.models import OKFDocument
+from tars.domains.knowledge.spec.schemas import OKFDocument
 from tars.domains.knowledge.spec.parser import parse_okf_text
 from tars.domains.knowledge.spec.serializer import serialize_okf_document
 

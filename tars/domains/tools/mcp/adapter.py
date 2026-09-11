@@ -7,7 +7,7 @@ from typing import Any
 
 from tars.domains.tools.base import BaseTool
 from tars.domains.tools.mcp.client import AsyncMCPClient
-from tars.domains.tools.mcp.models import MCPToolMeta
+from tars.domains.tools.mcp.schemas import MCPToolMeta
 from tars.domains.tools.registry import ToolRegistry
 
 logger = logging.getLogger("tars.domains.tools.mcp.adapter")

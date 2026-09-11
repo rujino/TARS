@@ -14,7 +14,7 @@ from tars.domains.knowledge.spec.errors import (
     OKFValidationError,
     OKFVersionError,
 )
-from tars.domains.knowledge.spec.models import (
+from tars.domains.knowledge.spec.schemas import (
     ID_PATTERN,
     OKF2Document,
     OKF2Metadata,

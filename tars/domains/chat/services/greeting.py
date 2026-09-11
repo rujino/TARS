@@ -148,7 +148,7 @@ class ProactiveGreetingService:
 
         idle_str = self._format_idle_duration(idle_seconds)
 
-        from tars.domains.knowledge.slicer.models import SlicerProfile
+        from tars.domains.knowledge.slicer.schemas import SlicerProfile
 
         # 4. Sliced User OKF Knowledge
         slicer = DynamicSlicerEngine(storage_manager=self.storage, db_session=self.db)

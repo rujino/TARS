@@ -15,7 +15,7 @@ from tars.domains.knowledge.micro import (
 )
 from tars.domains.knowledge.models import UserWikiIndex
 from tars.domains.knowledge.slicer.engine import DynamicSlicerEngine
-from tars.domains.knowledge.spec.models import (
+from tars.domains.knowledge.spec.schemas import (
     OKF2Document,
     OKF2Metadata,
     OKFDocument,

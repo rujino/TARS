@@ -9,7 +9,7 @@ from tars.core.session.manager import (
     SHORT_TERM_THRESHOLD_SECONDS,
     SmartSessionManager,
 )
-from tars.core.session.models import (
+from tars.core.session.schemas import (
     RoutingDecision,
     SessionRoutingAction,
     SessionRoutingDecision,

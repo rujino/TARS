@@ -35,9 +35,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tars.config import get_settings
 from tars.core.session.detector import RESET_COMMAND_REGEX
 from tars.core.session.manager import SmartSessionManager
-from tars.core.session.models import SessionRoutingAction, SessionRoutingDecision
+from tars.core.session.schemas import SessionRoutingAction, SessionRoutingDecision
 from tars.domains.knowledge.slicer.engine import DynamicSlicerEngine
-from tars.domains.knowledge.spec.models import OKFDocument
+from tars.domains.knowledge.spec.schemas import OKFDocument
 from tars.domains.knowledge.storage.manager import FileStorageManager
 from tars.domains.persona.models import TARSSettings
 from tars.domains.persona.prompts import SYSTEM_DIRECTIVE_PRIORITY, TARSPersonaManager

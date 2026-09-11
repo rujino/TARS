@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from tars.domains.knowledge.spec.errors import OKFSerializationError
-from tars.domains.knowledge.spec.models import OKFDocument
+from tars.domains.knowledge.spec.schemas import OKFDocument
 
 
 def serialize_okf_document(doc: OKFDocument) -> str:

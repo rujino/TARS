@@ -14,7 +14,7 @@ from langchain_core.messages import BaseMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tars.domains.knowledge.slicer.models import (
+from tars.domains.knowledge.slicer.schemas import (
     CHAT_TYPE_MAP,
     GREETING_TYPE_MAP,
     IMPORTANCE_SCORE_MAP,
@@ -29,7 +29,7 @@ from tars.domains.knowledge.slicer.models import (
     SlicerProfile,
     SlicerWeights,
 )
-from tars.domains.knowledge.spec.models import OKFDocument, OKFMetadata
+from tars.domains.knowledge.spec.schemas import OKFDocument, OKFMetadata
 
 logger = logging.getLogger("tars.domains.knowledge.slicer.engine")
 

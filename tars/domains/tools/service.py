@@ -15,7 +15,7 @@ from tars.core.security import create_access_token, decode_access_token
 from tars.domains.persona.service import UserSettingsService
 from tars.domains.tools.mcp.adapter import MCPToolAdapter
 from tars.domains.tools.mcp.client import AsyncMCPClient
-from tars.domains.tools.mcp.models import MCPTransportType
+from tars.domains.tools.mcp.schemas import MCPTransportType
 from tars.domains.tools.registry import ToolRegistry
 from tars.domains.tools.schemas import (
     GoogleAuthCallbackResponse,

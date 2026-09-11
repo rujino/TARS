@@ -24,7 +24,7 @@ from tars.engine.adapters.gemini import GeminiAdapter
 from tars.engine.adapters.llamacpp import LlamaCppAdapter
 from tars.engine.adapters.router import HybridLLMRouter
 from tars.engine.orchestrator.graph import build_tars_graph
-from tars.engine.orchestrator.models import AgentStreamEvent
+from tars.engine.orchestrator.schemas import AgentStreamEvent
 from tars.engine.orchestrator.observability import (
     flush_langfuse_handler,
     get_langfuse_callback_handler,

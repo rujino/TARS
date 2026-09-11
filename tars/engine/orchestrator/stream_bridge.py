@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import BackgroundTasks
 
-from tars.engine.orchestrator.models import AgentStreamEvent
+from tars.engine.orchestrator.schemas import AgentStreamEvent
 from tars.engine.orchestrator.state import TARSState
 
 logger = logging.getLogger("tars.engine.orchestrator.stream_bridge")

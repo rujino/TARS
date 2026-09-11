@@ -14,15 +14,15 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from tars.domains.knowledge.curator.models import (
+from tars.domains.knowledge.curator.schemas import (
     AutoAcceptReviewHandler,
     CurationProposal,
     ICurationReviewHandler,
 )
 from tars.domains.knowledge.curator.prompts import CURATOR_SYSTEM_PROMPT
 from tars.domains.knowledge.micro.manager import MicroFactManager
-from tars.domains.knowledge.micro.models import MicroFact
-from tars.domains.knowledge.spec.models import (
+from tars.domains.knowledge.micro.schemas import MicroFact
+from tars.domains.knowledge.spec.schemas import (
     OKFDocument,
     OKFImportance,
     OKFMetadata,

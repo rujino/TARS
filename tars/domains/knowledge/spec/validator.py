@@ -7,7 +7,7 @@ from typing import Any
 import pydantic
 
 from tars.domains.knowledge.spec.errors import OKFValidationError, OKFVersionError
-from tars.domains.knowledge.spec.models import ID_PATTERN, OKFDocument, OKFMetadata
+from tars.domains.knowledge.spec.schemas import ID_PATTERN, OKFDocument, OKFMetadata
 
 SUPPORTED_MAJOR_VERSIONS = {"1", "1.0"}
 

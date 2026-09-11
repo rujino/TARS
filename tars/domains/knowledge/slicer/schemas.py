@@ -9,7 +9,7 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tars.domains.knowledge.spec.models import OKFDocument, OKFImportance, OKFType
+from tars.domains.knowledge.spec.schemas import OKFDocument, OKFImportance, OKFType
 
 
 class SlicerProfile(str, Enum):

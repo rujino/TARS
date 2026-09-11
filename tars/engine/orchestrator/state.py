@@ -12,8 +12,8 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-from tars.core.session.models import RoutingDecision
-from tars.domains.knowledge.spec.models import OKFDocument
+from tars.core.session.schemas import RoutingDecision
+from tars.domains.knowledge.spec.schemas import OKFDocument
 from tars.engine.adapters.base import ToolCallData
 
 # Default persona and execution configuration constants
