@@ -9,6 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from tars.domains.knowledge.spec.wikilink import WikiLink, extract_wikilinks
+
 ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
 
@@ -20,6 +22,15 @@ class OKFType(StrEnum):
     ENTITY = "entity"
     PROCEDURE = "procedure"
     PREFERENCE = "preference"
+    REFERENCE = "reference"
+
+
+class OKFStatus(StrEnum):
+    """Document verification and lifecycle status."""
+
+    DRAFT = "draft"
+    VERIFIED = "verified"
+    DEPRECATED = "deprecated"
 
 
 class OKFImportance(StrEnum):
@@ -72,14 +83,16 @@ class OKFMetadata(BaseModel):
 
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
-    okf_version: str = Field(default="1.0", description="OKF Specification version")
+    okf_version: str = Field(default="2.0", description="OKF Specification version")
     id: str = Field(..., min_length=1, max_length=128, description="Unique slug ID")
     type: OKFType = Field(..., description="Knowledge type")
     title: str = Field(..., min_length=1, max_length=256, description="Document title")
     description: str | None = Field(default=None, description="Short summary/description")
     category: str | None = Field(default=None, max_length=64, description="High-level category")
     tags: list[str] = Field(default_factory=list, description="Keyword tags")
+    aliases: list[str] = Field(default_factory=list, description="Alternative lookup titles/aliases")
     importance: OKFImportance = Field(default=OKFImportance.MEDIUM, description="Importance level")
+    status: OKFStatus = Field(default=OKFStatus.VERIFIED, description="Document verification status")
     source: OKFSource = Field(default=OKFSource.MANUAL, description="Creation source")
     relations: OKFRelations = Field(default_factory=OKFRelations, description="Relation graph")
     created_at: datetime = Field(
@@ -126,6 +139,25 @@ class OKFMetadata(BaseModel):
         if isinstance(v, str):
             tags = [t.strip().lower() for t in v.split(",") if t.strip()]
             return list(dict.fromkeys(tags))
+        return []
+
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def normalize_aliases(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, (list, set, tuple)):
+            seen: set[str] = set()
+            result: list[str] = []
+            for item in v:
+                alias = str(item).strip()
+                if alias and alias not in seen:
+                    seen.add(alias)
+                    result.append(alias)
+            return result
+        if isinstance(v, str):
+            aliases = [a.strip() for a in v.split(",") if a.strip()]
+            return list(dict.fromkeys(aliases))
         return []
 
     @field_validator("created_at", "updated_at", mode="before")
@@ -206,3 +238,45 @@ class OKFDocument(BaseModel):
     @property
     def description(self) -> str | None:
         return self.metadata.description
+
+    @property
+    def status(self) -> OKFStatus:
+        return self.metadata.status
+
+    @property
+    def aliases(self) -> list[str]:
+        return self.metadata.aliases
+
+    @property
+    def wikilinks(self) -> list[WikiLink]:
+        """Extract Obsidian-style [[target_id|label]] links from markdown content."""
+        return extract_wikilinks(self.content)
+
+    @property
+    def outgoing_link_ids(self) -> list[str]:
+        """Unique target document IDs referenced via wiki-links or explicit relations."""
+        targets: list[str] = [link.target_id for link in self.wikilinks]
+        if self.metadata.relations:
+            targets.extend(self.metadata.relations.depends_on)
+            targets.extend(self.metadata.relations.related_to)
+        return list(dict.fromkeys(targets))
+
+
+# OKF 2.0 Aliases
+OKF2Metadata = OKFMetadata
+OKF2Document = OKFDocument
+
+__all__ = [
+    "ID_PATTERN",
+    "OKF2Document",
+    "OKF2Metadata",
+    "OKFDocument",
+    "OKFImportance",
+    "OKFMetadata",
+    "OKFRelations",
+    "OKFSource",
+    "OKFStatus",
+    "OKFType",
+    "WikiLink",
+    "extract_wikilinks",
+]
