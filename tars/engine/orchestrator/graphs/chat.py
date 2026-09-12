@@ -1,42 +1,35 @@
-"""LangGraph StateGraph construction, compilation, and execution for TARS.
+"""LangGraph StateGraph construction, compilation, and execution for TARS Chat Agent.
 
 Provides:
-- build_tars_graph: Builds StateGraph with session routing, reset handling, ReAct loop, and postprocessing.
-- compile_tars_graph: Compiles StateGraph with optional checkpointing.
-- create_tars_graph: Factory convenience function.
+- build_chat_graph: Builds StateGraph with session routing, reset handling, ReAct loop, and postprocessing.
+- compile_chat_graph: Compiles StateGraph with optional checkpointing.
+- create_chat_graph: Factory convenience function.
 - check_reset: Conditional edge routing function for session reset detection.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import BackgroundTasks
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.state import CompiledStateGraph
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from tars.core.session.manager import SmartSessionManager
-from tars.domains.knowledge.slicer.engine import DynamicSlicerEngine
-from tars.domains.knowledge.storage.manager import FileStorageManager
-from tars.domains.persona.prompts import TARSPersonaManager
-from tars.domains.tools.registry import ToolRegistry
-from tars.engine.adapters.router import HybridLLMRouter
-from tars.engine.orchestrator.nodes import (
-    llm_node,
-    postprocess_node,
-    prompt_node,
-    reset_node,
-    session_node,
-    should_continue,
-    slicer_node,
-    tool_node,
-)
 from tars.engine.orchestrator.state import TARSState
 
-logger = logging.getLogger("tars.engine.orchestrator.graph")
+if TYPE_CHECKING:
+    from fastapi import BackgroundTasks
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+    from langgraph.graph.state import CompiledStateGraph
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from tars.core.session.manager import SmartSessionManager
+    from tars.domains.knowledge.slicer.engine import DynamicSlicerEngine
+    from tars.domains.knowledge.storage.manager import FileStorageManager
+    from tars.domains.persona.prompts import TARSPersonaManager
+    from tars.domains.tools.registry import ToolRegistry
+    from tars.engine.adapters.router import HybridLLMRouter
+
+logger = logging.getLogger("tars.engine.orchestrator.graphs.chat")
 
 
 def check_reset(state: TARSState) -> str:
@@ -53,7 +46,7 @@ def check_reset(state: TARSState) -> str:
     return "slicer_node"
 
 
-def build_tars_graph(
+def build_chat_graph(
     router: HybridLLMRouter,
     slicer: DynamicSlicerEngine,
     persona_manager: TARSPersonaManager | None = None,
@@ -93,6 +86,17 @@ def build_tars_graph(
     Returns:
         Configured uncompiled StateGraph builder instance.
     """
+    from tars.engine.orchestrator.nodes import (
+        llm_node,
+        postprocess_node,
+        prompt_node,
+        reset_node,
+        session_node,
+        should_continue,
+        slicer_node,
+        tool_node,
+    )
+
     builder: StateGraph[Any, Any, Any, Any] = StateGraph(TARSState)
 
     # Wrap node executions with bound dependencies
@@ -177,14 +181,14 @@ def build_tars_graph(
     return builder
 
 
-def compile_tars_graph(
+def compile_chat_graph(
     builder: StateGraph[Any, Any, Any, Any],
     checkpointer: BaseCheckpointSaver[Any] | None = None,
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Compile the configured StateGraph into a runnable state machine.
 
     Args:
-        builder: Uncompiled StateGraph instance from build_tars_graph.
+        builder: Uncompiled StateGraph instance from build_chat_graph.
         checkpointer: Optional persistence checkpointer for multi-turn session state.
 
     Returns:
@@ -195,7 +199,7 @@ def compile_tars_graph(
     return builder.compile()
 
 
-def create_tars_graph(
+def create_chat_graph(
     router: HybridLLMRouter,
     slicer: DynamicSlicerEngine,
     persona_manager: TARSPersonaManager | None = None,
@@ -222,7 +226,7 @@ def create_tars_graph(
     Returns:
         CompiledStateGraph instance.
     """
-    builder = build_tars_graph(
+    builder = build_chat_graph(
         router=router,
         slicer=slicer,
         persona_manager=persona_manager,
@@ -232,12 +236,20 @@ def create_tars_graph(
         session_manager=session_manager,
         background_tasks=background_tasks,
     )
-    return compile_tars_graph(builder=builder, checkpointer=checkpointer)
+    return compile_chat_graph(builder=builder, checkpointer=checkpointer)
 
+
+# Backward-compatible aliases
+build_tars_graph = build_chat_graph
+compile_tars_graph = compile_chat_graph
+create_tars_graph = create_chat_graph
 
 __all__ = [
+    "build_chat_graph",
     "build_tars_graph",
     "check_reset",
+    "compile_chat_graph",
     "compile_tars_graph",
+    "create_chat_graph",
     "create_tars_graph",
 ]

@@ -23,13 +23,12 @@ from tars.engine.adapters.base import BaseLLMAdapter
 from tars.engine.adapters.gemini import GeminiAdapter
 from tars.engine.adapters.llamacpp import LlamaCppAdapter
 from tars.engine.adapters.router import HybridLLMRouter
-from tars.engine.orchestrator.graph import build_tars_graph
-from tars.engine.orchestrator.schemas import AgentStreamEvent
 from tars.engine.orchestrator.observability import (
     flush_langfuse_handler,
     get_langfuse_callback_handler,
     trace_attributes_context,
 )
+from tars.engine.orchestrator.schemas import AgentStreamEvent
 from tars.engine.orchestrator.state import TARSState
 from tars.engine.orchestrator.stream_bridge import LangGraphStreamBridge
 
@@ -136,7 +135,9 @@ class AgentChatService:
         background_tasks: BackgroundTasks | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Execute full agent turn with session routing, dynamic slicing, ReAct tools, and token streaming."""
-        graph = build_tars_graph(
+        from tars.engine.orchestrator.graphs import create_chat_graph
+
+        graph = create_chat_graph(
             router=self.router,
             slicer=self.slicer,
             persona_manager=self.persona_mgr,
@@ -144,7 +145,7 @@ class AgentChatService:
             db_session=self.db,
             storage_manager=self.storage,
             background_tasks=background_tasks,
-        ).compile()
+        )
 
         initial_state: TARSState = {
             "user_id": user_id,

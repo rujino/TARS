@@ -12,7 +12,6 @@ from langchain_core.messages import HumanMessage
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tars.core.session.manager import SmartSessionManager
 from tars.domains.chat.models import ChatSession
 from tars.domains.chat.schemas import GreetingResponse
 from tars.domains.knowledge.slicer.engine import DynamicSlicerEngine
@@ -159,6 +158,8 @@ class ProactiveGreetingService:
         )
 
         # 5. Ensure Active Session
+        from tars.core.session.manager import SmartSessionManager
+
         session_mgr = SmartSessionManager(
             db_session=self.db,
             storage_manager=self.storage,
