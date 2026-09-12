@@ -37,8 +37,9 @@ async def tool_node(
     pending_tool_calls: list[ToolCallData] = list(state.get("tool_calls", []))
 
     # Check if latest message in state is an AIMessage with tool_calls
-    if not pending_tool_calls and state.get("messages"):
-        last_msg = state["messages"][-1]
+    messages = state.get("messages")
+    if not pending_tool_calls and messages:
+        last_msg = messages[-1]
         msg_tool_calls = getattr(last_msg, "tool_calls", [])
         if msg_tool_calls:
             for tc in msg_tool_calls:

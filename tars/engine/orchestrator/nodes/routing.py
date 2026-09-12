@@ -20,8 +20,9 @@ def should_continue(state: TARSState) -> str:
         'tool_node' if pending tool calls remain within iteration budget, else 'postprocess_node'.
     """
     tool_calls = state.get("tool_calls", [])
-    if not tool_calls and state.get("messages"):
-        last_msg = state["messages"][-1]
+    messages = state.get("messages")
+    if not tool_calls and messages:
+        last_msg = messages[-1]
         msg_tool_calls = getattr(last_msg, "tool_calls", [])
         if msg_tool_calls:
             tool_calls = msg_tool_calls
