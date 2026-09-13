@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.core.security import (
     create_access_token,
+    create_ws_ticket,
     get_password_hash_async,
     verify_password_async,
 )
@@ -18,6 +19,7 @@ from tars.domains.auth.schemas import (
     UserLoginRequest,
     UserResponse,
     UserSignupRequest,
+    WebSocketTicketResponse,
 )
 from tars.domains.persona.models import TARSSettings
 
@@ -123,6 +125,11 @@ class AuthService:
             "token_type": "bearer",
             "user": user_resp,
         }
+
+    async def issue_ws_ticket(self, user_id: str) -> WebSocketTicketResponse:
+        """Issue a temporary 30-second single-use ticket for WebSocket authentication."""
+        ticket = create_ws_ticket(user_id=user_id, expires_in_seconds=30)
+        return WebSocketTicketResponse(ticket=ticket, expires_in=30)
 
 
 __all__ = [

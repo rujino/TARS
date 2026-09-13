@@ -6,16 +6,15 @@ Defines the central state dictionary that transitions through the StateGraph.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-if TYPE_CHECKING:
-    from tars.core.session.schemas import RoutingDecision
-    from tars.domains.knowledge.spec.schemas import OKFDocument
-    from tars.engine.adapters.base import ToolCallData
+from tars.domains.knowledge.spec.schemas import OKFDocument
+from tars.engine.adapters.base import ToolCallData
+from tars.engine.adapters.router import RoutingDecision
 
 # Default persona and execution configuration constants
 DEFAULT_HUMOR_LEVEL: float = 0.90

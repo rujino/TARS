@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -89,6 +90,64 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
         return None
 
 
+_consumed_ws_tickets: dict[str, float] = {}
+
+
+def create_ws_ticket(
+    user_id: str,
+    expires_in_seconds: int = 30,
+) -> str:
+    """Generate a short-lived single-use ticket for WebSocket authentication."""
+    settings = get_settings()
+    now = datetime.now(UTC)
+    expire = now + timedelta(seconds=expires_in_seconds)
+    payload: dict[str, Any] = {
+        "sub": user_id,
+        "type": "ws_ticket",
+        "jti": str(uuid.uuid4()),
+        "exp": expire,
+        "iat": now,
+    }
+    encoded = jwt.encode(
+        payload,
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+    return str(encoded)
+
+
+def validate_and_consume_ws_ticket(ticket: str) -> str | None:
+    """Validate a single-use WebSocket ticket and immediately consume it to prevent replay."""
+    payload = decode_access_token(ticket)
+    if payload is None or payload.get("type") != "ws_ticket":
+        return None
+
+    jti = payload.get("jti")
+    sub = payload.get("sub")
+    if not jti or not sub:
+        return None
+
+    now_ts = datetime.now(UTC).timestamp()
+    exp_ts = float(payload.get("exp", 0))
+    if now_ts > exp_ts:
+        return None
+
+    global _consumed_ws_tickets
+    if jti in _consumed_ws_tickets:
+        logger.warning("WebSocket ticket reuse attempt blocked (jti=%s, user=%s)", jti, sub)
+        return None
+
+    _consumed_ws_tickets[jti] = exp_ts
+
+    # Prune expired tickets if cache grows
+    if len(_consumed_ws_tickets) > 200:
+        expired_jtis = [k for k, v in _consumed_ws_tickets.items() if now_ts > v]
+        for k in expired_jtis:
+            _consumed_ws_tickets.pop(k, None)
+
+    return str(sub)
+
+
 def _get_fernet() -> Any:
     """Derive deterministic Fernet cipher instance from jwt_secret_key."""
     import base64
@@ -140,6 +199,7 @@ def decrypt_secret(ciphertext: str | None) -> str | None:
 
 __all__ = [
     "create_access_token",
+    "create_ws_ticket",
     "decode_access_token",
     "decrypt_secret",
     "encrypt_secret",
@@ -147,6 +207,7 @@ __all__ = [
     "get_password_hash_async",
     "hash_password",
     "hash_password_async",
+    "validate_and_consume_ws_ticket",
     "verify_password",
     "verify_password_async",
 ]

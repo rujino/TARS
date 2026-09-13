@@ -5,9 +5,11 @@ Thin Controller pattern: Delegates orchestration and session workflows to AgentC
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -30,7 +32,7 @@ from tars.api.dependencies import (
     get_tool_registry,
 )
 from tars.core.database import get_session_factory
-from tars.core.security import decode_access_token
+from tars.core.security import decode_access_token, validate_and_consume_ws_ticket
 from tars.domains.auth.models import User
 from tars.domains.chat.schemas import (
     ChatStreamRequest,
@@ -62,34 +64,93 @@ async def get_proactive_greeting(
     )
 
 
-@router.post(
-    "/stream",
-    summary="Stream real-time tokens via Server-Sent Events (SSE)",
-)
-async def chat_sse_stream(
-    request: Request,
+# ============================================================================
+# Streaming & Session Helpers (Thin Controller Delegation)
+# ============================================================================
+
+
+async def _generate_sse_stream(
+    agent_service: AgentChatService,
+    user_id: str,
     payload: ChatStreamRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    agent_service: AgentChatService = Depends(get_agent_chat_service),
-) -> StreamingResponse:
-    """Stream model response tokens using standard SSE protocol with unified Agent ReAct pipeline."""
+    request: Request,
+) -> AsyncIterator[str]:
+    """Generate SSE events from AgentChatService with heartbeat ping and disconnect termination."""
+    queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
+    sentinel = object()
 
-    async def sse_event_generator() -> AsyncIterator[str]:
-        async for event in agent_service.stream_chat(
-            user_id=current_user.id,
-            message=payload.message,
-            session_id=payload.session_id,
-            client_timezone=payload.timezone,
-            background_tasks=background_tasks,
-        ):
+    async def producer() -> None:
+        try:
+            async for event in agent_service.stream_chat(
+                user_id=user_id,
+                message=payload.message,
+                session_id=payload.session_id,
+                client_timezone=payload.timezone,
+                background_tasks=background_tasks,
+            ):
+                if await request.is_disconnected():
+                    logger.info("Client disconnected from SSE stream; terminating graph execution")
+                    break
+                await queue.put(event)
+        except asyncio.CancelledError:
+            logger.info("Client disconnected from SSE stream; terminating graph execution")
+            raise
+        except Exception as exc:
+            await queue.put(exc)
+        finally:
+            await queue.put(sentinel)
+
+    producer_task = asyncio.create_task(producer())
+
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=15.0)
+            except TimeoutError:
+                if await request.is_disconnected():
+                    logger.info("Client disconnected from SSE stream; terminating graph execution")
+                    break
+                yield ": ping\n\n"
+                continue
+
+            if item is sentinel:
+                break
+            if isinstance(item, Exception):
+                logger.error("Error encountered in SSE stream: %s", item, exc_info=True)
+                yield f"event: error\ndata: {json.dumps({'error': str(item)})}\n\n"
+                break
+
             if await request.is_disconnected():
                 logger.info("Client disconnected from SSE stream; terminating graph execution")
                 break
-            yield event.to_sse_event()
 
+            yield item.to_sse_event()
+    finally:
+        if not producer_task.done():
+            producer_task.cancel()
+            try:
+                await producer_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+
+def _create_sse_streaming_response(
+    agent_service: AgentChatService,
+    user_id: str,
+    payload: ChatStreamRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+) -> StreamingResponse:
+    """Create a configured StreamingResponse for SSE chat streaming."""
     return StreamingResponse(
-        sse_event_generator(),
+        _generate_sse_stream(
+            agent_service=agent_service,
+            user_id=user_id,
+            payload=payload,
+            background_tasks=background_tasks,
+            request=request,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -99,26 +160,43 @@ async def chat_sse_stream(
     )
 
 
-@router.websocket("/ws")
-async def chat_websocket_endpoint(
+async def _authenticate_ws_connection(
     websocket: WebSocket,
-    token: str | None = Query(default=None),
-    storage: FileStorageManager = Depends(get_storage_manager),
-    tool_registry: ToolRegistry = Depends(get_tool_registry),
-) -> None:
-    """양방향 실시간 WebSocket 대화 엔드포인트 (Thin Controller)."""
-    if not token:
-        logger.warning("WebSocket rejected: missing token query param")
-        await websocket.close(code=4001)
-        return
+    ticket: str | None = None,
+    token: str | None = None,
+) -> str | None:
+    """Authenticate incoming WebSocket connection via header, ticket, or legacy token, and verify active user."""
+    user_id: str | None = None
 
-    payload = decode_access_token(token)
-    if payload is None or "sub" not in payload:
-        logger.warning("WebSocket rejected: invalid or expired token")
-        await websocket.close(code=4001)
-        return
+    # 1. Native mobile apps / HTTP clients with Authorization header
+    auth_header = websocket.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        header_token = auth_header[7:].strip()
+        payload = decode_access_token(header_token)
+        if payload and "sub" in payload:
+            user_id = str(payload["sub"])
 
-    user_id = str(payload["sub"])
+    # 2. Web browser 1-time single-use ticket
+    if user_id is None and ticket:
+        user_id = validate_and_consume_ws_ticket(ticket)
+        if not user_id:
+            logger.warning("WebSocket rejected: invalid, expired, or reused ticket")
+            await websocket.close(code=4001)
+            return None
+
+    # 3. Legacy query token fallback (with deprecation notice)
+    if user_id is None and token:
+        logger.warning(
+            "WebSocket connected with deprecated '?token=' query param; migrate to ws-ticket"
+        )
+        payload = decode_access_token(token)
+        if payload and "sub" in payload:
+            user_id = str(payload["sub"])
+
+    if not user_id:
+        logger.warning("WebSocket rejected: missing valid ticket, token, or auth header")
+        await websocket.close(code=4001)
+        return None
 
     session_factory = get_session_factory()
     async with session_factory() as db:
@@ -128,11 +206,22 @@ async def chat_websocket_endpoint(
         if user is None or not user.is_active:
             logger.warning("WebSocket rejected: user not found or inactive (%s)", user_id)
             await websocket.close(code=4001)
-            return
+            return None
 
+    return user_id
+
+
+async def _handle_ws_chat_session(
+    websocket: WebSocket,
+    user_id: str,
+    storage: FileStorageManager,
+    tool_registry: ToolRegistry,
+) -> None:
+    """Run full WebSocket conversational session loop with turn handling and error resilience."""
     await websocket.accept()
     logger.info("WebSocket connected for user %s", user_id)
 
+    session_factory = get_session_factory()
     try:
         while True:
             try:
@@ -185,11 +274,67 @@ async def chat_websocket_endpoint(
     except Exception as exc:
         logger.error("Unexpected WebSocket exception: %s", exc, exc_info=True)
         try:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "message": f"Server execution error: {exc}",
+                }
+            )
+        except Exception:
+            pass
+        try:
             await websocket.close(code=1011)
         except Exception:
             pass
     finally:
         logger.debug("WebSocket handler connection cleaned up for user %s", user_id)
+
+
+# ============================================================================
+# Routers (Thin Controllers)
+# ============================================================================
+
+
+@router.post(
+    "/stream",
+    summary="Stream real-time tokens via Server-Sent Events (SSE)",
+)
+async def chat_sse_stream(
+    request: Request,
+    payload: ChatStreamRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    agent_service: AgentChatService = Depends(get_agent_chat_service),
+) -> StreamingResponse:
+    """Stream model response tokens using standard SSE protocol with unified Agent ReAct pipeline."""
+    return _create_sse_streaming_response(
+        agent_service=agent_service,
+        user_id=current_user.id,
+        payload=payload,
+        background_tasks=background_tasks,
+        request=request,
+    )
+
+
+@router.websocket("/ws")
+async def chat_websocket_endpoint(
+    websocket: WebSocket,
+    ticket: str | None = Query(default=None),
+    token: str | None = Query(default=None),
+    storage: FileStorageManager = Depends(get_storage_manager),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+) -> None:
+    """양방향 실시간 WebSocket 대화 엔드포인트 (Thin Controller)."""
+    user_id = await _authenticate_ws_connection(websocket, ticket=ticket, token=token)
+    if not user_id:
+        return
+
+    await _handle_ws_chat_session(
+        websocket=websocket,
+        user_id=user_id,
+        storage=storage,
+        tool_registry=tool_registry,
+    )
 
 
 __all__ = ["router"]

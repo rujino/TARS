@@ -104,6 +104,10 @@ class TARSApiClient {
     return user;
   }
 
+  async getWsTicket() {
+    return this.request('/auth/ws-ticket', { method: 'POST' });
+  }
+
   // --- TARS Persona Settings APIs ---
   async getConfig() {
     return this.request('/tars/config', { method: 'GET' });

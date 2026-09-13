@@ -15,26 +15,36 @@ class TARSStreamClient {
     this.maxReconnectAttempts = 3;
     this.isFallbackSSE = false;
     this.currentSessionId = 'default_session';
+    this.isConnecting = false;
   }
 
-  connectWebSocket() {
+  async connectWebSocket() {
     const token = this.api.getToken();
     if (!token) {
       this.callbacks.onStatusChange?.('OFFLINE');
       return;
     }
 
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    if (this.isConnecting || (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING))) {
       return;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/v1/chat/ws?token=${encodeURIComponent(token)}`;
-
+    this.isConnecting = true;
     this.callbacks.onStatusChange?.('CONNECTING');
 
     try {
+      // 1-Time Single-Use Ticket Exchange Pattern
+      const ticketData = await this.api.getWsTicket();
+      const ticket = ticketData?.ticket;
+      if (!ticket) {
+        throw new Error('No WebSocket ticket returned from server');
+      }
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api/v1/chat/ws?ticket=${encodeURIComponent(ticket)}`;
+
       this.ws = new WebSocket(wsUrl);
+      this.isConnecting = false;
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0;
@@ -74,6 +84,7 @@ class TARSStreamClient {
         this.handleDisconnect();
       };
     } catch (err) {
+      this.isConnecting = false;
       console.warn('[Stream] WS Connection failed, falling back:', err);
       this.handleDisconnect();
     }
@@ -111,6 +122,9 @@ class TARSStreamClient {
     const targetSession = sessionId || this.currentSessionId || 'default_session';
     this.currentSessionId = targetSession;
 
+    // Trigger onStart immediately for instant bubble rendering and responsive UI
+    this.callbacks.onStart?.(targetSession);
+
     if (!this.isFallbackSSE && this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(
         JSON.stringify({
@@ -126,7 +140,6 @@ class TARSStreamClient {
   }
 
   async sendSSEMessage(message, sessionId) {
-    this.callbacks.onStart?.(sessionId);
     try {
       const token = this.api.getToken();
       const res = await fetch('/api/v1/chat/stream', {

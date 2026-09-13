@@ -13,6 +13,7 @@ from tars.domains.auth.schemas import (
     UserLoginRequest,
     UserResponse,
     UserSignupRequest,
+    WebSocketTicketResponse,
 )
 from tars.domains.auth.service import (
     AuthService,
@@ -86,6 +87,19 @@ async def get_me(
 ) -> UserResponse:
     """Return profile details for active bearer token."""
     return UserResponse.model_validate(current_user)
+
+
+@router.post(
+    "/ws-ticket",
+    response_model=WebSocketTicketResponse,
+    summary="Issue a short-lived, single-use ticket for WebSocket authentication",
+)
+async def issue_ws_ticket(
+    current_user: User = Depends(get_current_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> WebSocketTicketResponse:
+    """Generate a single-use, 30-second ticket for authenticating WebSocket connections."""
+    return await auth_service.issue_ws_ticket(current_user.id)
 
 
 __all__ = ["router"]

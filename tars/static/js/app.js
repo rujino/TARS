@@ -266,6 +266,7 @@
   function initStreamClient() {
     streamClient = new TARSStreamClient(api, {
       onStart: (sessionId) => {
+        if (isStreaming && currentTarsBubble) return;
         isStreaming = true;
         dom.sendBtn.disabled = true;
         currentTarsText = '';
@@ -274,10 +275,11 @@
       onToken: (chunk) => {
         if (!chunk) return;
         currentTarsText += chunk;
-        if (currentTarsBubble) {
-          currentTarsBubble.innerHTML = renderMarkdown(currentTarsText) + '<span class="tars-cursor"></span>';
-          scrollToBottom();
+        if (!currentTarsBubble) {
+          currentTarsBubble = createTarsMessagePlaceholder();
         }
+        currentTarsBubble.innerHTML = renderMarkdown(currentTarsText) + '<span class="tars-cursor"></span>';
+        scrollToBottom();
         tts.pushToken(chunk);
       },
       onEnd: (fullText) => {
@@ -294,12 +296,13 @@
       onError: (errorMsg) => {
         isStreaming = false;
         dom.sendBtn.disabled = false;
-        if (currentTarsBubble) {
-          currentTarsBubble.innerHTML =
-            renderMarkdown(currentTarsText) +
-            `<div style="color: var(--tars-red); margin-top: 8px; font-size: 12px;">[ERROR: ${escapeHtml(errorMsg)}]</div>`;
-          scrollToBottom();
+        if (!currentTarsBubble) {
+          currentTarsBubble = createTarsMessagePlaceholder();
         }
+        currentTarsBubble.innerHTML =
+          renderMarkdown(currentTarsText) +
+          `<div style="color: var(--tars-red); margin-top: 8px; font-size: 12px;">[ERROR: ${escapeHtml(errorMsg)}]</div>`;
+        scrollToBottom();
         tts.stop();
         dom.chatInput.focus();
       },
