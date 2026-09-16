@@ -24,8 +24,6 @@ from tars.engine.orchestrator.nodes import (
 )
 from tars.engine.orchestrator.schemas import AgentStreamEvent
 from tars.engine.orchestrator.state import (
-    DEFAULT_HONESTY_LEVEL,
-    DEFAULT_HUMOR_LEVEL,
     DEFAULT_MODE,
     TARSState,
 )
@@ -33,8 +31,6 @@ from tars.engine.orchestrator.stream_bridge import LangGraphStreamBridge
 
 __all__ = [
     "AgentStreamEvent",
-    "DEFAULT_HONESTY_LEVEL",
-    "DEFAULT_HUMOR_LEVEL",
     "DEFAULT_MODE",
     "LangGraphStreamBridge",
     "TARSState",

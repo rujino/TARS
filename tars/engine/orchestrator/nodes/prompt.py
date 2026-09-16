@@ -9,8 +9,6 @@ from typing import Any
 from tars.domains.knowledge.spec.schemas import OKFDocument
 from tars.domains.persona.prompts import SYSTEM_DIRECTIVE_PRIORITY, TARSPersonaManager
 from tars.engine.orchestrator.state import (
-    DEFAULT_HONESTY_LEVEL,
-    DEFAULT_HUMOR_LEVEL,
     DEFAULT_MODE,
     TARSState,
 )
@@ -39,8 +37,6 @@ async def prompt_node(
     """
     manager = persona_manager or TARSPersonaManager()
 
-    humor_level = float(state.get("humor_level", DEFAULT_HUMOR_LEVEL))
-    honesty_level = float(state.get("honesty_level", DEFAULT_HONESTY_LEVEL))
     mode = str(state.get("mode", DEFAULT_MODE))
     raw_wikis: list[OKFDocument] = state.get("relevant_wikis", [])
 
@@ -65,8 +61,6 @@ async def prompt_node(
 
     # 2. Build system prompt using TARSPersonaManager (includes SYSTEM DIRECTIVE PRIORITY & TEMPORAL CONTEXT)
     system_prompt = manager.build_system_prompt(
-        humor_level=humor_level,
-        honesty_level=honesty_level,
         mode=mode,
         context_docs=sanitized_wikis,
         client_timezone=client_timezone,

@@ -20,8 +20,6 @@ from tars.core.session.schemas import SessionRoutingAction, SessionRoutingDecisi
 from tars.domains.knowledge.storage.manager import FileStorageManager
 from tars.domains.persona.models import TARSSettings
 from tars.engine.orchestrator.state import (
-    DEFAULT_HONESTY_LEVEL,
-    DEFAULT_HUMOR_LEVEL,
     DEFAULT_MODE,
     TARSState,
 )
@@ -71,8 +69,8 @@ async def session_node(
         background_tasks: Optional FastAPI BackgroundTasks for async archiving/extraction.
 
     Returns:
-        State update dictionary containing session_id, humor_level, honesty_level,
-        mode, routing_decision, is_reset, and hydrated messages history.
+        State update dictionary containing session_id, mode,
+        routing_decision, is_reset, and hydrated messages history.
     """
     user_id = state.get("user_id", "")
     session_id = state.get("session_id")
@@ -81,8 +79,6 @@ async def session_node(
     active_query = extracted_query if extracted_query else state.get("active_query", "")
 
     # 1. Fetch user persona parameters from DB (or state/defaults)
-    humor = float(state.get("humor_level", DEFAULT_HUMOR_LEVEL))
-    honesty = float(state.get("honesty_level", DEFAULT_HONESTY_LEVEL))
     mode = str(state.get("mode", DEFAULT_MODE))
     disabled_tools: list[str] = list(state.get("disabled_tools", []))
 
@@ -92,10 +88,6 @@ async def session_node(
             res = await db_session.execute(stmt)
             settings = res.scalar_one_or_none()
             if settings is not None:
-                if settings.humor_level is not None:
-                    humor = float(settings.humor_level)
-                if settings.honesty_level is not None:
-                    honesty = float(settings.honesty_level)
                 if settings.mode is not None:
                     mode = str(settings.mode)
                 if getattr(settings, "disabled_tools", None) is not None:
@@ -164,8 +156,6 @@ async def session_node(
     return {
         "session_id": active_session_id,
         "active_query": active_query,
-        "humor_level": humor,
-        "honesty_level": honesty,
         "mode": mode,
         "disabled_tools": disabled_tools,
         "routing_decision": routing_decision,

@@ -1,10 +1,10 @@
-"""Personalized TARS agent settings per user (humor, honesty, mode)."""
+"""Personalized TARS agent settings per user (mode, tools, oauth)."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, String
+from sqlalchemy import JSON, Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from tars.core.database import Base, EncryptedString, TimestampMixin, UUIDPrimaryKeyMixin
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class TARSSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
-    """Personalized TARS agent settings per user (humor, honesty, mode)."""
+    """Personalized TARS agent settings per user (mode, tools, oauth)."""
 
     __tablename__ = "tars_settings"
 
@@ -25,15 +25,9 @@ class TARSSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
         index=True,
     )
-    humor_level: Mapped[float] = mapped_column(
-        Float, default=0.90, nullable=False
-    )  # 0.0 to 1.0 (Default: 90%)
-    honesty_level: Mapped[float] = mapped_column(
-        Float, default=0.95, nullable=False
-    )  # 0.0 to 1.0 (Default: 95%)
     mode: Mapped[str] = mapped_column(
-        String(32), default="companion", nullable=False
-    )  # "companion" | "work"
+        String(32), default="attend", nullable=False
+    )  # "attend" | "task"
 
     # Tool preferences and Google OAuth account linking
     disabled_tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
@@ -78,10 +72,7 @@ class TARSSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         self.google_linked_email = value
 
     def __repr__(self) -> str:
-        return (
-            f"<TARSSettings user_id={self.user_id!r} humor={self.humor_level} "
-            f"honesty={self.honesty_level} mode={self.mode!r}>"
-        )
+        return f"<TARSSettings user_id={self.user_id!r} mode={self.mode!r}>"
 
 
 __all__ = ["TARSSettings"]

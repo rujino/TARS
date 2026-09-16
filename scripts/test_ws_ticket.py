@@ -72,9 +72,7 @@ async def test_ws_ticket_e2e_flow() -> None:
         )
         settings = TARSSettings(
             user_id=user_id,
-            humor_level=0.8,
-            honesty_level=0.9,
-            mode="companion",
+            mode="attend",
         )
         session.add(user)
         session.add(settings)

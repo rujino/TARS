@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#08080a">
-  <meta name="description" content="TARS - Tactical Autonomous Robotic System with real-time streaming and on-device TTS">
+  <meta name="description" content="TARS - Thoughtful Adaptive Reflective System with real-time streaming and on-device TTS">
   
   <!-- iOS Safari PWA Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15,7 +15,7 @@
   <!-- PWA Web App Manifest -->
   <link rel="manifest" href="/manifest.json">
   
-  <title>TARS // Tactical Autonomous Robotic System</title>
+  <title>TARS // Thoughtful Adaptive Reflective System</title>
   <link rel="stylesheet" href="/static/css/style.css?v=2.5.0">
 </head>
 <body>
@@ -36,7 +36,7 @@
       </div>
 
       <div class="header-center">
-        <span id="mode-badge" class="mode-badge" style="display: none;">[ MODE: COMPANION ]</span>
+        <span id="mode-badge" class="mode-badge" style="display: none;">[ MODE: ATTEND ]</span>
       </div>
 
       <div class="header-right">
@@ -52,7 +52,7 @@
         <div class="auth-card">
           <div class="auth-header">
             <h1>TARS // ACCESS</h1>
-            <p>TACTICAL AUTONOMOUS ROBOTIC SYSTEM</p>
+            <p>THOUGHTFUL ADAPTIVE REFLECTIVE SYSTEM</p>
           </div>
 
           <div class="auth-tabs">
@@ -106,32 +106,14 @@
         <aside class="hud-sidebar" id="sidebar">
           <div class="sidebar-section">
             <div class="sidebar-title">OPERATOR PROFILE</div>
-            <div id="user-display-name" style="font-weight: 700; color: var(--tars-cyan); font-size: 13px;">Cooper</div>
+            <div id="user-display-name" style="font-weight: 700; color: var(--tars-cyan); font-size: 13px;">주인님</div>
           </div>
 
           <div class="sidebar-section">
-            <div class="sidebar-title">TARS PERSONA PARAMETERS</div>
-            
-            <div class="slider-group">
-              <div class="slider-header">
-                <span class="slider-label">HUMOR LEVEL</span>
-                <span id="humor-val" class="slider-value">90%</span>
-              </div>
-              <input type="range" id="humor-slider" class="hud-slider" min="0" max="100" value="90">
-            </div>
-
-            <div class="slider-group">
-              <div class="slider-header">
-                <span class="slider-label">HONESTY LEVEL</span>
-                <span id="honesty-val" class="slider-value">95%</span>
-              </div>
-              <input type="range" id="honesty-slider" class="hud-slider" min="0" max="100" value="95">
-            </div>
-
-            <div class="sidebar-title" style="margin-top: 8px;">OPERATING MODE</div>
+            <div class="sidebar-title">OPERATING MODE</div>
             <div class="mode-selector">
-              <div id="mode-companion" class="mode-option active">COMPANION</div>
-              <div id="mode-work" class="mode-option">WORK</div>
+              <div id="mode-attend" class="mode-option active">ATTEND</div>
+              <div id="mode-task" class="mode-option">TASK</div>
             </div>
 
             <button id="btn-reset-config" class="hud-btn" style="margin-top: 12px; width: 100%; justify-content: center;">
@@ -161,13 +143,13 @@
             <div class="message-item tars">
               <div class="message-header"><span>TARS // AI</span></div>
               <div class="message-bubble">
-                <p><strong>TARS Tactical Interface Online.</strong> Humor parameter set to 90%, Honesty parameter set to 95%. Ready for instructions, Cooper.</p>
+                <p><strong>TARS Online.</strong> Thoughtful Adaptive Reflective System이 준비되었습니다. 주인님, 편안하게 말씀해 주세요.</p>
               </div>
             </div>
           </div>
 
           <div class="chat-input-wrapper">
-            <textarea id="chat-input" class="chat-input" placeholder="Enter tactical directive or query..." rows="1"></textarea>
+            <textarea id="chat-input" class="chat-input" placeholder="주인님, 어떤 이야기를 나누고 싶으신가요?..." rows="1"></textarea>
             <button id="send-btn" class="send-btn">TRANSMIT</button>
           </div>
         </section>

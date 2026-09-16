@@ -1,5 +1,5 @@
 {
-  "name": "TARS - Tactical Autonomous Robotic System",
+  "name": "TARS - Thoughtful Adaptive Reflective System",
   "short_name": "TARS",
   "start_url": "/",
   "scope": "/",
@@ -7,7 +7,7 @@
   "background_color": "#08080a",
   "theme_color": "#08080a",
   "orientation": "portrait-primary",
-  "description": "Interstellar tactical autonomous robotic assistant with real-time streaming and on-device TTS",
+  "description": "Thoughtful Adaptive Reflective System with real-time streaming and on-device TTS",
   "icons": [
     {
       "src": "/static/icons/icon-192.png",

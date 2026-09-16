@@ -4,7 +4,7 @@
  * - Routing between AuthView and ChatView
  * - Real-time dual streaming integration
  * - On-Device TTS engine linkage
- * - Persona controls (Humor / Honesty / Mode) bidirectional sync
+ * - Operating mode (ATTEND / TASK) bidirectional sync
  * - Service Worker registration & PWA lifecycle
  */
 (function () {
@@ -60,12 +60,8 @@
     // Sidebar & Persona Controls
     sidebar: document.getElementById('sidebar'),
     userDisplayName: document.getElementById('user-display-name'),
-    humorSlider: document.getElementById('humor-slider'),
-    humorVal: document.getElementById('humor-val'),
-    honestySlider: document.getElementById('honesty-slider'),
-    honestyVal: document.getElementById('honesty-val'),
-    modeCompanion: document.getElementById('mode-companion'),
-    modeWork: document.getElementById('mode-work'),
+    modeAttend: document.getElementById('mode-attend'),
+    modeTask: document.getElementById('mode-task'),
     btnResetConfig: document.getElementById('btn-reset-config'),
 
     // Tools & MCP Management (G5)
@@ -224,42 +220,22 @@
   }
 
   function applyConfigToUI(config) {
-    const humorPct = Math.round((config.humor_level ?? 0.90) * 100);
-    const honestyPct = Math.round((config.honesty_level ?? 0.95) * 100);
-    const mode = config.mode || 'companion';
+    const rawMode = (config.mode || 'attend').toLowerCase();
+    const mode = (rawMode === 'work' || rawMode === 'task') ? 'task' : 'attend';
 
-    dom.humorSlider.value = humorPct;
-    dom.humorVal.textContent = `${humorPct}%`;
-
-    dom.honestySlider.value = honestyPct;
-    dom.honestyVal.textContent = `${honestyPct}%`;
-
-    if (mode === 'work') {
-      dom.modeWork.classList.add('active');
-      dom.modeCompanion.classList.remove('active');
-      if (dom.modeBadge) dom.modeBadge.textContent = '[ MODE: WORK ]';
+    if (mode === 'task') {
+      if (dom.modeTask) dom.modeTask.classList.add('active');
+      if (dom.modeAttend) dom.modeAttend.classList.remove('active');
+      if (dom.modeBadge) dom.modeBadge.textContent = '[ MODE: TASK ]';
     } else {
-      dom.modeCompanion.classList.add('active');
-      dom.modeWork.classList.remove('active');
-      if (dom.modeBadge) dom.modeBadge.textContent = '[ MODE: COMPANION ]';
+      if (dom.modeAttend) dom.modeAttend.classList.add('active');
+      if (dom.modeTask) dom.modeTask.classList.remove('active');
+      if (dom.modeBadge) dom.modeBadge.textContent = '[ MODE: ATTEND ]';
     }
   }
 
   function scheduleConfigUpdate() {
-    clearTimeout(configDebounceTimer);
-    configDebounceTimer = setTimeout(async () => {
-      const humor = parseInt(dom.humorSlider.value, 10) / 100.0;
-      const honesty = parseInt(dom.honestySlider.value, 10) / 100.0;
-      try {
-        const updated = await api.updateConfig({
-          humor_level: humor,
-          honesty_level: honesty
-        });
-        applyConfigToUI(updated);
-      } catch (err) {
-        console.warn('[Config] Update failed:', err);
-      }
-    }, 300);
+    // Mode changes are pushed directly via button click handlers
   }
 
   // --- Stream Client Initialization ---
@@ -1057,35 +1033,28 @@
       setAuthError('Session expired. Please log in again.');
     });
 
-    // Persona Sliders
-    dom.humorSlider.addEventListener('input', () => {
-      dom.humorVal.textContent = `${dom.humorSlider.value}%`;
-      scheduleConfigUpdate();
-    });
-
-    dom.honestySlider.addEventListener('input', () => {
-      dom.honestyVal.textContent = `${dom.honestySlider.value}%`;
-      scheduleConfigUpdate();
-    });
-
     // Persona Mode Switch
-    dom.modeCompanion.addEventListener('click', async () => {
-      try {
-        const updated = await api.updateConfig({ mode: 'companion' });
-        applyConfigToUI(updated);
-      } catch (err) {
-        console.warn('[Config] Mode change error:', err);
-      }
-    });
+    if (dom.modeAttend) {
+      dom.modeAttend.addEventListener('click', async () => {
+        try {
+          const updated = await api.updateConfig({ mode: 'attend' });
+          applyConfigToUI(updated);
+        } catch (err) {
+          console.warn('[Config] Mode change error:', err);
+        }
+      });
+    }
 
-    dom.modeWork.addEventListener('click', async () => {
-      try {
-        const updated = await api.updateConfig({ mode: 'work' });
-        applyConfigToUI(updated);
-      } catch (err) {
-        console.warn('[Config] Mode change error:', err);
-      }
-    });
+    if (dom.modeTask) {
+      dom.modeTask.addEventListener('click', async () => {
+        try {
+          const updated = await api.updateConfig({ mode: 'task' });
+          applyConfigToUI(updated);
+        } catch (err) {
+          console.warn('[Config] Mode change error:', err);
+        }
+      });
+    }
 
     // Reset Config Button
     dom.btnResetConfig.addEventListener('click', async () => {
@@ -1135,7 +1104,7 @@
     if (token) {
       try {
         const user = await api.getMe();
-        dom.userDisplayName.textContent = user?.username || 'Cooper';
+        dom.userDisplayName.textContent = user?.username || '주인님';
         showView('chat');
         await loadUserConfig();
         initStreamClient();

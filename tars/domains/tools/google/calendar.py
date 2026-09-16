@@ -54,11 +54,11 @@ class GoogleCalendarAdapter:
             },
             "evt_002": {
                 "id": "evt_002",
-                "summary": "TARS Humor Calibration",
+                "summary": "TARS Reflection & Sync",
                 "start": {"dateTime": "2026-08-31T14:00:00Z"},
                 "end": {"dateTime": "2026-08-31T15:00:00Z"},
-                "description": "Adjusting sarcasm parameters down to 90%.",
-                "attendees": [{"email": "cooper@endurance.space"}],
+                "description": "Weekly reflection and knowledge synchronization for 주인님.",
+                "attendees": [{"email": "user@example.com"}],
                 "status": "confirmed",
             },
         }

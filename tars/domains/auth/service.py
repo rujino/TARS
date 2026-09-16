@@ -88,9 +88,7 @@ class AuthService:
 
         default_settings = TARSSettings(
             user_id=new_user.id,
-            humor_level=0.90,
-            honesty_level=0.95,
-            mode="companion",
+            mode="attend",
             created_at=now,
             updated_at=now,
         )

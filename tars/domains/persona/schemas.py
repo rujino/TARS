@@ -8,43 +8,33 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TARSConfigResponse(BaseModel):
-    """Current TARS persona settings model."""
+    """Current TARS settings model."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    humor_level: float
-    honesty_level: float
     mode: str
 
 
 class TARSConfigUpdateRequest(BaseModel):
-    """Partial update payload for TARS persona configuration."""
+    """Partial update payload for TARS configuration."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
-    humor_level: float | None = Field(
+    mode: Literal["attend", "task", "companion", "work"] | None = Field(
         default=None,
-        description="Humor index in range 0.0 to 1.0 or 0 to 100",
-    )
-    honesty_level: float | None = Field(
-        default=None,
-        description="Honesty index in range 0.0 to 1.0 or 0 to 100",
-    )
-    mode: Literal["companion", "work"] | None = Field(
-        default=None,
-        description="Operational mode ('companion' or 'work')",
+        description="Operational mode ('attend' or 'task')",
     )
 
-    @field_validator("humor_level", "honesty_level")
+    @field_validator("mode")
     @classmethod
-    def validate_levels(cls, v: float | None) -> float | None:
+    def normalize_mode(cls, v: str | None) -> str | None:
         if v is None:
             return None
-        if 1.0 < v <= 100.0:
-            v = v / 100.0
-        if v < 0.0 or v > 1.0:
-            raise ValueError("Level parameters must be between 0.0 and 1.0 (or 0 and 100)")
-        return round(float(v), 4)
+        if v == "companion":
+            return "attend"
+        if v == "work":
+            return "task"
+        return v
 
 
 __all__ = [

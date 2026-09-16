@@ -136,7 +136,7 @@ class GeminiAdapter(BaseLLMAdapter):
             # Fallback mock/offline response when API key is unconfigured
             last_msg = messages[-1].content if messages else ""
             return LLMResponse(
-                content=f"TARS: Affirmative. Processed '{last_msg}'. Humor setting: 90%.",
+                content=f"TARS: 주인님, 말씀하신 내용('{last_msg}')을 확인하였습니다.",
                 tool_calls=[],
                 model_name=self.model_name,
             )

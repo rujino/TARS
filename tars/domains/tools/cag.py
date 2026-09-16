@@ -45,9 +45,7 @@ class ToolCAGManager:
     def get_static_instructions(self) -> str:
         """Compose static base system instructions without dynamic XML OKF slices."""
         return self.persona_manager.build_system_prompt(
-            humor_level=0.90,
-            honesty_level=0.95,
-            mode="companion",
+            mode="attend",
             context_docs=None,
         )
 

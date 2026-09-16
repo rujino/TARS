@@ -101,14 +101,8 @@ class Settings(BaseSettings):
     )
 
     # TARS Persona default parameters
-    default_humor_level: float = Field(
-        default=0.90, ge=0.0, le=1.0, description="Default humor level (0.0 to 1.0)"
-    )
-    default_honesty_level: float = Field(
-        default=0.95, ge=0.0, le=1.0, description="Default honesty level (0.0 to 1.0)"
-    )
-    default_mode: Literal["companion", "work"] = Field(
-        default="companion", description="Default TARS operating mode"
+    default_mode: Literal["attend", "task", "companion", "work"] = Field(
+        default="attend", description="Default TARS operating mode ('attend' or 'task')"
     )
 
     # External LLM / SLM Endpoints
