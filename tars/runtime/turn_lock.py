@@ -24,7 +24,6 @@ from enum import Enum
 from typing import Any
 
 from tars.core.config import get_settings
-from tars.runtime.redis_double import InMemoryAsyncRedis
 
 logger = logging.getLogger("tars.runtime.turn_lock")
 
@@ -32,7 +31,7 @@ _redis_client_instance: Any = None
 
 
 def get_redis_client() -> Any:
-    """Return configured Redis client or InMemoryAsyncRedis fallback if Redis is enabled."""
+    """Return configured Redis client if Redis is enabled, or None if unavailable."""
     global _redis_client_instance
     if _redis_client_instance is not None:
         return _redis_client_instance
@@ -51,18 +50,12 @@ def get_redis_client() -> Any:
         )
     except Exception as exc:
         logger.warning(
-            "REDIS_BACKPLANE_DEGRADED: Real redis client unavailable (%s); using InMemoryAsyncRedis",
+            "REDIS_BACKPLANE_DEGRADED: Real redis client unavailable (%s); running in local L1 mode",
             exc,
         )
-        _redis_client_instance = InMemoryAsyncRedis()
+        _redis_client_instance = None
 
     return _redis_client_instance
-
-
-def set_redis_client(client: Any) -> None:
-    """Explicitly inject a Redis client (useful for tests and dependency injection)."""
-    global _redis_client_instance
-    _redis_client_instance = client
 
 
 class TurnState(str, Enum):

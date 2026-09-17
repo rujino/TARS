@@ -1,0 +1,174 @@
+.pageContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+}
+
+.introSection {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  color: #ffffff;
+  padding: var(--spacing-6);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.introTitle {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  margin-bottom: var(--spacing-2);
+}
+
+.introDesc {
+  color: #94a3b8;
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--spacing-4);
+}
+
+.architectureDiagram {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-4);
+}
+
+.archCard {
+  background-color: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3);
+}
+
+.archLayer {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  color: var(--color-primary-light);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-1);
+}
+
+.archRole {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.archDetail {
+  font-size: var(--font-size-xs);
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+}
+
+.filterTabs {
+  display: flex;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+}
+
+.filterTab {
+  padding: var(--spacing-1) var(--spacing-3);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  transition: all var(--transition-fast);
+}
+
+.filterTab:hover {
+  color: var(--color-text-main);
+}
+
+.filterTabActive {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse) !important;
+}
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.taskItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.taskItem:hover {
+  border-color: #cbd5e1;
+  box-shadow: var(--shadow-sm);
+}
+
+.taskCompleted {
+  opacity: 0.6;
+  background-color: #f8fafc;
+}
+
+.taskLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+  flex: 1;
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.taskContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.taskTitle {
+  font-weight: 600;
+  font-size: var(--font-size-md);
+  color: var(--color-text-main);
+}
+
+.taskTitleCompleted {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.taskDescription {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.taskRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.emptyState {
+  text-align: center;
+  padding: var(--spacing-12);
+  color: var(--color-text-muted);
+  background-color: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}

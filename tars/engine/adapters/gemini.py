@@ -263,27 +263,13 @@ class GeminiAdapter(BaseLLMAdapter):
             model_name=self.model_name,
         )
 
-    async def _call_client_generate(
-        self,
-        messages: Sequence[BaseMessage],
-        system_prompt: str = "",
-        **kwargs: Any,
-    ) -> str:
-        """Internal worker executing non-stream Gemini completion (mockable in tests)."""
-        resp = await self._call_client_generate_response(
-            messages=messages,
-            system_prompt=system_prompt,
-            **kwargs,
-        )
-        return resp.content
-
     async def _call_client_stream(
         self,
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Internal worker executing streaming Gemini completion (mockable in tests)."""
+        """Internal worker executing streaming Gemini completion."""
         client = self._get_client()
         if client is None:
             raise RuntimeError(
@@ -376,22 +362,6 @@ class GeminiAdapter(BaseLLMAdapter):
         async for chunk in stream_generate():
             yield chunk
 
-    async def _probe_api_health(self) -> bool:
-        """Internal health probe worker (mockable in tests)."""
-        if not self.api_key:
-            return False
-        try:
-            client = self._get_client()
-            if client is None:
-                return False
-            # Lightweight probe
-            if hasattr(client, "ainvoke"):
-                await client.ainvoke([HumanMessage(content="ping")])
-            return True
-        except Exception as e:
-            logger.warning("Gemini health probe failed: %s", e)
-            return False
-
     async def agenerate_response(
         self,
         messages: Sequence[BaseMessage],
@@ -412,7 +382,12 @@ class GeminiAdapter(BaseLLMAdapter):
         **kwargs: Any,
     ) -> str:
         """Generate complete response text using Google Gemini."""
-        return await self._call_client_generate(messages, system_prompt=system_prompt, **kwargs)
+        resp = await self._call_client_generate_response(
+            messages=messages,
+            system_prompt=system_prompt,
+            **kwargs,
+        )
+        return resp.content
 
     async def astream(
         self,
@@ -428,7 +403,19 @@ class GeminiAdapter(BaseLLMAdapter):
 
     async def is_healthy(self) -> bool:
         """Check whether Gemini API is reachable and authorized."""
-        return await self._probe_api_health()
+        if not self.api_key:
+            return False
+        try:
+            client = self._get_client()
+            if client is None:
+                return False
+            # Lightweight probe
+            if hasattr(client, "ainvoke"):
+                await client.ainvoke([HumanMessage(content="ping")])
+            return True
+        except Exception as e:
+            logger.warning("Gemini health probe failed: %s", e)
+            return False
 
 
 __all__ = ["GeminiAdapter"]

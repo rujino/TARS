@@ -33,9 +33,6 @@ class GoogleAuthHelper:
 
         # Multi-tenant per-user token cache: user_id -> (access_token, expires_at)
         self._user_token_cache: dict[str, tuple[str, float]] = {}
-        # Single-user / test fallback cache
-        self._cached_token: str | None = None
-        self._token_expires_at: float = 0.0
         # Per-user async locks to prevent thundering-herd token refresh
         self._user_locks: dict[str, asyncio.Lock] = {}
 
@@ -50,10 +47,11 @@ class GoogleAuthHelper:
             self._http_client = httpx.AsyncClient(timeout=10.0)
         return self._http_client
 
-    def invalidate_user_cache(self, user_id: str) -> None:
+    def invalidate_user_cache(self, user_id: str | None = None) -> None:
         """Evict cached token for a specific user upon disconnect or token change."""
-        self._user_token_cache.pop(user_id, None)
-        self._user_locks.pop(user_id, None)
+        key = user_id or "__default__"
+        self._user_token_cache.pop(key, None)
+        self._user_locks.pop(key, None)
 
     async def get_access_token(self, user_id: str | None = None) -> str:
         """Obtain a valid OAuth2 access token for the given user, renewing via refresh token if necessary.
@@ -66,28 +64,21 @@ class GoogleAuthHelper:
             str: Valid Bearer access token string.
         """
         now = time.time()
+        key = user_id or "__default__"
 
         # 1. Fast-path check without acquiring lock
-        if user_id:
-            cached = self._user_token_cache.get(user_id)
-            if cached and now < (cached[1] - 60):
-                return cached[0]
-        else:
-            if self._cached_token and now < (self._token_expires_at - 60):
-                return self._cached_token
+        cached = self._user_token_cache.get(key)
+        if cached and now < (cached[1] - 60):
+            return cached[0]
 
         # 2. Acquire per-user lock to serialize renewal and prevent race conditions
         lock = self._get_user_lock(user_id)
         async with lock:
             now = time.time()
             # Double-check inside lock
-            if user_id:
-                cached = self._user_token_cache.get(user_id)
-                if cached and now < (cached[1] - 60):
-                    return cached[0]
-            else:
-                if self._cached_token and now < (self._token_expires_at - 60):
-                    return self._cached_token
+            cached = self._user_token_cache.get(key)
+            if cached and now < (cached[1] - 60):
+                return cached[0]
 
             effective_client_id: str | None = self.client_id
             effective_client_secret: str | None = self.client_secret
@@ -152,11 +143,7 @@ class GoogleAuthHelper:
                 access_token = str(data["access_token"])
                 expires_in = int(data.get("expires_in", 3600))
 
-                if user_id:
-                    self._user_token_cache[user_id] = (access_token, now + expires_in)
-                else:
-                    self._cached_token = access_token
-                    self._token_expires_at = now + expires_in
+                self._user_token_cache[key] = (access_token, now + expires_in)
 
                 logger.info(
                     "Renewed Google OAuth2 access token for user %s (expires in %ds)",
