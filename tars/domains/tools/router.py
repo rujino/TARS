@@ -19,7 +19,6 @@ from tars.domains.tools.schemas import (
     GoogleAuthUrlResponse,
     GoogleCredentialsRequest,
     GoogleCredentialsResponse,
-    GoogleMockLinkResponse,
     ServerTestResponse,
     ToolsServersResponse,
     ToolToggleRequest,
@@ -201,19 +200,6 @@ async def disconnect_google(
 ) -> dict[str, Any]:
     """Revoke and remove linked Google credentials for the current user."""
     return await tool_service.disconnect_google(current_user.id)
-
-
-@router.post(
-    "/auth/google/mock-link",
-    response_model=GoogleMockLinkResponse,
-    summary="Toggle mock Google Workspace credentials for offline testing",
-)
-async def mock_link_google(
-    current_user: User = Depends(get_current_user),
-    tool_service: ToolService = Depends(get_tool_service),
-) -> GoogleMockLinkResponse:
-    """Toggle deterministic mock Google credentials in DB for offline development."""
-    return await tool_service.mock_link_google(current_user.id)
 
 
 @router.post(

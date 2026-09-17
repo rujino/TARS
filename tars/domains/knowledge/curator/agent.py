@@ -14,12 +14,12 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from tars.domains.knowledge.curator.prompts import CURATOR_SYSTEM_PROMPT
 from tars.domains.knowledge.curator.schemas import (
     AutoAcceptReviewHandler,
     CurationProposal,
     ICurationReviewHandler,
 )
-from tars.domains.knowledge.curator.prompts import CURATOR_SYSTEM_PROMPT
 from tars.domains.knowledge.micro.manager import MicroFactManager
 from tars.domains.knowledge.micro.schemas import MicroFact
 from tars.domains.knowledge.spec.schemas import (
@@ -101,7 +101,9 @@ class KnowledgeCuratorAgent:
         try:
             payload = json.loads(cleaned_json)
         except json.JSONDecodeError as exc:
-            logger.error("Failed to parse Curator LLM response as JSON: %s\nRaw: %s", exc, cleaned_json)
+            logger.error(
+                "Failed to parse Curator LLM response as JSON: %s\nRaw: %s", exc, cleaned_json
+            )
             return {"micro_facts": [], "curated_docs": [], "proposals": []}
 
         # Step 3: Process Tier 1 Micro Facts
@@ -164,7 +166,9 @@ class KnowledgeCuratorAgent:
                     "aliases": doc_data.get("aliases", []),
                     "importance": importance,
                     "status": OKFStatus.VERIFIED,
-                    "source": OKFSource.AUTO_EXTRACTED if source_hint == "auto" else OKFSource.MANUAL,
+                    "source": OKFSource.AUTO_EXTRACTED
+                    if source_hint == "auto"
+                    else OKFSource.MANUAL,
                 }
 
                 proposal = CurationProposal(
@@ -184,9 +188,15 @@ class KnowledgeCuratorAgent:
                     doc = OKFDocument(metadata=metadata, content=content)
                     await self.storage_manager.save_okf_file(user_id=user_id, doc=doc)
                     curated_docs.append(doc)
-                    logger.info("KnowledgeCurator persisted OKF 2.0 document '%s' for user '%s'", doc_id, user_id)
+                    logger.info(
+                        "KnowledgeCurator persisted OKF 2.0 document '%s' for user '%s'",
+                        doc_id,
+                        user_id,
+                    )
                 else:
-                    logger.info("KnowledgeCurator proposal for '%s' rejected by review handler", doc_id)
+                    logger.info(
+                        "KnowledgeCurator proposal for '%s' rejected by review handler", doc_id
+                    )
 
         return {
             "micro_facts": saved_facts,

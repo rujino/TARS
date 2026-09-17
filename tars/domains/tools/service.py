@@ -15,14 +15,12 @@ from tars.core.security import create_access_token, decode_access_token
 from tars.domains.persona.service import UserSettingsService
 from tars.domains.tools.mcp.adapter import MCPToolAdapter
 from tars.domains.tools.mcp.client import AsyncMCPClient
-from tars.domains.tools.mcp.schemas import MCPTransportType
 from tars.domains.tools.registry import ToolRegistry
 from tars.domains.tools.schemas import (
     GoogleAuthCallbackResponse,
     GoogleAuthUrlResponse,
     GoogleCredentialsRequest,
     GoogleCredentialsResponse,
-    GoogleMockLinkResponse,
     ServerInfo,
     ServerTestResponse,
     ToolItem,
@@ -122,10 +120,9 @@ class ToolService:
                         if hasattr(tool.client.config.transport, "value")
                         else tool.client.config.transport
                     )
-                    is_mock_srv = tool.client.config.transport == MCPTransportType.MOCK
                     is_connected = getattr(tool.client, "_is_connected", False)
-                    srv_status: Literal["connected", "offline", "mock"] = (
-                        "mock" if is_mock_srv else ("connected" if is_connected else "offline")
+                    srv_status: Literal["connected", "offline"] = (
+                        "connected" if is_connected else "offline"
                     )
                     mcp_servers_map[srv_name] = {
                         "id": srv_name,
@@ -147,9 +144,7 @@ class ToolService:
         google_linked = bool(
             user_settings.google_refresh_token or user_settings.google_access_token
         )
-        google_status: Literal["connected", "offline", "mock"] = (
-            "connected" if google_linked else "offline"
-        )
+        google_status: Literal["connected", "offline"] = "connected" if google_linked else "offline"
         google_email = user_settings.google_linked_email if google_linked else None
         google_active_count = sum(1 for t in google_tools if t.active)
 
@@ -167,7 +162,6 @@ class ToolService:
                 active_tools_count=google_active_count,
                 auth_required=True,
                 is_linked=google_linked,
-                is_mock=bool(user_settings.google_mock_linked),
                 account_email=google_email,
                 tools=google_tools,
             )
@@ -191,13 +185,12 @@ class ToolService:
                     active_tools_count=active_cnt,
                     auth_required=False,
                     is_linked=srv_dict["status"] == "connected",
-                    is_mock=srv_dict["status"] == "mock",
                     account_email=None,
                     tools=srv_dict["tools"],
                 )
             )
 
-        # 3. Other Builtin Tools
+        # 3. Builtin Tools
         if other_tools:
             other_active_count = sum(1 for t in other_tools if t.active)
             servers.append(
@@ -214,7 +207,6 @@ class ToolService:
                     active_tools_count=other_active_count,
                     auth_required=False,
                     is_linked=True,
-                    is_mock=False,
                     account_email=None,
                     tools=other_tools,
                 )
@@ -338,67 +330,58 @@ class ToolService:
             )
 
         user_settings = await self.user_settings_service.get_or_create_settings(target_user_id)
-        is_mock = code.startswith("mock_")
         account_email: str | None = None
 
-        if is_mock:
-            access_token = "ya29.mock_google_access_token"
-            refresh_token = "mock_google_refresh_token"
-            account_email = "user@example.com"
-        else:
-            client_id = user_settings.google_client_id or self.settings.google_client_id
-            client_secret = user_settings.google_client_secret or self.settings.google_client_secret
+        client_id = user_settings.google_client_id or self.settings.google_client_id
+        client_secret = user_settings.google_client_secret or self.settings.google_client_secret
 
-            if not client_id or not client_secret:
-                raise GoogleOAuthNotConfiguredError(
-                    "Google OAuth2 Client ID 또는 Client Secret이 설정되지 않았습니다."
-                )
-
-            effective_redirect_uri = (
-                override_redirect_uri or state_redirect_uri or default_redirect_uri
+        if not client_id or not client_secret:
+            raise GoogleOAuthNotConfiguredError(
+                "Google OAuth2 Client ID 또는 Client Secret이 설정되지 않았습니다."
             )
 
-            async with httpx.AsyncClient(timeout=15.0) as http_client:
-                token_payload = {
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": effective_redirect_uri,
-                }
-                try:
-                    resp = await http_client.post(
-                        "https://oauth2.googleapis.com/token",
-                        data=token_payload,
+        effective_redirect_uri = override_redirect_uri or state_redirect_uri or default_redirect_uri
+
+        async with httpx.AsyncClient(timeout=15.0) as http_client:
+            token_payload = {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": effective_redirect_uri,
+            }
+            try:
+                resp = await http_client.post(
+                    "https://oauth2.googleapis.com/token",
+                    data=token_payload,
+                )
+                if resp.status_code != 200:
+                    err_text = resp.text
+                    logger.error("Google token exchange failed: %s", err_text)
+                    raise TokenExchangeError(
+                        f"Token exchange failed (Google 토큰 교환 실패): {err_text}"
                     )
-                    if resp.status_code != 200:
-                        err_text = resp.text
-                        logger.error("Google token exchange failed: %s", err_text)
-                        raise TokenExchangeError(
-                            f"Token exchange failed (Google 토큰 교환 실패): {err_text}"
-                        )
 
-                    token_data = resp.json()
-                    access_token = token_data.get("access_token", "")
-                    refresh_token = token_data.get("refresh_token")
-                    account_email = token_data.get("email")
-                except httpx.HTTPError as exc:
-                    logger.error("Google token exchange network error: %s", exc)
-                    raise TokenExchangeError(f"Google 인증 통신 실패: {exc}") from exc
+                token_data = resp.json()
+                access_token = token_data.get("access_token", "")
+                refresh_token = token_data.get("refresh_token")
+                account_email = token_data.get("email")
+            except httpx.HTTPError as exc:
+                logger.error("Google token exchange network error: %s", exc)
+                raise TokenExchangeError(f"Google 인증 통신 실패: {exc}") from exc
 
-                if access_token and not account_email:
-                    try:
-                        userinfo_resp = await http_client.get(
-                            "https://www.googleapis.com/oauth2/v2/userinfo",
-                            headers={"Authorization": f"Bearer {access_token}"},
-                        )
-                        if userinfo_resp.status_code == 200:
-                            u_data = userinfo_resp.json()
-                            account_email = u_data.get("email")
-                    except Exception as exc:
-                        logger.warning("Failed to fetch Google userinfo: %s", exc)
+            if access_token and not account_email:
+                try:
+                    userinfo_resp = await http_client.get(
+                        "https://www.googleapis.com/oauth2/v2/userinfo",
+                        headers={"Authorization": f"Bearer {access_token}"},
+                    )
+                    if userinfo_resp.status_code == 200:
+                        u_data = userinfo_resp.json()
+                        account_email = u_data.get("email")
+                except Exception as exc:
+                    logger.warning("Failed to fetch Google userinfo: %s", exc)
 
-        user_settings.google_mock_linked = is_mock
         user_settings.google_access_token = access_token
         if refresh_token:
             user_settings.google_refresh_token = refresh_token
@@ -415,7 +398,6 @@ class ToolService:
             status="success",
             provider="google",
             linked=True,
-            is_mock=is_mock,
             account_email=user_settings.google_linked_email,
             message="Google Workspace account linked successfully.",
         )
@@ -492,7 +474,6 @@ class ToolService:
         user_settings.google_refresh_token = None
         user_settings.google_access_token = None
         user_settings.google_linked_email = None
-        user_settings.google_mock_linked = False
         user_settings.updated_at = datetime.now(UTC)
         await self.db.commit()
         await self.db.refresh(user_settings)
@@ -502,39 +483,6 @@ class ToolService:
             "linked": False,
             "message": "Google Workspace 계정 연동이 해제되었습니다.",
         }
-
-    async def mock_link_google(self, user_id: str) -> GoogleMockLinkResponse:
-        """Toggle deterministic mock Google credentials in DB for offline development."""
-        user_settings = await self.user_settings_service.get_or_create_settings(user_id)
-
-        if not user_settings.google_mock_linked:
-            user_settings.google_mock_linked = True
-            user_settings.google_refresh_token = "mock_google_refresh_token"
-            user_settings.google_access_token = "mock_google_access_token"
-            user_settings.google_linked_email = "cooper@endurance.space"
-            message = "Mock Google Workspace account linked successfully."
-        else:
-            user_settings.google_mock_linked = False
-            user_settings.google_refresh_token = None
-            user_settings.google_access_token = None
-            user_settings.google_linked_email = None
-            message = "Mock Google Workspace account unlinked."
-
-        self.tool_registry.invalidate_user_google_cache(user_id)
-
-        user_settings.updated_at = datetime.now(UTC)
-        await self.db.commit()
-        await self.db.refresh(user_settings)
-
-        return GoogleMockLinkResponse(
-            status="success",
-            provider="google",
-            linked=user_settings.google_linked,
-            mock_linked=user_settings.google_mock_linked,
-            is_mock=user_settings.google_mock_linked,
-            account_email=user_settings.google_linked_email,
-            message=message,
-        )
 
     async def test_server_connectivity(
         self,
@@ -561,19 +509,12 @@ class ToolService:
         for client in self.tool_registry._managed_clients:
             if isinstance(client, AsyncMCPClient) and client.config.name == server_id:
                 ping_ok = await client.ping()
-                is_mock = client.config.transport == MCPTransportType.MOCK
-                srv_status: Literal["connected", "offline", "mock"] = (
-                    "mock" if is_mock else ("connected" if ping_ok else "offline")
-                )
+                srv_status: Literal["connected", "offline"] = "connected" if ping_ok else "offline"
                 return ServerTestResponse(
                     server_id=server_id,
                     status=srv_status,
-                    latency_ms=2.0 if (ping_ok or is_mock) else 0.0,
-                    message=(
-                        "MCP server ping passed"
-                        if (ping_ok or is_mock)
-                        else "MCP server unreachable"
-                    ),
+                    latency_ms=2.0 if ping_ok else 0.0,
+                    message=("MCP server ping passed" if ping_ok else "MCP server unreachable"),
                 )
 
         raise ServerNotFoundError(f"Server '{server_id}' not found.")

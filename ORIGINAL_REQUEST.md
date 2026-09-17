@@ -227,3 +227,62 @@ Implement automated unit and integration tests covering the tool management REST
 ### Test Suite
 - [ ] All new tests in `tests/tier1_unit/test_tools_management.py` pass.
 - [ ] All existing tier 1 unit tests pass (`.venv/bin/pytest tests/tier1_unit/`).
+
+## 2026-09-16T23:25:07Z
+
+TARS 기존 레거시 테스트용 프론트엔드를 전면 제거하고 기획서 스펙에 맞춘 '베라 & 미우 듀얼 메이드 단톡방 클라이언트'로 완전히 새로 구축하며, 백엔드의 가짜 하드코딩 대사(Mock/Fallback f-strings)를 전면 제거하고 실제 LLM 런타임 및 WebSocket 파이프라인에 완전하게 연결(Wiring)합니다.
+
+Working directory: /home/ryuji/Workspace/TARS
+Integrity mode: development
+
+## Reference Material
+- 기획서 1부 (인지 내면 & ToM): `docs/COGNITIVE_COMPANION_PLAN.md`
+- 기획서 2부 (사회성 & 듀얼 메이드 단톡방): `docs/COGNITIVE_COMPANION_PLAN_PART2.md`
+- 기획서 3부 (분산 런타임 & 초저지연 인프라): `docs/COGNITIVE_COMPANION_PLAN_PART3.md`
+
+## Requirements
+
+### R1. `companion.py` 내 가짜 하드코딩 대사(Mock Fallback) 전면 영구 제거 및 실제 듀얼 LLM 추론 강제
+- `_generate_character_response()` 내의 하드코딩된 f-string 대사 템플릿("~다냥!", "수석 메이드 베라입니다" 등)을 완전히 제거합니다.
+- 베라(System 2)와 미우(System 1)는 반드시 `PersonaRegistry`의 고유 시스템 프롬프트(`VERA_SYSTEM_PROMPT_TEMPLATE`, `MIU_SYSTEM_PROMPT_TEMPLATE`)와 중앙 무의식의 ToM(`master_state`), 서사 맥락(`context_summary`), 캐릭터별 직전 감정 여운(`prev_vibe`), 단톡방 상호작용 시각(`perspective_context`)을 주입받아 `HybridLLMRouter`(Gemini / SLM)를 통해 각각 독립적으로 실제 추론 및 발화하도록 강제합니다.
+- 가짜 텍스트 반환을 원천 금지하며, LLM 호출 실패 시 숨기지 않고 명확한 에러 핸들링 및 재시도/디그레이데이션 경로를 타도록 합니다.
+
+### R2. 실제 서비스 경로(`AgentChatService` & WebSocket/SSE)에 `create_companion_graph` 전면 와이어링
+- `tars/domains/chat/services/agent_chat.py`의 `stream_chat()`이 더 이상 레거시 단일 챗봇 그래프(`create_chat_graph`)를 타지 않고, 베라 & 미우 듀얼 컴패니언 그래프(`create_companion_graph`)를 직접 실행하도록 교체 연결합니다.
+- `companion_dispatch_node`에서 방출되는 토큰 및 이벤트에 화자 식별자(`speaker: "vera" | "miu"`), 아바타 경로, 세대 번호(`turn_epoch`), 턴 상태 메타데이터를 필수 탑재하여 실시간 스트리밍으로 흘려보냅니다.
+- `HybridSessionTurnLock`과 `PrefetchBufferQueue`가 실제 웹소켓 스트림과 유기적으로 결합되어, 1차 화자 발화 중 2차 화자 선행 생성 및 0.2초 지터 전환, Barge-in 인터럽트 시 0ms 즉시 토큰 드롭이 실 서비스에서 작동하도록 연결합니다.
+
+### R3. 카톡 읽음 확인(Read Receipt) 및 실시간 타이핑 인디케이터 프로토콜 구현
+- 기획서 3부 4.2절 명세에 따라, 사용자 메시지 전송 즉시 노란 숫자 `2`가 렌더링되고, 베라는 0.05초 만에 읽음(`{"type": "read_receipt", "reader": "vera", "unread_count": 1}`), 미우는 0.3~0.5초 시간차 지터 후 읽음(`{"type": "read_receipt", "reader": "miu", "unread_count": 0}`)을 방출하는 실시간 프로토콜을 백엔드와 프론트엔드에 양방향 구현합니다.
+- 2차 화자 선행 생성(프리페치) 트리거 발동 시 `{"type": "typing_indicator", "sender": "miu", "status": "active"}`를 클라이언트로 송출하여 "🐾 미우가 발을 동동 구르며 타자 치는 중..." 겹침 타이핑 연출을 제공합니다.
+
+### R4. 프론트엔드(`tars/static`) 전면 제거 및 베라 & 미우 단톡방 전용 클라이언트 신규 구축
+- 기존 레거시 단일 TARS 챗봇 UI를 완전히 제거하고, 기획서 2부/3부에 부합하는 모던 웹 클라이언트(`index.html`, `style.css`, `app.js`, `chat.js`)를 신규 작성합니다.
+- **헤더 & 단톡방 참여자**: 베라(🧊 수석 메이드)와 미우(🐾 견습 고양이 메이드)의 프로필 및 실시간 온라인/타이핑 상태 표시.
+- **좌측 사이드바**: 제미나이 스타일의 일자별(오늘 / 어제 / 지난 7일 / 지난 30일 / 이전 대화) 대화 목록 아코디언 및 `[+ New Chat]` 버튼.
+- **단톡방 메인 뷰**:
+  - 사용자 메시지(우측 말풍선, 노란 숫자 읽음 카운터 `2` -> `1` -> 사라짐).
+  - 베라의 메시지(좌측, 베라 아바타 및 수석 메이드 뱃지, 격조 높은 하십시오체 말풍선).
+  - 미우의 메시지(좌측, 미우 아바타 및 고양이 뱃지, 귀여운 1~2문장 말풍선).
+  - 실시간 토큰 스트리밍 시 화자별 전용 말풍선에서 타이핑 커서가 부드럽게 출력.
+- 과거 세션 클릭 시 과거 대화 턴들을 화자별 아바타/이름과 함께 정확히 복원하고 세션 전환 후 대화 지속 가능.
+
+## Acceptance Criteria
+
+### Authentic Dual LLM Inference (No Mocks)
+- [ ] `companion.py`에 어떠한 하드코딩된 대사 템플릿 f-string도 존재하지 않아야 한다 (`_generate_character_response` 완전 제거).
+- [ ] 베라와 미우의 발화는 각각 `HybridLLMRouter`를 통해 고유 시스템 프롬프트와 ToM 상태를 바탕으로 독립 실행된 실제 LLM 응답이어야 한다.
+
+### Production Runtime Wiring
+- [ ] `AgentChatService.stream_chat()`이 실제 실행 시 `create_companion_graph`를 구동함을 확인하는 E2E 테스트가 통과해야 한다.
+- [ ] WebSocket `/api/v1/chat/ws` 스트리밍 프레임에 `speaker` ("vera" 또는 "miu"), `turn_epoch`가 명확히 포함되어 전송되어야 한다.
+
+### Group Chat & Read Receipt Protocol
+- [ ] 사용자 메시지 인입 시 읽음 확인 이벤트가 베라(즉시)와 미우(지터) 순으로 정상 발행되어야 한다.
+- [ ] 프리페치 트리거 시 2차 화자의 `typing_indicator` 웹소켓 프레임이 클라이언트로 전송되어야 한다.
+
+### Redesigned Frontend UI
+- [ ] `tars/static`에 더 이상 `TARS // AI` 단일 챗봇 텍스트나 레거시 컴포넌트가 남지 않고, 베라 & 미우 단톡방 인터페이스가 렌더링되어야 한다.
+- [ ] 사용자 메시지 우측 배치, 베라/미우 메시지 좌측 분리 및 각자의 아바타와 이름이 정상 표기되어야 한다.
+- [ ] 좌측 사이드바에 `[+ New Chat]` 버튼과 일자별 그룹 목록이 작동하며 세션 전환 및 과거 화자별 대화 복원이 원활히 이루어져야 한다.
+

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+
 from pydantic import BaseModel, ConfigDict, Field
 
 # Matches [[target_id]] or [[target_id|Display Label]]

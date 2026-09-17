@@ -133,12 +133,8 @@ class GeminiAdapter(BaseLLMAdapter):
         tools = kwargs.get("tools") or self.tools
 
         if client is None:
-            # Fallback mock/offline response when API key is unconfigured
-            last_msg = messages[-1].content if messages else ""
-            return LLMResponse(
-                content=f"TARS: 주인님, 말씀하신 내용('{last_msg}')을 확인하였습니다.",
-                tool_calls=[],
-                model_name=self.model_name,
+            raise RuntimeError(
+                "Gemini client is not initialized. Please ensure TARS_GEMINI_API_KEY is configured."
             )
 
         formatted = self._format_messages_for_gemini(messages, system_prompt)
@@ -290,10 +286,9 @@ class GeminiAdapter(BaseLLMAdapter):
         """Internal worker executing streaming Gemini completion (mockable in tests)."""
         client = self._get_client()
         if client is None:
-            # Default offline token yield
-            for token in ["TARS: ", "Confirmed. ", "Navigation ", "locked."]:
-                yield token
-            return
+            raise RuntimeError(
+                "Gemini client is not initialized. Please ensure TARS_GEMINI_API_KEY is configured."
+            )
 
         if hasattr(client, "astream"):
             all_msgs: list[BaseMessage] = []

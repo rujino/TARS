@@ -157,8 +157,7 @@ class GoogleAuthHelper:
 다음 세 가지 이벤트 발생 시 `ToolRegistry.invalidate_user_google_cache(user_id)`를 반드시 호출해야 합니다:
 1. `POST /api/v1/tools/auth/google/disconnect`: 계정 연동 해제 시
 2. `POST /api/v1/tools/auth/google/credentials`: 사용자 커스텀 OAuth 클라이언트 키 변경 시
-3. `POST /api/v1/tools/auth/google/mock-link`: 오프라인 모의 연동 상태 토글 시
-4. `GET /api/v1/tools/auth/google/callback`: OAuth 리다이렉트 콜백을 통해 새 토큰이 수신 및 저장될 때
+3. `GET /api/v1/tools/auth/google/callback`: OAuth 리다이렉트 콜백을 통해 새 토큰이 수신 및 저장될 때
 
 ---
 

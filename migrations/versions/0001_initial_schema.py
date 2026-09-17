@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-08-27 10:35:00.000000
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -85,8 +86,12 @@ def upgrade() -> None:
     op.create_index(op.f("ix_user_wikis_type"), "user_wikis", ["type"], unique=False)
     op.create_index(op.f("ix_user_wikis_category"), "user_wikis", ["category"], unique=False)
     op.create_index(op.f("ix_user_wikis_importance"), "user_wikis", ["importance"], unique=False)
-    op.create_index("ix_user_wikis_lookup", "user_wikis", ["user_id", "type", "importance"], unique=False)
-    op.create_index("ix_user_wikis_user_category", "user_wikis", ["user_id", "category"], unique=False)
+    op.create_index(
+        "ix_user_wikis_lookup", "user_wikis", ["user_id", "type", "importance"], unique=False
+    )
+    op.create_index(
+        "ix_user_wikis_user_category", "user_wikis", ["user_id", "category"], unique=False
+    )
 
     # 4. Create chat_sessions table
     op.create_table(
@@ -116,7 +121,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_chat_sessions_user_id"), "chat_sessions", ["user_id"], unique=False)
     op.create_index(op.f("ix_chat_sessions_status"), "chat_sessions", ["status"], unique=False)
-    op.create_index(op.f("ix_chat_sessions_last_active_at"), "chat_sessions", ["last_active_at"], unique=False)
+    op.create_index(
+        op.f("ix_chat_sessions_last_active_at"), "chat_sessions", ["last_active_at"], unique=False
+    )
 
     # 5. Create chat_messages table
     op.create_table(
@@ -142,9 +149,13 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_chat_messages")),
     )
-    op.create_index(op.f("ix_chat_messages_session_id"), "chat_messages", ["session_id"], unique=False)
+    op.create_index(
+        op.f("ix_chat_messages_session_id"), "chat_messages", ["session_id"], unique=False
+    )
     op.create_index(op.f("ix_chat_messages_user_id"), "chat_messages", ["user_id"], unique=False)
-    op.create_index(op.f("ix_chat_messages_created_at"), "chat_messages", ["created_at"], unique=False)
+    op.create_index(
+        op.f("ix_chat_messages_created_at"), "chat_messages", ["created_at"], unique=False
+    )
 
 
 def downgrade() -> None:

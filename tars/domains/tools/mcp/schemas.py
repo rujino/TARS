@@ -14,7 +14,6 @@ class MCPTransportType(StrEnum):
     SSE = "sse"
     STDIO = "stdio"
     HTTP = "http"
-    MOCK = "mock"
 
 
 class MCPServerConfig(BaseModel):

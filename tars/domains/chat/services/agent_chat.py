@@ -29,7 +29,6 @@ from tars.engine.orchestrator.observability import (
     trace_attributes_context,
 )
 from tars.engine.orchestrator.schemas import AgentStreamEvent
-from tars.engine.orchestrator.state import TARSState
 from tars.engine.orchestrator.stream_bridge import LangGraphStreamBridge
 
 logger = logging.getLogger("tars.domains.chat.services.agent_chat")
@@ -133,35 +132,47 @@ class AgentChatService:
         client_timezone: str | None = None,
         reference_time: datetime | None = None,
         background_tasks: BackgroundTasks | None = None,
+        messages: list[BaseMessage] | None = None,
+        turn_epoch: int | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
-        """Execute full agent turn with session routing, dynamic slicing, ReAct tools, and token streaming."""
-        from tars.engine.orchestrator.graphs import create_chat_graph
-
-        graph = create_chat_graph(
-            router=self.router,
-            slicer=self.slicer,
-            persona_manager=self.persona_mgr,
-            tool_registry=self.tool_registry,
-            db_session=self.db,
-            storage_manager=self.storage,
-            background_tasks=background_tasks,
+        """Execute full agent turn with session routing, dynamic slicing, companion pipeline, and token streaming."""
+        from tars.core.session.manager import SmartSessionManager
+        from tars.domains.persona.registry import get_default_registry
+        from tars.engine.orchestrator.graphs.companion import (
+            CompanionState,
+            create_companion_graph,
         )
 
-        initial_state: TARSState = {
+        graph = create_companion_graph(
+            router=self.router,
+            slicer=self.slicer,
+            registry=get_default_registry(),
+            session_manager=SmartSessionManager(self.db, self.storage),
+            db_session=self.db,
+            storage_manager=self.storage,
+        )
+
+        chat_messages: list[BaseMessage] = (
+            list(messages)
+            if messages is not None and len(messages) > 0
+            else [HumanMessage(content=message)]
+        )
+        resolved_session_id = session_id or "default_session"
+        resolved_turn_epoch = turn_epoch if turn_epoch is not None else 1
+
+        initial_state: CompanionState = {
             "user_id": user_id,
-            "session_id": session_id or "",
+            "session_id": resolved_session_id,
             "active_query": message,
-            "messages": [HumanMessage(content=message)],
-            "iteration_count": 0,
-            "tools_used": [],
-            "client_timezone": client_timezone or "Asia/Seoul",
-            "reference_time": reference_time,
+            "messages": chat_messages,
+            "active_persona_ids": ["vera", "miu"],
         }
+        initial_state["turn_epoch"] = resolved_turn_epoch  # type: ignore[typeddict-unknown-key]
 
         lf_handler = get_langfuse_callback_handler(
             user_id=user_id,
-            session_id=session_id or "",
-            tags=["tars", "chat"],
+            session_id=resolved_session_id,
+            tags=["tars", "chat", "companion"],
         )
         stream_config = {"callbacks": [lf_handler]} if lf_handler else None
 

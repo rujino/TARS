@@ -20,7 +20,9 @@ class CurationProposal(BaseModel):
     frontmatter: dict[str, Any] = Field(default_factory=dict, description="OKF 2.0 metadata fields")
     content: str = Field(default="", description="Markdown body containing [[wiki-links]]")
     created_links: list[str] = Field(default_factory=list, description="Target document IDs linked")
-    diff_summary: str | None = Field(default=None, description="Summary of modifications if updating")
+    diff_summary: str | None = Field(
+        default=None, description="Summary of modifications if updating"
+    )
 
 
 class ICurationReviewHandler(ABC):

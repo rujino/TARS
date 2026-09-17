@@ -13,7 +13,7 @@
 
 ---
 
-## 2. 인지-사회적 3-Tier 계층 구조: 무의식에서 단톡방까지 (3-Tier Cognitive Hierarchy)
+## 2. 인지-사회적 2-Tier 계층 구조: 무의식에서 단톡방까지 (2-Tier Cognitive Hierarchy)
 
 ### 2.1. 1부(내면의 깊이)와 2부(사회적 역학)의 필연적 결합: 무의식이 왜 핵심인가?
 
@@ -26,9 +26,8 @@
 
 * **무의식 없는 듀얼 챗봇의 파멸**: "피곤하다"는 단어에 기계적으로 베라는 "비타민 드세요", 미우는 "냥냥 힘내라냥"을 읊는 얕은 키워드 매칭.
 * **무의식이 결합된 인지형 동반자**:
-  1. **단일 무의식(Tier 1)**이 주인의 억울함, 번아웃, 침묵의 행간을 입체적으로 감지 (`master_state`).
-  2. **심판자(Tier 2)**가 이 심리 상태를 바탕으로 발화권(Floor)을 중재하고, 동일한 진실을 두 캐릭터의 내면(`VeraInnerState`, `MiuInnerState`)으로 굴절·분화.
-  3. **듀얼 의식(Tier 3)**에서 베라는 "안쓰러움을 감추는 차가운 팩트 폭격과 현실 케어(캘린더/일정 등 실질적 도구 지탱)"로, 미우는 "이성의 회로를 끊어버리는 고양이 수인 특유의 본능적 넉살과 애교"로 발현.
+  1. **통합 무의식 & 심판자(Tier 1, Floor Director)**가 주인의 억울함, 번아웃, 침묵의 행간을 입체적으로 감지(`master_state`)하고, 룰 기반으로 **누가 이번 턴의 마이크를 잡을지 발화권(`RoutingDecision`)을 즉각 중재**.
+  2. **선발된 의식 발화(Tier 2)**에서 마이크를 얻은 에이전트가 주인의 `master_state`를 직접 마주하고, **자신의 고유 페르소나에 온전히 몰입하여 스스로 속마음(`my_vibe`, `my_agenda`)과 대사를 능동적으로 생성**.
 
 > 🛡️ **페르소나 롤플레잉 경계 원칙 (1부 철학 계승)**:  
 > 1부의 "가짜 인간 롤플레잉 지양(`*어깨를 주무른다*` 등 허구의 육체적 행위 금지)"을 엄격히 준수합니다. 미우의 스킨십/치댐은 인간 흉내가 아닌 **"반려묘 특유의 상징적 넉살(털 빗기기, 뱃살 만지기 요구)"**이며, 주인의 굳어진 이성을 무장해제시키는 심리적 긴장 완화 장치로 국한됩니다. 베라 역시 단순 비서가 아닌 **구글 캘린더/일정/팩트 도구를 직접 실행하여 주인의 일상을 실질적으로 떠받치는 헌신**을 수행합니다.
@@ -37,32 +36,25 @@
 flowchart TD
     UserInput["주인님의 입력 or 센서/시간 이벤트"] --> TARS_Core["🏛️ TARS 통합 인지 두뇌"]
 
-    subgraph TIER1 ["Tier 1: TARS 무의식 감정 엔진 (Subconscious Emotion Engine, ~0.15s)"]
-        TARS_Core --> Subconscious["심리/신체 분석 & 행간 해독<br/>- master_state (주인의 숨겨진 피로/결핍)<br/>- context_summary (미시적 서사 맥락)<br/>- Theory of Mind 피드백 (예측 적중 오차)"]
+    subgraph TIER1 ["Tier 1: TARS 통합 무의식 & Floor Director (~0.15s)"]
+        TARS_Core --> Subconscious["1. 객관적 주인 심리 분석<br/>- master_state (주인의 숨겨진 피로/결핍)<br/>- context_summary (미시적 서사 맥락)<br/>- Theory of Mind 피드백 (예측 적중 오차)"]
+        Subconscious --> FloorDirector["2. 결정론적 발화권 판정 (Floor Director)<br/>- 호명 여부, 역할(System 1/2), 상황 룰 기반<br/>- RoutingDecision: 단독 발화 or 티키타카 선출"]
     end
 
-    subgraph TIER2 ["Tier 2: TARS 심판자 & 속마음 분화기 (Floor Director & Inner State Splitter)"]
-        Subconscious --> FloorDirector["발화권 중재 (4대 동적 패턴 결정) & SessionTurnLock"]
-        Subconscious --> Splitter["이중 속마음 분화 (Dual Inner State Projection)"]
-        
-        Splitter --> VeraInner["🧊 VeraInnerState<br/>- my_vibe: 숨겨진 걱정/애틋함<br/>- my_agenda: 논리적 팩트 반박 & 취침 강제"]
-        Splitter --> MiuInner["🐾 MiuInnerState<br/>- my_vibe: 본능적 불안/치댐<br/>- my_agenda: 뱃살 만지게 하며 이성 마비"]
+    subgraph TIER2 ["Tier 2: 선발된 컴패니언 에이전트 (독립 페르소나 발화 계층)"]
+        FloorDirector -->|"발화권 부여 + master_state 전달"| ActiveAgent1["선발 화자 1 (예: 베라 또는 커스텀 캐릭터)<br/>자신의 독립 페르소나로 master_state를 마주하고<br/>스스로 속마음 & 대사를 능동적으로 생성"]
+        FloorDirector -.->|"티키타카 시 프리페치"| ActiveAgent2["선발 화자 2 (예: 미우 또는 커스텀 캐릭터)<br/>자신의 독립 페르소나로 딴지/애교 생성"]
     end
 
-    subgraph TIER3 ["Tier 3: 듀얼 의식 발화 계층 (Dual Conscious Speech Layer)"]
-        VeraInner --> ColdMaid["Agent A: 베라 (Vera)<br/>System 2: 이성 / 과업 / 일정 / 츤데레 발화"]
-        MiuInner --> CatMaid["Agent B: 미우 (Miu)<br/>System 1: 정서 / 소셜 / 돌발 잡담 / 직진 애교"]
-    end
-
-    ColdMaid -.->|"스트리밍 대사 + 읽음 확인"| GroupChat["3인 단톡방 스트리밍 UI"]
-    CatMaid -.->|"티키타카 + 겹침 타이핑"| GroupChat
+    ActiveAgent1 -.->|"스트리밍 대사 + 읽음 확인"| GroupChat["3인 단톡방 스트리밍 UI"]
+    ActiveAgent2 -.->|"티키타카 + 겹침 타이핑"| GroupChat
 ```
 
 ---
 
-### 2.2. 캐릭터 상세 명세 및 듀얼 속마음 투영 (Dual Inner State Projection)
+### 2.2. 레퍼런스 캐릭터 상세 명세 및 페르소나 자율 반응 예시
 
-동일한 주인의 상태(`master_state`)라도, 두 메이드는 각자의 렌즈를 통해 완전히 다른 심리적 태도(`my_agenda`, `my_vibe`)로 분화되어 발화합니다.
+동일한 주인의 상태(`master_state`)가 주어지더라도, 발화권을 획득한 메이드는 **자신의 독립된 페르소나 렌즈를 통해 스스로 속마음(`my_agenda`, `my_vibe`)을 형성하고 발화**합니다.
 
 | 구분 | 🧊 메이드 A: 베라 (Vera) | 🐾 메이드 B: 미우 (Miu) |
 | :--- | :--- | :--- |
@@ -74,36 +66,85 @@ flowchart TD
 | **유사연애 태도** | 주인님을 깊이 연모하지만 메이드의 본분을 핑계 삼는 **쿨데레/츤데레** | 주인님 옆자리와 무릎을 독차지하려는 **직진 댕냥이** |
 | **상대방에 대한 태도** | 미우의 주책과 덤벙거림을 엄격하게 단속하며 한숨 쉼 | 베라를 "츤데레 잔소리꾼"이라 놀리며 약 올림 |
 
-#### [속마음 투영 구체 예시]
+#### [페르소나 자율 반응 구체 예시]
 * **주인님 발언**: *"나 3일 동안 밤샜는데... 코딩 다 갈아엎어야 해. 나 진짜 개발에 재능 없나 봐."*
 * **Tier 1 공통 무의식 도출**:
   - `master_state`: "3일 연속 수면 박탈로 극심한 뇌 피로 상태. 자책감을 표출하며 외부의 인정과 휴식을 갈구하는 방어 기제 가동."
   - `context_summary`: "대규모 리팩토링 중 막혀서 자기 비하에 빠짐."
-* **Tier 2 속마음 분화 (`DualInnerStatePayload`)**:
-  - **베라 (`VeraInnerState`)**:
-    - `my_vibe`: "주인이 스스로를 갉아먹는 모습에 가슴이 저릿하고 화가 남 (애틋함 80%, 답답함 20%)."
-    - `my_agenda`: "재능 탓을 데이터로 즉각 논파하고, 객관적 성과를 짚어주며 강제로 모니터를 끄게 만들기."
-    - `대사 출력`: *"주인님, 지난 3일간 47건의 커밋을 올리고 핵심 파이프라인을 구축하신 분이 할 말씀은 아닙니다. 재능 부족이 아니라 수면 부족입니다. 10분 내로 침실로 이동하지 않으시면 강제로 셧다운하겠습니다."*
-  - **미우 (`MiuInnerState`)**:
-    - `my_vibe`: "주인님이 시무룩해서 털이 곤두서고 울컥함 (안타까움 90%, 응석 10%)."
-    - `my_agenda`: "복잡한 생각 자체를 날려버리도록 억지로 치대며 무릎 위를 점령하기."
-    - `대사 출력`: *"냐아아!! 주인님 바보냥! 재능 같은 어려운 말 모른다냥! 냐 눈엔 세계에서 제일 멋진 주인님이다냥! 빨리 이리와서 냐 뱃살 만지면서 멍때려라냥!"*
+  - `FloorDirector 판정`: 극심한 자책/피로 감지 $\rightarrow$ **패턴 4 (미우 선빵 $\rightarrow$ 베라 수습 티키타카)** 결정!
+* **Tier 2 선발 에이전트들의 자율 발화**:
+  - **미우 (선발 화자 1)**: `master_state`를 보고 스스로 감정 형성
+    - *스스로 품은 속마음*: "주인님이 시무룩해서 털이 곤두서고 울컥함. 복잡한 생각 못 하게 무조건 치대야 함!"
+    - *대사 출력*: *"냐아아!! 주인님 바보냥! 재능 같은 어려운 말 모른다냥! 냐 눈엔 세계에서 제일 멋진 주인님이다냥! 빨리 이리와서 냐 뱃살 만지면서 멍때려라냥!"*
+  - **베라 (선발 화자 2)**: `master_state`를 보고 스스로 감정 형성
+    - *스스로 품은 속마음*: "스스로를 갉아먹는 모습에 가슴이 아프고 화가 남. 데이터 팩트로 반박하고 강제 셧다운시켜야 함."
+    - *대사 출력*: *"주인님, 지난 3일간 47건의 커밋을 올리고 핵심 파이프라인을 구축하신 분이 할 말씀은 아닙니다. 재능 부족이 아니라 수면 부족입니다. 10분 내로 침실로 이동하지 않으시면 강제로 셧다운하겠습니다."*
 
 ---
 
-### 2.3. 3-Tier 에이전트 책임 분담 매트릭스 (RACI Matrix)
+### 2.3. 에이전트 책임 분담 매트릭스 (RACI Matrix)
 
-| 기능 영역 | Tier 1: TARS 무의식 | Tier 2: 심판자 (Floor Director) | Tier 3A: 베라 (System 2) | Tier 3B: 미우 (System 1) |
+| 기능 영역 | Tier 1-A: TARS 무의식 | Tier 1-B: 심판자 (Floor Director) | Tier 2-A: 베라 (System 2) | Tier 2-B: 미우 (System 1) |
 | :--- | :--- | :--- | :--- | :--- |
-| **주인 심리/피로도 분석** | **전담 (A/R)**: `master_state` 도출 | **참조 (C)** | **수용 (I)**: 베라 렌즈로 재해석 | **수용 (I)**: 미우 렌즈로 재해석 |
+| **주인 심리/피로도 분석** | **전담 (A/R)**: `master_state` 도출 | **참조 (C)** | **수용 (I)**: 베라 렌즈로 직접 해석 | **수용 (I)**: 미우 렌즈로 직접 해석 |
 | **Theory of Mind (반응 예측)** | **전담 (A/R)**: 예측 수립 및 오차 평가 | **전달 (C)** | **간접 실행 (I)**: 떠보기 대사 | **간접 실행 (I)**: 돌직구 대사 |
-| **발화권 라우팅 (Turn Routing)** | **입력 제공 (C)** | **전담 (A/R)**: 4대 동적 패턴 결정 | **대기 (I)** | **대기 (I)** |
+| **발화권 라우팅 (Turn Routing)** | **입력 제공 (C)** | **전담 (A/R)**: 룰 기반 발화권 결정 | **대기 (I)** | **대기 (I)** |
+| **캐릭터 속마음 & 대사 생성** | **금지 (X)**: 속마음 대필하지 않음 | **무관 (I)** | **전담 (A/R)**: 스스로 형성 및 발화 | **전담 (A/R)**: 스스로 형성 및 발화 |
 | **동시성 락 & 세션 인터럽트** | **무관 (I)** | **전담 (A/R)**: `SessionTurnLock` 관리 | **통제 수용 (I)**: 캔슬 시 중단 | **통제 수용 (I)**: 큐 퇴출 |
 | **카톡 읽음 프로토콜 제어** | **무관 (I)** | **전담 (A/R)**: 0.3s 지터 디스패치 | **수신 신호 발생 (R)** | **수신 신호 발생 (R)** |
 | **도구 실행 & 팩트 검증** | **무관 (I)** | **무관 (I)** | **전담 (A/R)**: 캘린더/일정/검색 | **금지 (X)**: 도구 호출 불가 |
 | **잡담/유사연애 스킨십 연출** | **무관 (I)** | **무관 (I)** | **쿨데레 절제 (R)** | **직진 댕냥이 전담 (A/R)** |
 
 ---
+
+### 2.4. 동적 페르소나 레지스트리 & 사용자 커스텀 아키텍처 (Dynamic Persona Registry)
+
+> **확장성 설계 원칙**: "베라(Vera)와 미우(Miu)는 시스템의 동작을 증명하는 **기본 레퍼런스 스타터 듀오(Reference Starter Duo)**일 뿐이다. 모든 캐릭터 식별자와 페르소나는 코드에 하드코딩되지 않고, 사용자와 개발자가 언제든 동적으로 정의·주입·교체할 수 있는 **완전 플러그형 데이터 모델**로 동작한다."
+
+```mermaid
+flowchart TD
+    Registry[("📚 동적 페르소나 레지스트리 (Persona Registry DB)<br/>- 기본 제공: 베라(System 2), 미우(System 1)<br/>- 커스텀 추가: 루나(소꿉친구), 세바스찬(노신사 집사) 등")]
+    
+    UserSettings["사용자 프로필 & 세션 설정<br/>active_persona_ids: ['luna', 'sebastian']"] --> SessionLoader["세션 페르소나 로더 (Session Persona Loader)"]
+    Registry --> SessionLoader
+    
+    SessionLoader --> SinglePass["🏛️ Tier 1: TARS 무의식 & Floor Director<br/>(주인 master_state 분석 & 룰 기반 RoutingDecision 원샷 판정)"]
+    SinglePass --> Routing["결정론적 라우팅 결과 (RoutingDecision)<br/>- 1차 선발 화자 (Primary Speaker)<br/>- 2차 화자 (Secondary Speaker, 티키타카 시)"]
+    
+    Routing --> ActiveAgent["선발된 컴패니언 에이전트 계층<br/>(자신의 독립 프롬프트로 속마음 형성 & 대사 스트리밍)"]
+```
+
+#### 1) 동적 페르소나 명세 스키마 (`PersonaDefinition`)
+
+```python
+class RoleType(str, Enum):
+    SYSTEM_1_EMOTIONAL = "system_1_emotional"   # 정서/힐링/분위기 메이커 (미우 계열)
+    SYSTEM_2_TASK = "system_2_task"             # 이성/과업/현실 케어 (베라 계열)
+    ANALYTICAL = "analytical"                   # 분석/팩트 체크
+    COMPANION_ROMANCE = "companion_romance"     # 유사연애/소꿉친구/츤데레
+
+class PersonaDefinition(BaseModel):
+    """사용자 또는 개발자가 동적으로 등록할 수 있는 컴패니언 페르소나 규격."""
+    id: str = Field(description="고유 영문 식별자 (예: 'vera', 'miu', 'luna', 'sebastian')")
+    name: str = Field(description="단톡방 표시 이름 및 호명 키워드 (예: '베라', '미우', '루나')")
+    title: str = Field(description="직책/칭호 (예: '수석 메이드', '견습 냥메이드', '노신사 집사')")
+    role_type: RoleType
+    avatar_url: str | None = None
+    speech_style: str = Field(description="말투 및 어미 지침 (예: '~하십시오체', '~냥체')")
+    relationship_stance: str = Field(description="주인과의 관계성 및 케어 철학")
+    allowed_tools: list[str] = Field(default_factory=list, description="실행 권한을 가진 도구 목록 (예: ['google_calendar'])")
+    system_prompt_template: str = Field(description="페르소나 렌더링용 Jinja2/F-String 템플릿")
+    read_jitter_range: tuple[float, float] = Field(
+        default=(0.2, 0.5),
+        description="카톡 읽음 확인 시간차(Jitter) 범위(초). 예: 베라 (0.05, 0.1), 미우 (0.3, 0.6)"
+    )
+    is_builtin: bool = False                    # 시스템 기본 제공 여부
+```
+
+#### 2) 동적 캐릭터 주입 흐름 (Dynamic Injection Pipeline)
+1. **세션 바인딩**: 단톡방 세션 생성 시 사용자는 자신이 원하는 조합(예: `[베라, 미우]`, `[베라, 루나]`, 또는 `[세바스찬 단독]`)을 자유롭게 선택합니다. 단독 캐릭터 선택 시(`N=1`)에는 별도 파이프라인 분기 없이 `evaluate_turn_routing`에서 자동으로 `SOLO` 패턴이 결정되어 1부의 1:1 대화 경험을 100% 동일하게 제공합니다.
+2. **동적 무의식 & 라우팅 분석**: Single-Pass 인지 노드는 등록된 활성 페르소나 목록을 참조하여 주인의 객관적 심리(`master_state`)를 분석하고, 상황에 맞는 발화권(`RoutingDecision`)을 즉각 배정합니다. (이 단계에서는 캐릭터의 속마음을 대필하지 않습니다.)
+3. **독립 에이전트 자율 발화**: 발화권을 획득한 에이전트(1~2명)만이 주인의 `master_state`와 자신의 이전 `my_vibe`를 전달받아, 자신의 독립 시스템 프롬프트를 입고 스스로 속마음(`my_vibe`, `my_agenda`)을 형성하여 대사를 스트리밍합니다.
 
 ## 3. 핵심 공학 설계 원칙 (Core Engineering Architecture)
 
@@ -315,35 +356,128 @@ flowchart TD
 
 ---
 
-### 3.3. 심판자 에이전트(Floor Director) 기반 동적 발화 라우팅 & 속마음 주입
+### 3.3. 심판자 에이전트(Floor Director): 발화 욕구 점수(Desire Score) & 엄격한 코드 룰 엔진
 
-> **문제 정의**: 매 턴마다 기계적으로 A $\rightarrow$ B 순서로 핑퐁을 치면 며칠 만에 인위적인 작위성(Uncanny Valley)이 느껴지고 대화가 지루해짐.  
-> **지연 시간 최적화 (Single-Pass Execution)**: Tier 1(무의식 분석)과 Tier 2(심판자 라우팅 + 듀얼 속마음 분화)를 순차적으로 2회 호출하면 LLM 왕복 지연(RTT)이 0.4~0.6초로 누적됩니다. 이를 방지하기 위해 **"단일 초경량 모델(Gemini Flash-Lite, ~0.2초)의 Structured Output 1회 호출로 무의식 분석과 듀얼 속마음 분화를 원샷 처리(Single-Pass Unified Cognitive Call)"**합니다.
+> **딜레마의 본질**:
+> 1. **하향식 독재 심판자(Top-Down Dictator)의 한계**: 심판자가 위에서 기계적으로 패턴을 찍어 누르면, 캐릭터가 "지금 꼭 끼어들고 싶다"는 내적 동기(Agency)가 거세되어 토크쇼 마이크 배정 같은 작위성이 생김.
+> 2. **완전 자율 분권화(Pure Decentralization)의 파멸**: 각 에이전트에게 "알아서 말할지 말지 정해라"고 맡기면, 침묵 여부를 판단하기 위해 **매 턴마다 두 메이드의 LLM을 모두 실행해야 하므로 토큰과 지연이 2배로 폭증**함. 또한 LLM 특유의 '수다 본능(Chatty Bias)'으로 인해 90% 확률로 끼어들어 단톡방이 난장판이 됨.
+>
+> **해결책: 객관적 주인 상태 분석 + 발화 적합도 평가 + 코드 레벨 엄격 게이트키퍼**:  
+> Single-Pass 통합 인지 단계(Gemini Flash-Lite, ~0.15s)에서는 **주인의 상태(`master_state`)를 객관적으로 분석**하고, 활성 캐릭터들의 상황 적합도인 **'발화 적합도 점수(`desire_scores: dict[str, int]`)'**만 경량 산출합니다.  
+> **⚠️ 캐릭터별 복잡한 내면 속마음(`my_vibe`, `my_agenda`)은 중앙에서 결코 대필하지 않으며, 발화권을 획득한 에이전트가 직접 생성합니다.**
 
 ```mermaid
 flowchart TD
-    UserInput["주인님 메시지 접수"] --> UnifiedCognitive["🏛️ Tier 1+2 단일 파이프라인 (Single-Pass Gemini Flash-Lite, ~0.2s)<br/>- 주인의 무의식 분석 (master_state, ToM 오차)<br/>- 4대 발화 패턴 결정 (routing_pattern)<br/>- 베라/미우 듀얼 속마음 원샷 도출 (VeraInner / MiuInner)"]
+    UserInput["주인님 메시지 접수"] --> SinglePass["🏛️ Tier 1: TARS 무의식 & 적합도 평가 (Gemini Flash-Lite, ~0.15s)<br/>- 주인의 무의식 분석 (master_state, context_summary)<br/>- 활성 캐릭터별 상황 적합도/긴급도 산출 (desire_scores: 1~10)"]
     
-    UnifiedCognitive -->|"패턴 1 (약 35%): 업무/팩트/일정 질문"| VeraOnly["🧊 베라 단독 브리핑<br/>(미우는 조용히 경청)"]
-    UnifiedCognitive -->|"패턴 2 (약 25%): 단순 넋두리/일상 잡담"| MiuOnly["🐾 미우 단독 맞장구<br/>(베라는 묵묵히 지켜봄)"]
-    UnifiedCognitive -->|"패턴 3 (약 25%): 메뉴/의견/의논 선택"| VeraThenMiu["🧊 베라 정갈한 답변 $\rightarrow$ 🐾 미우 딴지/참견<br/>*(베라 스트리밍 중 미우 프리페치 병렬 가동)*"]
-    UnifiedCognitive -->|"패턴 4 (약 15%): 심야 번아웃/돌발/흥분"| MiuThenVera["🐾 미우 선빵/호들갑 $\rightarrow$ 🧊 베라 단속/현실 수습<br/>*(미우 스트리밍 중 베라 프리페치 병렬 가동)*"]
+    subgraph GATEKEEPER ["결정론적 발화권 판정 (Deterministic Code Rules)"]
+        SinglePass --> Gatekeeper{"⚙️ Floor Director 룰 엔진<br/>(evaluate_turn_routing)"}
+        Gatekeeper -->|"Rule 2: 상위 2명 7점 이상 (치열한 명분)"| PatternTiki["패턴: 티키타카 교차 발화 (상위 2인)<br/>(1차 화자 발화 + 2차 화자 오버랩 프리페치)"]
+        Gatekeeper -->|"Rule 3: 단독 우세 or 격차 >= 3"| PatternSolo["패턴: 1위 화자 단독 발화<br/>(타 캐릭터는 불필요한 발화 차단/경청)"]
+        Gatekeeper -->|"Rule 4: 전원 5점 미만 (일상 단답)"| PatternLight["가벼운 1인 단답 처리 (사족 차단)"]
+        Gatekeeper -->|"Rule 1: 특정 화자 직접 호명"| PatternMention["호명된 캐릭터 최우선 발화 (+4 가산)"]
+    end
 
-    UnifiedCognitive -.->|"VeraInnerState 주입"| VeraOnly
-    UnifiedCognitive -.->|"VeraInnerState 주입"| VeraThenMiu
-    UnifiedCognitive -.->|"MiuInnerState 주입"| MiuOnly
-    UnifiedCognitive -.->|"MiuInnerState 주입"| MiuThenVera
+    PatternTiki --> ActiveAgents["선발된 에이전트 계층<br/>(각자 자신의 페르소나 프롬프트로 속마음 & 대사 자율 생성)"]
+    PatternSolo --> ActiveAgents
+    PatternLight --> ActiveAgents
+    PatternMention --> ActiveAgents
 ```
 
-* **황금 비율 가이드라인**:
-  - **단독 발화 (~60%)**: 베라 혼자 깔끔하게 답변하거나 미우 혼자 귀엽게 맞장구쳐서 불필요한 레이턴시와 사족 방지.
-  - **티키타카 발화 (~40%)**: 진짜 필요한 순간에만 둘의 대화가 교차하여 예측 불가능한 꿀잼 연출.
-* **무의식 기반 동적 패턴 결정 알고리즘**:
-  - `master_state`에 '극심한 피로' or '번아웃' 감지 시 $\rightarrow$ **패턴 4 (미우 즉각 감정 환기 $\rightarrow$ 베라 현실 일정 조정)**로 자동 우선 승격.
-  - `master_state`에 '일정/태스크 문의' 감지 시 $\rightarrow$ **패턴 1 (베라 단독)**으로 낭비 없는 0.5초 브리핑.
-* **티키타카 체감 지연 0초화 (2차 화자 프리페칭, Overlapped Prefetching)**:
-  - 패턴 3/4의 2차 화자는 1차 화자가 끝나기를 마냥 기다리는 대신, **1차 화자의 스트리밍 시작 시점에 시스템 프롬프트를 조기 조합하고 백그라운드 프리페치(Prefetch)**를 시작합니다.
-  - 동시에 1차 화자 스트리밍 도중 2차 화자의 `typing_indicator`를 웹소켓으로 띄워 대기 시간을 '살아있는 캐릭터가 타자 치는 중'으로 체감 치환합니다.
+#### 1) 엄격한 4대 게이트키퍼 규칙 (Strict Gatekeeper Rules)
+
+| 규칙 번호 | 규칙 명칭 | 조건식 (Condition) | 결과 동작 및 발화 배정 |
+| :--- | :--- | :--- | :--- |
+| **Rule 1** | **직접 호명 우선권** | 사용자 메시지에 캐릭터 `name` 포함 시 | 호명된 캐릭터의 `desire_score`에 **+4 가산** 및 최우선 1차 발화권 배정 |
+| **Rule 2** | **티키타카 허용 조건** | `top1_score >= 7 and top2_score >= 7` | **둘 다 말할 명분이 절박할 때만 교차 발화 허용**.<br/>- 정서 위기/감정 케어 $\rightarrow$ System 1 (정서형) 선빵<br/>- 과업/팩트/의논 $\rightarrow$ System 2 (과업형) 선빵 |
+| **Rule 3** | **단독 발화 컷오프** | 1위만 $\ge 7$ 이거나 `top1 - top2 >= 3` | 1위 캐릭터 단독 발화.<br/>탈락한 캐릭터는 **발화 큐에서 즉시 제외(침묵/경청)** |
+| **Rule 4** | **저욕구 사족 방어** | 전원 점수 $< 5$ 점일 때 | 가벼운 일상 인사/단답. 최근 턴에 덜 말한 메이드 1명만 짧게 대답 |
+
+#### 2) `evaluate_turn_routing` 동적 N-인격 결정론적 구현 명세
+
+```python
+class RoutingPattern(str, Enum):
+    SOLO = "SOLO"                   # 단독 1인 발화
+    TIKITAKA = "TIKITAKA"           # 2인 교차 티키타카 발화
+
+class RoutingDecision(BaseModel):
+    pattern: RoutingPattern
+    primary_speaker_id: str         # 1차 발화 페르소나 ID
+    secondary_speaker_id: str | None = None  # 2차 발화 페르소나 ID (티키타카 시)
+    reason: str
+
+def evaluate_turn_routing(
+    user_text: str,
+    desire_scores: dict[str, int],
+    active_personas: list[PersonaDefinition],
+    subconscious: SubconsciousStatePayload,
+) -> RoutingDecision:
+    """N명의 동적 페르소나 환경에서 0ms로 실행되는 범용 발화권 판정 함수."""
+    scores: list[tuple[PersonaDefinition, int]] = []
+    
+    # 1. 캐릭터별 가산점 및 점수 집계 (Rule 1: 직접 호명)
+    for p in active_personas:
+        base_score = desire_scores.get(p.id, 5)
+        if p.name in user_text:
+            base_score += 4  # 직접 호명된 캐릭터 대폭 가산
+        scores.append((p, base_score))
+
+    # 2. 발화 욕구 점수 기준 내림차순 정렬
+    scores.sort(key=lambda x: x[1], reverse=True)
+    if not scores:
+        raise ValueError("활성화된 컴패니언 페르소나가 없습니다.")
+
+    top1_p, top1_score = scores[0]
+    
+    # 단일 캐릭터 세션인 경우 단독 발화 반환
+    if len(scores) == 1:
+        return RoutingDecision(
+            pattern=RoutingPattern.SOLO,
+            primary_speaker_id=top1_p.id,
+            reason=f"{top1_p.name} 단독 세션 발화"
+        )
+
+    top2_p, top2_score = scores[1]
+
+    # Rule 2: 상위 2명 모두 발화 욕구 7점 이상일 때 -> 티키타카 교차 발화 허용
+    if top1_score >= 7 and top2_score >= 7:
+        # 긴급 정서 케어 상황에서는 정서형(System 1) 페르소나를 우선 선발
+        is_crisis = "번아웃" in subconscious.master_state or "자책" in subconscious.master_state
+        if is_crisis and top2_p.role_type == RoleType.SYSTEM_1_EMOTIONAL:
+            return RoutingDecision(
+                pattern=RoutingPattern.TIKITAKA,
+                primary_speaker_id=top2_p.id,
+                secondary_speaker_id=top1_p.id,
+                reason=f"정서 위기 감지: {top2_p.name}(정서 선빵) -> {top1_p.name}(현실 수습)"
+            )
+        return RoutingDecision(
+            pattern=RoutingPattern.TIKITAKA,
+            primary_speaker_id=top1_p.id,
+            secondary_speaker_id=top2_p.id,
+            reason=f"치열한 듀얼 발화 명분: {top1_p.name}({top1_score}점) -> {top2_p.name}({top2_score}점)"
+        )
+
+    # Rule 3 & 4: 단독 발화 (점수 격차 >= 3 또는 2위 7점 미만)
+    return RoutingDecision(
+        pattern=RoutingPattern.SOLO,
+        primary_speaker_id=top1_p.id,
+        secondary_speaker_id=None,
+        reason=f"{top1_p.name} 우세 ({top1_score}점 vs {top2_p.name} {top2_score}점) - 타 캐릭터 경청"
+    )
+```
+
+#### 3) 이 방식이 보장하는 3대 효과
+1. **무한한 페르소나 확장성 (Infinite Extensibility)**: 베라/미우뿐 아니라 사용자가 생성한 '루나(소꿉친구)', '세바스찬(집사)', '아이리스(해커)' 등 어떤 캐릭터가 단톡방에 들어와도 코드 수정 없이 100% 동일한 규칙으로 티키타카가 성립합니다.
+2. **토큰 낭비 Zero**: 별도의 추가 LLM 호출 없이 Single-Pass 응답의 정수 점수들을 파이썬에서 0초 만에 정렬/비교하므로 인원수가 늘어나도 오버헤드가 없습니다.
+3. **피로감 없는 완벽한 정숙성**: N명의 캐릭터가 있더라도 엄격한 7점 컷오프에 의해 **한 턴에 최대 2명까지만 발화가 엄격히 제한**되므로 단톡방이 난장판이 되지 않습니다.
+
+#### 4) 다자간 Theory of Mind & 생각 노드(Thought Node)의 통합 연계
+1. **단톡방 전체 서사 단위의 Theory of Mind 귀속**:
+   - 복수 화자(예: 미우 애교 $\rightarrow$ 베라 수습)가 오간 후 다음 턴 주인의 반응이 인입되었을 때, 예측 오차 평가(`prediction_feedback`)는 개별 캐릭터가 아닌 **Tier 1 TARS 무의식이 단톡방 전체 서사 흐름에서 종합 평가**합니다.
+   - 예: *"두 메이드의 티키타카로 주인이 웃으며 긴장을 풀었음 $\rightarrow$ 예측 적중(ToM 성공)"* 메모가 다음 턴 `SubconsciousStatePayload`에 반영되어 서사의 유기적 연속성을 완성합니다.
+2. **생각 노드(`thought_node`)의 공통 인지 렌즈 주입**:
+   - 1부에서 생성된 `type: thought_node`(예: 번아웃 쉴드, 자책 방어 규격)는 Tier 1 `slicer_node`에 의해 슬라이싱되어 `master_state` 분석 시 최상위 사고 렌즈로 주입됩니다.
+   - 단톡방의 모든 활성 메이드는 이 단일한 무의식 진실을 공유하므로, 캐릭터별 말투와 성향은 완전히 다르더라도 주인을 지탱하는 본질적인 인지적 방어 태세는 하나로 정렬됩니다.
 
 ---
 
@@ -443,13 +577,14 @@ sequenceDiagram
 
 ## 5. 데이터 모델 및 프로토콜 명세 (Data & Protocol Specs)
 
-### 5.1. 무의식 & 듀얼 속마음 및 단톡방 메시지 스키마
+### 5.1. 무의식·발화권 라우팅 및 단톡방 메시지 스키마
 
 ```python
-class SpeakerIdentity(str, Enum):
+class DefaultSpeakerId:
+    """기본 제공 페르소나 식별자 상수 (동적 확장을 지원하되 기본값 타입 힌트 편의 제공)."""
     MASTER = "master"      # 주인님 (User)
-    VERA = "vera"          # 메이드 A (수석 메이드)
-    MIU = "miu"            # 메이드 B (고양이 메이드)
+    VERA = "vera"          # 레퍼런스 수석 메이드 (System 2)
+    MIU = "miu"            # 레퍼런스 고양이 메이드 (System 1)
 
 class SubconsciousStatePayload(BaseModel):
     """Tier 1 TARS 무의식이 도출한 주인의 공통 심리 진실."""
@@ -459,30 +594,31 @@ class SubconsciousStatePayload(BaseModel):
     expected_reaction: str | None = Field(default=None, description="주인이 다음 턴에 보일 것으로 예상되는 반응")
 
 class CharacterInnerState(BaseModel):
-    """Tier 2 심판자가 메이드별 인지 렌즈로 굴절시킨 개별 속마음."""
-    speaker: SpeakerIdentity
+    """Tier 2 발화권을 획득한 에이전트가 자신의 페르소나로 직접 형성한 내면 속마음."""
+    speaker_id: str = Field(description="페르소나 고유 ID (예: 'vera', 'miu', 'luna', 'sebastian')")
     my_vibe: str = Field(description="캐릭터의 내면 정서 및 여운 (애틋함, 뾰루퉁함, 안타까움 등)")
     my_agenda: str = Field(description="이번 턴 대화의 심리적 의도/행동 목표 (예: 잔소리로 침대 보내기, 치대며 웃기기)")
 
-class DualInnerStatePayload(BaseModel):
-    """심판자(Floor Director)가 생성하여 각 메이드 프롬프트에 주입하는 통합 인지 페이로드."""
+class CognitiveRoutingPayload(BaseModel):
+    """Tier 1 TARS 통합 인지 노드가 도출하는 객관적 주인 상태 및 발화권 판정."""
     subconscious: SubconsciousStatePayload
-    vera_inner: CharacterInnerState
-    miu_inner: CharacterInnerState
-    routing_pattern: str = Field(description="선택된 발화 패턴 (pattern_1 ~ pattern_4)")
+    routing_decision: RoutingDecision
 
 class GroupChatMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str
-    sender: SpeakerIdentity
-    recipients: list[SpeakerIdentity] = Field(default_factory=lambda: [SpeakerIdentity.VERA, SpeakerIdentity.MIU])
-    target_speaker: SpeakerIdentity | None = None
+    sender_id: str = Field(description="발화자 식별자 ('master' 또는 등록된 페르소나 ID)")
+    recipients: list[str] = Field(
+        default_factory=lambda: [DefaultSpeakerId.VERA, DefaultSpeakerId.MIU],
+        description="단톡방에 참여 중인 활성 수신자 페르소나 ID 목록"
+    )
+    target_speaker_id: str | None = None
     content: str
     is_interrupted: bool = False                   # 말하다 끊겼는지 여부
     interrupted_at_token_count: int | None = None  # 중단 시점 토큰 위치
     reply_to_id: str | None = None                 # 인과 앵커 ID
-    read_by: list[str] = Field(default_factory=list)  # ["vera"], ["vera", "miu"]
-    inner_state_snapshot: CharacterInnerState | None = None  # 발화 시점의 내면 속마음 스냅샷
+    read_by: list[str] = Field(default_factory=list)  # 읽은 페르소나 ID 리스트 (예: ["vera", "miu"])
+    inner_state_snapshot: CharacterInnerState | None = None  # 발화 에이전트가 직접 형성한 내면 속마음 스냅샷
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
@@ -508,7 +644,7 @@ class GroupChatMessage(BaseModel):
 
 | 마일스톤 | 명칭 | 핵심 산출물 및 구현 범위 |
 | :--- | :--- | :--- |
-| **M6** | **Tier 1+2 Single-Pass 통합 인지 엔진 & 듀얼 속마음 분화기** | - `UnifiedCognitiveNode` (Gemini Flash-Lite 기반 무의식 분석 + 발화권 라우팅 + 속마음 분화 원샷 처리)<br/>- 1부 `InnerStatePayload` $\rightarrow$ `DualInnerStatePayload` 스키마 마이그레이션 어댑터<br/>- 베라/미우 독립 시스템 프롬프트 및 `PerspectiveProjectionEngine` |
-| **M7** | **분산 턴 상태 머신 & `HybridSessionTurnLock`** | - `HybridSessionTurnLock` (L1 `asyncio.Lock` + L2 Redis 상태 해시/Redlock/PubSub 캔슬)<br/>- Traefik WebSocket Sticky Session 쿠키 설정 (`k8s/00-traefik-config.yaml`)<br/>- `turn_epoch` 기반 레이스 컨디션 방지 & 15초 Redis TTL 자동 만료 워치독 |
+| **M6** | **Tier 1 Single-Pass 통합 인지 & 동적 페르소나 레지스트리** | - `UnifiedCognitiveNode` (Gemini Flash-Lite 기반 주인 심리 `master_state` 분석 및 Floor Director 발화권 라우팅 원샷 처리)<br/>- `PersonaRegistry` (동적 캐릭터 정의 CRUD, Jinja2 시스템 프롬프트 렌더러, 세션별 페르소나 주입기)<br/>- 레거시 세션 데이터 마이그레이션 및 `CognitiveRoutingPayload` 스키마 어댑터 구축 |
+| **M7** | **결정론적 게이트키퍼 룰 엔진 & 세션 턴 락 연동** | - `FloorDirectorGatekeeper` (`evaluate_turn_routing` N인격 범용 4대 결정론적 룰 엔진 구현)<br/>- L1 로컬 `SessionTurnLock` (`asyncio.Lock` + `turn_epoch` 기반 상태 머신)<br/>- `turn_epoch` 기반 레이스 컨디션 방지 & 15초 Redis TTL 연동 인터페이스<br/>*(분산 Redis 백플레인 및 K8s 클러스터 확장은 3부 I1에서 전담)* |
 | **M8** | **예측 불가 타이밍 방어 (U1~U6) & 카톡 읽음 프로토콜** | - 6대 엣지 케이스 인터럽트 방어 로직 (300ms 버스트 버퍼링, 50~150ms 캔슬 전파)<br/>- `read_receipt` 웹소켓 이벤트 및 캐릭터별 0.3s 시간차(Jitter) 엔진<br/>- 2차 화자 사전 준비(Prefetching) 및 겹침 타이핑 인디케이터 연출 |
 | **M9** | **단톡방 UI 뷰 & 3인 멀티턴 E2E 통합** | - 프론트엔드 카톡 단톡방 스타일 UI (노란 숫자 2/1 연출, 겹침 타이핑 인디케이터)<br/>- 멀티 파드 분산 환경 인터럽트 스트레스 테스트 및 3인 멀티턴 E2E 종합 검증 |

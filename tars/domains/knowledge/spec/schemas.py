@@ -90,9 +90,13 @@ class OKFMetadata(BaseModel):
     description: str | None = Field(default=None, description="Short summary/description")
     category: str | None = Field(default=None, max_length=64, description="High-level category")
     tags: list[str] = Field(default_factory=list, description="Keyword tags")
-    aliases: list[str] = Field(default_factory=list, description="Alternative lookup titles/aliases")
+    aliases: list[str] = Field(
+        default_factory=list, description="Alternative lookup titles/aliases"
+    )
     importance: OKFImportance = Field(default=OKFImportance.MEDIUM, description="Importance level")
-    status: OKFStatus = Field(default=OKFStatus.VERIFIED, description="Document verification status")
+    status: OKFStatus = Field(
+        default=OKFStatus.VERIFIED, description="Document verification status"
+    )
     source: OKFSource = Field(default=OKFSource.MANUAL, description="Creation source")
     relations: OKFRelations = Field(default_factory=OKFRelations, description="Relation graph")
     created_at: datetime = Field(

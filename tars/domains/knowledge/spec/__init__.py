@@ -14,6 +14,7 @@ from tars.domains.knowledge.spec.errors import (
     OKFValidationError,
     OKFVersionError,
 )
+from tars.domains.knowledge.spec.parser import parse_okf_text
 from tars.domains.knowledge.spec.schemas import (
     ID_PATTERN,
     OKF2Document,
@@ -26,7 +27,6 @@ from tars.domains.knowledge.spec.schemas import (
     OKFStatus,
     OKFType,
 )
-from tars.domains.knowledge.spec.parser import parse_okf_text
 from tars.domains.knowledge.spec.serializer import serialize_okf_document
 from tars.domains.knowledge.spec.validator import (
     validate_okf_document,

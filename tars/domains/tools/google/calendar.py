@@ -6,13 +6,11 @@ Supports:
 - calendar_update_event: Update an existing event while preserving untouched fields
 - calendar_delete_event: Delete an event by ID
 - calendar_query_freebusy: Check schedule availability and busy intervals across calendars
-- Deterministic in-memory mock mode for offline testing
 """
 
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
 from tars.config import get_settings
@@ -37,31 +35,6 @@ class GoogleCalendarAdapter:
     ) -> None:
         self.auth_helper = auth_helper or GoogleAuthHelper()
         self.calendar_id = calendar_id or get_settings().google_calendar_id
-        # In-memory store for deterministic mock testing
-        self._mock_events: dict[str, dict[str, Any]] = {
-            "evt_001": {
-                "id": "evt_001",
-                "summary": "Endurance Mission Briefing",
-                "start": {"dateTime": "2026-08-30T10:00:00Z"},
-                "end": {"dateTime": "2026-08-30T11:30:00Z"},
-                "description": "Pre-flight trajectory and wormhole traversal review.",
-                "attendees": [
-                    {"email": "cooper@endurance.space"},
-                    {"email": "brand@endurance.space"},
-                ],
-                "status": "confirmed",
-                "hangoutLink": "https://meet.google.com/end-uran-ce1",
-            },
-            "evt_002": {
-                "id": "evt_002",
-                "summary": "TARS Reflection & Sync",
-                "start": {"dateTime": "2026-08-31T14:00:00Z"},
-                "end": {"dateTime": "2026-08-31T15:00:00Z"},
-                "description": "Weekly reflection and knowledge synchronization for 주인님.",
-                "attendees": [{"email": "user@example.com"}],
-                "status": "confirmed",
-            },
-        }
 
     async def close(self) -> None:
         """Close underlying authentication and HTTP resources."""
@@ -85,49 +58,6 @@ class GoogleCalendarAdapter:
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
         norm_time_min = normalize_calendar_time(time_min)
         norm_time_max = normalize_calendar_time(time_max)
-
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            events = list(self._mock_events.values())
-            if norm_time_min:
-                events = [
-                    e
-                    for e in events
-                    if (e.get("start", {}).get("dateTime") or e.get("start", {}).get("date", ""))
-                    >= norm_time_min
-                ]
-            if norm_time_max:
-                events = [
-                    e
-                    for e in events
-                    if (e.get("end", {}).get("dateTime") or e.get("end", {}).get("date", ""))
-                    <= norm_time_max
-                ]
-            if query:
-                q_lower = query.lower()
-                events = [
-                    e
-                    for e in events
-                    if q_lower in e.get("summary", "").lower()
-                    or q_lower in e.get("description", "").lower()
-                ]
-
-            events = events[:max_results]
-            if not detailed:
-                return [
-                    {
-                        "id": e.get("id"),
-                        "summary": e.get("summary"),
-                        "start": e.get("start"),
-                        "end": e.get("end"),
-                        "status": e.get("status"),
-                        "hangoutLink": e.get("hangoutLink"),
-                    }
-                    for e in events
-                ]
-            return events
 
         url = f"https://www.googleapis.com/calendar/v3/calendars/{self.calendar_id}/events"
         params: dict[str, str | int | bool] = {
@@ -171,14 +101,6 @@ class GoogleCalendarAdapter:
     async def get_event(self, event_id: str, user_id: str | None = None) -> dict[str, Any]:
         """Retrieve full details of a specific event by ID."""
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            if event_id in self._mock_events:
-                return self._mock_events[event_id]
-            raise KeyError(f"Event ID '{event_id}' not found.")
-
         url = (
             f"https://www.googleapis.com/calendar/v3/calendars/{self.calendar_id}/events/{event_id}"
         )
@@ -217,24 +139,6 @@ class GoogleCalendarAdapter:
         if conf_data:
             event_body["conferenceData"] = conf_data
 
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            event_id = f"evt_{uuid.uuid4().hex[:8]}"
-            created_event = {
-                "id": event_id,
-                **event_body,
-                "status": "confirmed",
-            }
-            if add_google_meet:
-                created_event["hangoutLink"] = (
-                    f"https://meet.google.com/{uuid.uuid4().hex[:3]}-{uuid.uuid4().hex[:4]}-{uuid.uuid4().hex[:3]}"
-                )
-            self._mock_events[event_id] = created_event
-            logger.info("Mock created calendar event: %s (%s)", event_id, summary)
-            return created_event
-
         url = f"https://www.googleapis.com/calendar/v3/calendars/{self.calendar_id}/events"
         client = self.auth_helper._get_http_client()
         resp = await client.post(url, headers=headers, params=conf_params, json=event_body)
@@ -255,7 +159,7 @@ class GoogleCalendarAdapter:
         user_id: str | None = None,
     ) -> dict[str, Any]:
         """Update an existing event, preserving untouched fields."""
-        existing = await self.get_event(event_id=event_id, user_id=user_id)
+        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
         patch_body: dict[str, Any] = {}
 
         if summary is not None:
@@ -280,21 +184,6 @@ class GoogleCalendarAdapter:
         if conf_data:
             patch_body["conferenceData"] = conf_data
 
-        headers = await self.auth_helper.get_auth_headers(user_id=user_id)
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            updated_event = dict(existing)
-            updated_event.update(patch_body)
-            if add_google_meet and "hangoutLink" not in updated_event:
-                updated_event["hangoutLink"] = (
-                    f"https://meet.google.com/{uuid.uuid4().hex[:3]}-{uuid.uuid4().hex[:4]}-{uuid.uuid4().hex[:3]}"
-                )
-            self._mock_events[event_id] = updated_event
-            logger.info("Mock updated calendar event: %s", event_id)
-            return updated_event
-
         url = (
             f"https://www.googleapis.com/calendar/v3/calendars/{self.calendar_id}/events/{event_id}"
         )
@@ -307,15 +196,6 @@ class GoogleCalendarAdapter:
     async def delete_event(self, event_id: str, user_id: str | None = None) -> dict[str, Any]:
         """Delete an event from calendar."""
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            if event_id in self._mock_events:
-                del self._mock_events[event_id]
-                return {"status": "deleted", "event_id": event_id}
-            raise KeyError(f"Event ID '{event_id}' not found.")
-
         url = (
             f"https://www.googleapis.com/calendar/v3/calendars/{self.calendar_id}/events/{event_id}"
         )
@@ -339,34 +219,6 @@ class GoogleCalendarAdapter:
             raise ValueError("time_min and time_max are required for freebusy query.")
 
         cal_ids = coerce_to_string_list(calendar_ids) or [self.calendar_id or "primary"]
-
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            # Compute busy intervals from mock events
-            busy_slots: list[dict[str, str]] = []
-            for evt in self._mock_events.values():
-                evt_start = evt.get("start", {}).get("dateTime") or evt.get("start", {}).get("date")
-                evt_end = evt.get("end", {}).get("dateTime") or evt.get("end", {}).get("date")
-                if evt_start and evt_end:
-                    if evt_start < norm_time_max and evt_end > norm_time_min:
-                        busy_slots.append({"start": evt_start, "end": evt_end})
-
-            primary_id = self.calendar_id or "primary"
-            calendars_busy: dict[str, dict[str, list[dict[str, str]]]] = {}
-            for cal_id in cal_ids:
-                if cal_id in ("primary", primary_id):
-                    calendars_busy[cal_id] = {"busy": busy_slots}
-                else:
-                    calendars_busy[cal_id] = {"busy": []}
-
-            return {
-                "kind": "calendar#freeBusy",
-                "timeMin": norm_time_min,
-                "timeMax": norm_time_max,
-                "calendars": calendars_busy,
-            }
 
         url = "https://www.googleapis.com/calendar/v3/freeBusy"
         query_body = {

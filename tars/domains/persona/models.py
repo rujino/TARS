@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, ForeignKey, String
+from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from tars.core.database import Base, EncryptedString, TimestampMixin, UUIDPrimaryKeyMixin
@@ -34,7 +34,6 @@ class TARSSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     google_refresh_token: Mapped[str | None] = mapped_column(EncryptedString(512), nullable=True)
     google_access_token: Mapped[str | None] = mapped_column(EncryptedString(1024), nullable=True)
     google_linked_email: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    google_mock_linked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     google_client_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     google_client_secret: Mapped[str | None] = mapped_column(EncryptedString(256), nullable=True)
 
@@ -43,25 +42,14 @@ class TARSSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     @property
     def google_linked(self) -> bool:
-        return bool(
-            self.google_mock_linked or self.google_refresh_token or self.google_access_token
-        )
+        return bool(self.google_refresh_token or self.google_access_token)
 
     @google_linked.setter
     def google_linked(self, value: bool) -> None:
         if not value:
-            self.google_mock_linked = False
             self.google_refresh_token = None
             self.google_access_token = None
             self.google_linked_email = None
-
-    @property
-    def google_is_mock(self) -> bool:
-        return bool(self.google_mock_linked)
-
-    @google_is_mock.setter
-    def google_is_mock(self, value: bool) -> None:
-        self.google_mock_linked = bool(value)
 
     @property
     def google_account_email(self) -> str | None:

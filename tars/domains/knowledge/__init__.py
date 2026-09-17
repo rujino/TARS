@@ -15,6 +15,7 @@ from tars.domains.knowledge.micro import (
 )
 from tars.domains.knowledge.models import UserWikiIndex
 from tars.domains.knowledge.slicer.engine import DynamicSlicerEngine
+from tars.domains.knowledge.spec.parser import parse_okf_text
 from tars.domains.knowledge.spec.schemas import (
     OKF2Document,
     OKF2Metadata,
@@ -23,7 +24,6 @@ from tars.domains.knowledge.spec.schemas import (
     OKFStatus,
     OKFType,
 )
-from tars.domains.knowledge.spec.parser import parse_okf_text
 from tars.domains.knowledge.spec.serializer import serialize_okf_document
 from tars.domains.knowledge.spec.wikilink import WikiLink, extract_wikilinks
 from tars.domains.knowledge.storage.manager import FileStorageManager

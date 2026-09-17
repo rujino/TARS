@@ -11,12 +11,10 @@ import logging
 import os
 from pathlib import Path
 
-from tars.config import get_settings
 from tars.domains.knowledge.micro.schemas import MicroFact, UserMicroFactProfile
 from tars.domains.knowledge.storage.manager import (
     FileStorageManager,
     StorageIOError,
-    StorageSecurityError,
 )
 
 logger = logging.getLogger("tars.domains.knowledge.micro.manager")
@@ -66,7 +64,9 @@ class MicroFactManager:
         except Exception as exc:
             if tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
-            raise StorageIOError(f"Failed to persist micro facts for user '{profile.user_id}': {exc}") from exc
+            raise StorageIOError(
+                f"Failed to persist micro facts for user '{profile.user_id}': {exc}"
+            ) from exc
 
     async def set_fact(
         self,

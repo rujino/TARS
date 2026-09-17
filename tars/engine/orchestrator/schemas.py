@@ -37,11 +37,35 @@ class AgentStreamEvent(BaseModel):
     model_name: str | None = Field(
         default=None, description="Model identifier that produced the turn response"
     )
+    title: str | None = Field(default=None, description="Updated session title")
+    speaker: str | None = Field(
+        default=None, description="Active speaker persona ID (e.g., vera, miu)"
+    )
+    avatar: str | None = Field(
+        default=None, description="Avatar image URL or asset path for the speaker"
+    )
+    turn_epoch: int | None = Field(
+        default=None,
+        description="Monotonic turn generation epoch for concurrency arbitration",
+    )
+    turn_state: str | None = Field(
+        default=None,
+        description="Turn state metadata (e.g., primary, secondary, monologue)",
+    )
 
     def to_sse_event(self) -> str:
         """Format as Server-Sent Event (SSE) wire protocol frame."""
         if self.type == "stream_start":
-            payload = json.dumps({"session_id": self.session_id}, ensure_ascii=False)
+            payload_dict: dict[str, Any] = {"session_id": self.session_id}
+            if self.speaker is not None:
+                payload_dict["speaker"] = self.speaker
+            if self.avatar is not None:
+                payload_dict["avatar"] = self.avatar
+            if self.turn_epoch is not None:
+                payload_dict["turn_epoch"] = self.turn_epoch
+            if self.turn_state is not None:
+                payload_dict["turn_state"] = self.turn_state
+            payload = json.dumps(payload_dict, ensure_ascii=False)
             return f"event: stream_start\ndata: {payload}\n\n"
         elif self.type == "tool_start":
             payload = json.dumps(
@@ -61,23 +85,51 @@ class AgentStreamEvent(BaseModel):
             )
             return f"event: tool_result\ndata: {payload}\n\n"
         elif self.type == "token":
-            payload = json.dumps({"content": self.content, "delta": self.delta}, ensure_ascii=False)
+            payload_dict = {"content": self.content, "delta": self.delta}
+            if self.speaker is not None:
+                payload_dict["speaker"] = self.speaker
+            if self.avatar is not None:
+                payload_dict["avatar"] = self.avatar
+            if self.turn_epoch is not None:
+                payload_dict["turn_epoch"] = self.turn_epoch
+            if self.turn_state is not None:
+                payload_dict["turn_state"] = self.turn_state
+            payload = json.dumps(payload_dict, ensure_ascii=False)
             return f"event: token\ndata: {payload}\n\n"
         elif self.type == "stream_end":
-            payload_dict: dict[str, Any] = {
+            payload_dict = {
                 "session_id": self.session_id,
                 "content": self.content,
                 "tools_used": self.tools_used or [],
             }
+            if self.title is not None:
+                payload_dict["title"] = self.title
             if self.engine is not None:
                 payload_dict["engine"] = self.engine
             if self.model_name is not None:
                 payload_dict["model_name"] = self.model_name
+            if self.speaker is not None:
+                payload_dict["speaker"] = self.speaker
+            if self.avatar is not None:
+                payload_dict["avatar"] = self.avatar
+            if self.turn_epoch is not None:
+                payload_dict["turn_epoch"] = self.turn_epoch
+            if self.turn_state is not None:
+                payload_dict["turn_state"] = self.turn_state
             payload = json.dumps(payload_dict, ensure_ascii=False)
             return f"event: stream_end\ndata: {payload}\n\n"
         elif self.type == "error":
             err_msg = self.error or self.content or "Stream error occurred"
-            payload = json.dumps({"error": err_msg, "message": err_msg}, ensure_ascii=False)
+            payload_dict = {"error": err_msg, "message": err_msg}
+            if self.speaker is not None:
+                payload_dict["speaker"] = self.speaker
+            if self.avatar is not None:
+                payload_dict["avatar"] = self.avatar
+            if self.turn_epoch is not None:
+                payload_dict["turn_epoch"] = self.turn_epoch
+            if self.turn_state is not None:
+                payload_dict["turn_state"] = self.turn_state
+            payload = json.dumps(payload_dict, ensure_ascii=False)
             return f"event: error\ndata: {payload}\n\n"
         elif self.type == "done":
             return "event: done\ndata: [DONE]\n\n"
@@ -89,6 +141,8 @@ class AgentStreamEvent(BaseModel):
         data: dict[str, Any] = {"type": self.type}
         if self.session_id is not None:
             data["session_id"] = self.session_id
+        if self.title is not None:
+            data["title"] = self.title
         if self.content is not None:
             data["content"] = self.content
         if self.delta is not None:
@@ -112,6 +166,14 @@ class AgentStreamEvent(BaseModel):
             data["engine"] = self.engine
         if self.model_name is not None:
             data["model_name"] = self.model_name
+        if self.speaker is not None:
+            data["speaker"] = self.speaker
+        if self.avatar is not None:
+            data["avatar"] = self.avatar
+        if self.turn_epoch is not None:
+            data["turn_epoch"] = self.turn_epoch
+        if self.turn_state is not None:
+            data["turn_state"] = self.turn_state
         return data
 
 

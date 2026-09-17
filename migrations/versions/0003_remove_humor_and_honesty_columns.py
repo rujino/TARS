@@ -4,6 +4,7 @@ Revision ID: 0003_remove_humor_honesty
 Revises: 0002_tool_settings
 Create Date: 2026-09-15 05:45:00.000000
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa

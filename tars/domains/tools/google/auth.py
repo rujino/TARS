@@ -1,10 +1,9 @@
-"""Google OAuth2 Authentication Helper with deterministic offline mock mode."""
+"""Google OAuth2 Authentication Helper."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from typing import Any
 
@@ -16,14 +15,13 @@ logger = logging.getLogger("tars.tools.google.auth")
 
 
 class GoogleAuthHelper:
-    """Helper managing Google Workspace OAuth2 Access Tokens with multi-tenant user isolation and mock mode."""
+    """Helper managing Google Workspace OAuth2 Access Tokens with multi-tenant user isolation."""
 
     def __init__(
         self,
         client_id: str | None = None,
         client_secret: str | None = None,
         refresh_token: str | None = None,
-        mock_mode: bool | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         settings = get_settings()
@@ -32,17 +30,6 @@ class GoogleAuthHelper:
         self.refresh_token = refresh_token or settings.google_refresh_token
         self._http_client = http_client
         self._owns_http_client = http_client is None
-
-        # Determine mock mode: explicit flag -> env var -> config
-        env_mock = os.environ.get("TARS_GOOGLE_MOCK_MODE", "").lower() in ("true", "1", "yes")
-        if mock_mode is not None:
-            self.mock_mode = mock_mode
-        elif env_mock:
-            self.mock_mode = True
-        elif settings.google_mock_mode:
-            self.mock_mode = True
-        else:
-            self.mock_mode = False
 
         # Multi-tenant per-user token cache: user_id -> (access_token, expires_at)
         self._user_token_cache: dict[str, tuple[str, float]] = {}
@@ -78,9 +65,6 @@ class GoogleAuthHelper:
         Returns:
             str: Valid Bearer access token string.
         """
-        if self.mock_mode:
-            return "mock_google_oauth2_access_token"
-
         now = time.time()
 
         # 1. Fast-path check without acquiring lock
@@ -123,15 +107,10 @@ class GoogleAuthHelper:
                         res = await session.execute(stmt)
                         s = res.scalar_one_or_none()
 
-                        if not s or not (
-                            s.google_refresh_token or s.google_access_token or s.google_mock_linked
-                        ):
+                        if not s or not (s.google_refresh_token or s.google_access_token):
                             raise RuntimeError(
                                 "Google Workspace 계정이 연동되지 않았습니다. [MCP & TOOLS]에서 Google 계정을 연동해 주세요."
                             )
-
-                        if s.google_mock_linked:
-                            return "mock_google_oauth2_access_token"
 
                         effective_refresh_token = s.google_refresh_token
                         if not effective_client_id and s.google_client_id:

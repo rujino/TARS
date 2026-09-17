@@ -6,7 +6,7 @@ Represents atomic user facts, preferences, identity attributes, and short-term s
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -15,9 +15,13 @@ class MicroFact(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    key: str = Field(..., min_length=1, max_length=128, description="Fact slot key (e.g. coffee_pref)")
+    key: str = Field(
+        ..., min_length=1, max_length=128, description="Fact slot key (e.g. coffee_pref)"
+    )
     value: str = Field(..., description="Fact value or natural language statement")
-    category: str = Field(default="preference", description="Category: preference | profile | state | rule")
+    category: str = Field(
+        default="preference", description="Category: preference | profile | state | rule"
+    )
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence score")
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), description="Last updated timestamp"
@@ -39,7 +43,9 @@ class UserMicroFactProfile(BaseModel):
         default_factory=lambda: datetime.now(UTC), description="Last profile update timestamp"
     )
 
-    def set_fact(self, key: str, value: str, category: str = "preference", confidence: float = 1.0) -> MicroFact:
+    def set_fact(
+        self, key: str, value: str, category: str = "preference", confidence: float = 1.0
+    ) -> MicroFact:
         clean_key = key.strip().lower()
         fact = MicroFact(
             key=clean_key,
@@ -70,7 +76,9 @@ class UserMicroFactProfile(BaseModel):
 
         lines = [
             fact.to_prompt_line()
-            for fact in sorted(self.facts.values(), key=lambda f: f.updated_at, reverse=True)[:max_facts]
+            for fact in sorted(self.facts.values(), key=lambda f: f.updated_at, reverse=True)[
+                :max_facts
+            ]
         ]
         return "## User Personal Context & Facts\n" + "\n".join(lines)
 

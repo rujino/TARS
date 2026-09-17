@@ -73,7 +73,9 @@ class ProactiveGreetingService:
         """Generate a thoughtful TARS personal attendant fallback greeting if LLM is unavailable or times out."""
         norm_mode = "attend" if mode in ("attend", "companion") else "task"
         if norm_mode == "task":
-            return "주인님, TARS 작업 모드 가동되었습니다. 집중할 과업이나 지시사항을 말씀해 주십시오."
+            return (
+                "주인님, TARS 작업 모드 가동되었습니다. 집중할 과업이나 지시사항을 말씀해 주십시오."
+            )
 
         if 22 <= hour or hour < 6:
             return f"주인님, 늦은 밤({hour}시)입니다. 오늘 하루도 고생 많으셨습니다. 무리하지 마시고 편안히 쉬시길 바랍니다."

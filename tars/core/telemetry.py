@@ -148,6 +148,7 @@ def setup_telemetry_logging() -> None:
         "%(asctime)s [%(levelname)s] [%(correlation_id)s] %(name)s: %(message)s"
     )
     root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
     if not root_logger.handlers:
         default_handler = logging.StreamHandler()
         default_handler.setFormatter(formatter)
@@ -159,6 +160,7 @@ def setup_telemetry_logging() -> None:
             handler.setFormatter(formatter)
 
     tars_logger = logging.getLogger("tars")
+    tars_logger.setLevel(logging.INFO)
     for handler in tars_logger.handlers:
         handler.addFilter(log_filter)
         handler.setFormatter(formatter)

@@ -4,6 +4,7 @@ Revision ID: 0002_tool_settings
 Revises: 0001_initial_schema
 Create Date: 2026-09-07 03:20:00.000000
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -35,7 +36,9 @@ def upgrade() -> None:
     )
     op.add_column(
         "tars_settings",
-        sa.Column("google_mock_linked", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column(
+            "google_mock_linked", sa.Boolean(), nullable=False, server_default=sa.text("false")
+        ),
     )
     op.add_column(
         "tars_settings",

@@ -29,7 +29,6 @@ class UserSettingsService:
                 user_id=user_id,
                 mode="attend",
                 disabled_tools=[],
-                google_mock_linked=False,
                 created_at=now,
                 updated_at=now,
             )

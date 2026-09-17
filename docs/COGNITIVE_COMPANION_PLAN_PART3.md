@@ -91,7 +91,7 @@ sequenceDiagram
     participant Client as 단톡방 UI
 
     Master->>Server: "오늘 진짜 힘들었다..."
-    Note over Server: Single-Pass 통합 인지 노드 (~0.2s)<br/>(Vera/Miu 듀얼 속마음 & 패턴 3 결정)
+    Note over Server: Single-Pass 통합 인지 노드 (~0.15s)<br/>(master_state 분석 & 룰 기반 티키타카 라우팅 결정)
 
     rect rgb(235, 245, 255)
         Note over Server,Client: [Phase 1: 베라 발화 스트리밍]
@@ -100,7 +100,7 @@ sequenceDiagram
     end
 
     rect rgb(255, 240, 245)
-        Note over Server,Miu: [Phase 2: 베라 발화 60% 시점 - 미우 프리페치 병렬 시작]
+        Note over Server,Miu: [Phase 2: 첫 문장 종결(. ! ?) 또는 30토큰 도달 시 - 미우 프리페치 병렬 시작]
         Server->>Client: typing_indicator (sender: miu, status: active)
         Client-->>Master: "🐾 미우가 발을 동동 구르며 타자 치는 중..."
         Server->>Miu: 백그라운드 LLM 프리페치 호출
@@ -115,6 +115,11 @@ sequenceDiagram
         Miu-->>Client: "냐아아!! 주인님 냐 뱃살 만져라냥!"
     end
 ```
+
+#### 프리페치 발동 트리거의 공학적 조건
+스트리밍 도중 전체 토큰 수를 사전에 예측하는 것은 불가능하므로, 시스템은 다음의 **결정론적 조건식(Deterministic Trigger)** 중 먼저 발생하는 시점에 2차 화자의 백그라운드 프리페치를 시작합니다:
+1. **첫 번째 문장 종결 부호(`.`, `!`, `?`, `\n`) 감지 시**: 1차 화자가 첫 문장을 마치는 즉시 2차 화자의 LLM 스트리밍 호출 (가장 일반적인 대화 리듬).
+2. **누적 30토큰 방출 시 (Fallback)**: 종결 부호 없이 장문이 이어지는 경우, 30토큰 도달 즉시 2차 화자 호출 시작.
 
 ### 3.2. 프리페칭 버퍼 관리 및 취소(GC) 파이프라인
 
@@ -248,11 +253,14 @@ spec:
 
 ### 5.4. API 비용 및 토큰 가드레일 (Cost Guardrails)
 1. **Single-Pass 통합 인지 노드**:
-   - 무의식 분석과 듀얼 속마음 도출을 1회 호출로 번들링하여 **기본 LLM 호출 횟수를 50% 절감**.
+   - 무의식 분석과 Floor Director 발화권 판정을 1회 경량 호출로 번들링하여 **발화 결정 레이턴시를 0.15초로 단축하고 불필요한 에이전트 호출 차단**.
 2. **미우 토큰 하드 캡**:
    - 미우(System 1)의 애교/딴지 대사는 시스템 프롬프트 및 파라미터에서 `max_tokens: 80`(공백 포함 50자 이내)으로 강제 제한하여 토큰 낭비 방지.
 3. **프리페치 타임아웃**:
    - 1차 화자가 예상보다 길게 말하더라도 프리페치는 최대 5초까지만 대기하며, 초과 시 안전하게 취소.
+4. **TTFT 및 레이턴시 가드레일**:
+   - 1차 화자의 첫 토큰 스트리밍 시간(TTFT)은 **1.0초 이내**를 유지.
+   - 2차 화자의 티키타카 전환은 인메모리 버퍼 큐를 통해 **0.2초 이내(숨고르기 지터 후 체감 0초)**로 방출하여 1.5초 이상의 어색한 침묵 원천 차단.
 
 ---
 
@@ -260,7 +268,7 @@ spec:
 
 | 마일스톤 | 명칭 | 핵심 산출물 및 엔지니어링 범위 |
 | :--- | :--- | :--- |
-| **I1** | **Redis 백플레인 & `HybridSessionTurnLock` 구축** | - Redis 분산 상태 해시 및 Redlock/PubSub 인터럽트 채널 구현<br/>- L1 로컬 락과 L2 Redis 락의 통합 드라이버 작성<br/>- 15초 Watchdog TTL 및 Orphan Lock 복구 단위 테스트 |
+| **I1** | **Redis 백플레인 & `HybridSessionTurnLock` 분산 인프라** | - 2부 M7의 결정론적 룰 엔진을 K8s 다중 파드 환경에서 지탱하는 Redis 분산 상태 해시 및 Redlock/PubSub 인터럽트 채널 구현<br/>- L1 로컬 락과 L2 Redis 락의 하이브리드 통합 드라이버 작성<br/>- 15초 Watchdog TTL 및 Orphan Lock 자동 복구 단위 테스트 |
 | **I2** | **오버랩 프리페칭 & 스트리밍 버퍼 엔진** | - `PrefetchBufferQueue` 비동기 버퍼 큐 구현<br/>- 1차 화자 스트리밍 연동 및 2차 화자 선행 생성 오케스트레이터<br/>- Barge-in 인터럽트 시 프리페치 즉시 취소 및 버퍼 GC 검증 |
 | **I3** | **분산 웹소켓 & 카톡 실시간 프로토콜** | - `/api/v1/chat/ws` 다자간 단톡방 이벤트 프로토콜 확장<br/>- `read_receipt` 2 $\rightarrow$ 1 $\rightarrow$ 0 시간차 지터 엔진<br/>- 겹침 타이핑 인디케이터(`typing_indicator`) 웹소켓 연출 |
 | **I4** | **Traefik Sticky 연동 & K8s 분산 카오스 테스트** | - Traefik Sticky Ingress 매니페스트 적용<br/>- 파드 3대(`replicas: 3`) 환경에서 동시 발화 및 급습 인터럽트 스트레스 테스트<br/>- 파드 강제 종료(Kill) 시 세션 복원 및 고아 락 회수 E2E 검증 |
