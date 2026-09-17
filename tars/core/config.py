@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # Application general settings
     app_name: str = Field(default="TARS", description="Application name")
-    environment: Literal["development", "test", "production"] = Field(
+    environment: Literal["development", "production"] = Field(
         default="development", description="Execution environment"
     )
     debug: bool = Field(default=False, description="Debug mode flag")

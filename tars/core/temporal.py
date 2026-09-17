@@ -15,7 +15,7 @@ def get_current_temporal_context(
 
     Args:
         client_timezone: IANA timezone identifier (e.g. 'Asia/Seoul', 'America/New_York').
-        reference_time: Optional fixed reference time (primarily for deterministic unit testing).
+        reference_time: Optional reference time override.
 
     Returns:
         dict containing now_utc, local_now, ISO strings, day of week, and formatted prompt text.

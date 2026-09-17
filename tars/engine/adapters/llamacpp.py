@@ -88,7 +88,7 @@ class LlamaCppAdapter(BaseLLMAdapter):
         system_prompt: str = "",
         **kwargs: Any,
     ) -> LLMResponse:
-        """Internal HTTP POST worker for structured response with tool calling (mockable in tests)."""
+        """Internal HTTP POST worker for structured response with tool calling."""
         client = self._get_http_client()
         url = (
             f"{self.base_url}/chat/completions"
@@ -140,27 +140,13 @@ class LlamaCppAdapter(BaseLLMAdapter):
             model_name=self.model_name,
         )
 
-    async def _http_post_completion(
-        self,
-        messages: Sequence[BaseMessage],
-        system_prompt: str = "",
-        **kwargs: Any,
-    ) -> str:
-        """Internal HTTP POST worker for full text generation (mockable in tests)."""
-        resp = await self._http_post_response(
-            messages=messages,
-            system_prompt=system_prompt,
-            **kwargs,
-        )
-        return resp.content
-
     async def _http_stream_completion(
         self,
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Internal HTTP streaming worker for SSE tokens (mockable in tests)."""
+        """Internal HTTP streaming worker for SSE tokens."""
         client = self._get_http_client()
         url = (
             f"{self.base_url}/chat/completions"
@@ -195,7 +181,7 @@ class LlamaCppAdapter(BaseLLMAdapter):
                     continue
 
     async def _probe_endpoint_health(self) -> bool:
-        """Internal health probe worker connecting to local server (mockable in tests)."""
+        """Internal health probe worker connecting to local server."""
         client = self._get_http_client()
         root_url = self.base_url[:-3] if self.base_url.endswith("/v1") else self.base_url
         v1_url = self.base_url if self.base_url.endswith("/v1") else f"{self.base_url}/v1"
@@ -231,7 +217,8 @@ class LlamaCppAdapter(BaseLLMAdapter):
         **kwargs: Any,
     ) -> str:
         """Generate single completion text via local SLM."""
-        return await self._http_post_completion(messages, system_prompt=system_prompt, **kwargs)
+        resp = await self._http_post_response(messages, system_prompt=system_prompt, **kwargs)
+        return resp.content
 
     async def astream(
         self,
