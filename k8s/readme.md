@@ -6,8 +6,10 @@
   • 02-db.yaml: PostgreSQL 16 (Deployment + Service + 10Gi 로컬 영구 볼륨 PVC)
   • 03-backend.yaml: TARS 백엔드 (Deployment 3 Replicas + 헬스 프로브 + 10Gi/5Gi PVC + Service)
   • 04-cluster-issuer.example.yaml: cert-manager Let's Encrypt 자동 발급자 템플릿 (gitignore 처리)
-  • 05-ingress.example.yaml: 도메인 라우팅, SSL 종료 Ingress 템플릿 (gitignore 처리)
-  • deploy.sh: 빌드/임포트/배포 원클릭 자동화 스크립트
+  • 05-ingress.example.yaml: 도메인 라우팅(/ ➔ frontend, /api,/health ➔ backend), SSL 종료 Ingress 템플릿
+  • 07-seaweedfs.yaml: SeaweedFS S3 분산 스토리지
+  • 08-frontend.yaml: TARS 프론트엔드 React SPA (Nginx Deployment 2 Replicas + Service)
+  • deploy.sh: 백엔드/프론트엔드 빌드/푸시/배포 원클릭 자동화 스크립트
   • DEPLOYMENT.md: 호스트 PC 세팅 및 K3s 배포 가이드
 
 ### K3s 설치 및 배포

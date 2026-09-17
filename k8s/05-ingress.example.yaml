@@ -16,10 +16,27 @@ spec:
     - host: tars.example.com # Replace with your real domain
       http:
         paths:
-          - path: /
+          # Backend API routes
+          - path: /api
             pathType: Prefix
             backend:
               service:
                 name: tars-backend
                 port:
                   number: 8000
+          # Backend health check
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: tars-backend
+                port:
+                  number: 8000
+          # Frontend SPA application (root and all other routes)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tars-frontend
+                port:
+                  number: 80

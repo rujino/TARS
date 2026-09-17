@@ -1,6 +1,6 @@
 # TARS K3s Production Deployment Guide (DEPLOYMENT.md)
 
-이 문서는 TARS AI Companion 백엔드 시스템을 자체 호스트 PC(홈 서버, 미니 PC, Linux 머신 등)에 **K3s (경량 쿠버네티스)**, **PostgreSQL 16**, **Traefik Ingress**, 그리고 **cert-manager (Let's Encrypt 자동 SSL/TLS)** 기반으로 안전하게 프로덕션 배포하는 종합 가이드입니다.
+이 문서는 TARS AI Companion 시스템(FastAPI 백엔드 + React SPA 프론트엔드)을 자체 호스트 PC(홈 서버, 미니 PC, Linux 머신 등)에 **K3s (경량 쿠버네티스)**, **PostgreSQL 16**, **Traefik Ingress**, 그리고 **cert-manager (Let's Encrypt 자동 SSL/TLS)** 기반으로 안전하게 프로덕션 배포하는 종합 가이드입니다.
 
 ---
 
@@ -96,6 +96,7 @@ cp k8s/05-ingress.example.yaml k8s/05-ingress.yaml
 
 3. **`k8s/05-ingress.yaml`**:
    - `tars.example.com`을 실제 사용하시는 도메인으로 변경.
+   - 라우팅 규칙: `/api`, `/health` ➔ 백엔드(`tars-backend:8000`), `/` (나머지 전체 웹 트래픽) ➔ 프론트엔드(`tars-frontend:80`) Nginx 서비스로 자동 분기됩니다.
 
 4. **`k8s/01-config.yaml`**:
    - `TARS_DOMAIN`: 사용하실 도메인 입력 (예: `tars.yourdomain.com`).
