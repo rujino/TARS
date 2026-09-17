@@ -47,9 +47,17 @@ class TokenResponse(BaseModel):
     user: UserResponse | None = None
 
 
+class WebSocketTicketResponse(BaseModel):
+    """Temporary single-use ticket for WebSocket authentication."""
+
+    ticket: str = Field(..., description="Single-use short-lived WebSocket authentication ticket")
+    expires_in: int = Field(default=30, description="Ticket validity duration in seconds")
+
+
 __all__ = [
     "TokenResponse",
     "UserLoginRequest",
     "UserResponse",
     "UserSignupRequest",
+    "WebSocketTicketResponse",
 ]

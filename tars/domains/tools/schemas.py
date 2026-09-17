@@ -27,7 +27,7 @@ class ServerInfo(BaseModel):
     id: str = Field(..., description="Server identifier")
     name: str = Field(..., description="Display name")
     type: Literal["builtin", "mcp"] = Field(..., description="Server type")
-    status: Literal["connected", "offline", "mock"] = Field(..., description="Connection status")
+    status: Literal["connected", "offline"] = Field(..., description="Connection status")
     transport: str | None = Field(default=None, description="Transport type")
     url: str | None = Field(default=None, description="Server endpoint URL")
     description: str = Field(default="", description="Description of integration")
@@ -37,7 +37,6 @@ class ServerInfo(BaseModel):
     active_tools_count: int = Field(default=0, description="Active tools count")
     auth_required: bool = Field(default=False, description="Whether OAuth linking is supported")
     is_linked: bool = Field(default=False, description="Whether account credentials are linked")
-    is_mock: bool = Field(default=False, description="Whether server is running in mock mode")
     account_email: str | None = Field(default=None, description="Linked account email")
     tools: list[ToolItem] = Field(default_factory=list, description="List of tools")
 
@@ -81,19 +80,6 @@ class GoogleAuthCallbackResponse(BaseModel):
     status: str
     provider: str = "google"
     linked: bool
-    is_mock: bool = False
-    account_email: str | None = None
-    message: str
-
-
-class GoogleMockLinkResponse(BaseModel):
-    """Mock linking toggle result."""
-
-    status: str = "success"
-    provider: str = "google"
-    linked: bool
-    mock_linked: bool
-    is_mock: bool
     account_email: str | None = None
     message: str
 
@@ -121,7 +107,7 @@ class ServerTestResponse(BaseModel):
     """Result of server connection test."""
 
     server_id: str
-    status: Literal["connected", "offline", "mock"]
+    status: Literal["connected", "offline"]
     latency_ms: float
     message: str
 
@@ -131,7 +117,6 @@ __all__ = [
     "GoogleAuthUrlResponse",
     "GoogleCredentialsRequest",
     "GoogleCredentialsResponse",
-    "GoogleMockLinkResponse",
     "ServerInfo",
     "ServerTestResponse",
     "ToolItem",

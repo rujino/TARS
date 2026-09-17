@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.domains.knowledge.extractor.prompts import KNOWLEDGE_EXTRACTION_SYSTEM_PROMPT
 from tars.domains.knowledge.models import UserWikiIndex
-from tars.domains.knowledge.spec.models import (
+from tars.domains.knowledge.spec.schemas import (
     OKFDocument,
     OKFImportance,
     OKFMetadata,

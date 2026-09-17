@@ -21,13 +21,13 @@ router = APIRouter(prefix="/tars/config", tags=["TARS Persona Configuration"])
 @router.get(
     "",
     response_model=TARSConfigResponse,
-    summary="Get current user's TARS persona settings",
+    summary="Get current user's TARS settings",
 )
 async def get_config(
     current_user: User = Depends(get_current_user),
     settings_service: UserSettingsService = Depends(get_user_settings_service),
 ) -> TARSConfigResponse:
-    """Return the active humor, honesty, and operational mode configuration."""
+    """Return the active operational mode configuration."""
     settings = await settings_service.get_or_create_settings(current_user.id)
     return TARSConfigResponse.model_validate(settings)
 
@@ -35,14 +35,14 @@ async def get_config(
 @router.patch(
     "",
     response_model=TARSConfigResponse,
-    summary="Partially update TARS persona parameters",
+    summary="Partially update TARS settings",
 )
 async def patch_config(
     payload: TARSConfigUpdateRequest,
     current_user: User = Depends(get_current_user),
     settings_service: UserSettingsService = Depends(get_user_settings_service),
 ) -> TARSConfigResponse:
-    """Update persona parameters such as humor_level, honesty_level, and mode."""
+    """Update settings parameters such as operational mode."""
     settings = await settings_service.update_settings(current_user.id, payload)
     return TARSConfigResponse.model_validate(settings)
 
@@ -50,13 +50,13 @@ async def patch_config(
 @router.post(
     "/reset",
     response_model=TARSConfigResponse,
-    summary="Reset TARS persona parameters to Interstellar defaults",
+    summary="Reset TARS settings to defaults",
 )
 async def reset_config(
     current_user: User = Depends(get_current_user),
     settings_service: UserSettingsService = Depends(get_user_settings_service),
 ) -> TARSConfigResponse:
-    """Reset configuration back to Humor: 90%, Honesty: 95%, Mode: companion."""
+    """Reset configuration back to default Mode: attend."""
     settings = await settings_service.reset_settings(current_user.id)
     return TARSConfigResponse.model_validate(settings)
 

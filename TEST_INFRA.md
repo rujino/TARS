@@ -1,109 +1,47 @@
-# E2E Test Infra: TARS Phase 4 - Production Infrastructure & Containerization Suite
+# E2E Test Infra: TARS Vera & Miu Dual-Maid Group Chat System
 
-## 1. Test Philosophy
-- **Opaque-Box & Requirement-Driven**: Tests validate interface contracts, configuration syntaxes, migration schemas, and end-to-end container orchestration behaviors against the authoritative requirements in `PROJECT.md` and `ORIGINAL_REQUEST.md`.
-- **Deterministic & Isolated Execution**: All tests are runnable in the isolated `uv` virtual environment using `pytest` without requiring external network access or pre-existing cloud infrastructure.
-- **Zero Schema Drift Policy**: Database migrations and SQLAlchemy ORM metadata (`tars.db.base.Base.metadata`) must remain in 100% synchronization, verified through automated bidirectional migration runs and schema drift assertions.
-- **Defensive Infrastructure Validation**: Container definitions (`Dockerfile`, `docker-compose.yml`), reverse proxy rules (`nginx.conf`, `default.conf`), SSL bootstrapper scripts (`scripts/init_ssl.sh`), and environment configurations (`.env.production.example`) are rigorously validated via AST, regex, and structured schema parsers for security, resilience, and low-latency streaming compliance.
+## Test Philosophy
+- Opaque-box, requirement-driven. Derived strictly from `ORIGINAL_REQUEST.md` (## 2026-09-16T23:25:07Z) and `docs/COGNITIVE_COMPANION_PLAN*.md`.
+- Methodology: Category-Partition + Boundary Value Analysis (BVA) + Pairwise Combinatorial + Real-World Workload Testing.
+- Zero tolerance for mock dialogues: verify authentic LLM execution, proper token event tags, and real-time protocol timings.
 
----
+## Feature Inventory
+| # | Feature | Source (requirement) | Tier 1 | Tier 2 | Tier 3 |
+|---|---------|---------------------|:------:|:------:|:------:|
+| 1 | Mock Dialogue Eradication | R1 (companion.py:126-201) | 5 | 5 | ✓ |
+| 2 | Authentic Dual LLM Inference | R1 (HybridLLMRouter) | 5 | 5 | ✓ |
+| 3 | Perspective Prompt Injection | R1 (PersonaRegistry) | 5 | 5 | ✓ |
+| 4 | Companion Graph Service Wiring | R2 (AgentChatService) | 5 | 5 | ✓ |
+| 5 | Stream Event Metadata Tagging | R2 (AgentStreamEvent) | 5 | 5 | ✓ |
+| 6 | Turn Lock & Monotonic Epoch | R2 (HybridSessionTurnLock) | 5 | 5 | ✓ |
+| 7 | Overlapped Prefetch & Bâton Touch | R2 (PrefetchBufferQueue) | 5 | 5 | ✓ |
+| 8 | KakaoTalk Read Receipt Protocol | R3 (2->1->0 timing) | 5 | 5 | ✓ |
+| 9 | Typing Indicator Protocol | R3 (Secondary prefetch) | 5 | 5 | ✓ |
+| 10 | Companion Avatar Assets | R4 (static/avatars) | 5 | 5 | ✓ |
+| 11 | Dual-Maid Group Chat UI Layout | R4 (index.html/components.css) | 5 | 5 | ✓ |
+| 12 | Multi-Speaker Session Restoration | R4 (REST messages + UI) | 5 | 5 | ✓ |
 
-## 2. Feature Inventory & Test Mapping
-| # | Feature ID | Feature Name | Requirement | Tier 1 Unit | Tier 2 Integration | Tier 3 E2E API | Tier 4 Scenario | Status |
-|---|------------|--------------|-------------|:-----------:|:------------------:|:--------------:|:---------------:|:------:|
-| 1 | F1 | `asyncpg` & `alembic` Dependencies | R2 | ✓ | ✓ | - | - | Verified |
-| 2 | F2 | Alembic Async Engine & Metadata Discovery | R2 | ✓ | ✓ | - | - | Verified |
-| 3 | F3 | Baseline Migration Schema (`0001_initial_schema`) | R2 | ✓ | ✓ | - | ✓ | Verified |
-| 4 | F4 | Database Migration Bootstrapper (`run_migrations.sh`) | R2 | ✓ | ✓ | - | ✓ | Verified |
-| 5 | F5 | Migration Regression & Schema Drift (`alembic check`) | R2 | ✓ | - | - | - | Verified |
-| 6 | F6 | Multi-Stage Dockerfile (`python:3.11-slim` + `uv`) | R1 | - | ✓ | - | ✓ | Verified |
-| 7 | F7 | Production Docker Compose (`tars-backend`, `tars-db`, `tars-nginx`, `certbot`) | R1 | - | ✓ | - | ✓ | Verified |
-| 8 | F8 | Local Development Compose Override | R1 | - | ✓ | - | - | Verified |
-| 9 | F9 | Container Entrypoint Script (`entrypoint.sh`) | R1 | - | ✓ | - | ✓ | Verified |
-| 10 | F10 | Nginx Main Configuration (`nginx.conf`) | R3 | - | ✓ | - | - | Verified |
-| 11 | F11 | Nginx Virtual Host & Streaming Proxy (`default.conf`) | R3 | - | ✓ | ✓ | ✓ | Verified |
-| 12 | F12 | SSL Bootstrap & Renewal Scripts (`init_ssl.sh`, `renew_certs.sh`) | R3 | - | ✓ | - | ✓ | Verified |
-| 13 | F13 | Production Environment Template (`.env.production.example`) | R4 | - | ✓ | - | - | Verified |
-| 14 | F14 | Comprehensive Deployment Guide (`DEPLOYMENT.md`) | R4 | - | ✓ | - | - | Verified |
-| 15 | F15 | Complete E2E Suite & Strict Type/Lint Integrity | AC | ✓ | ✓ | ✓ | ✓ | Verified |
+## Test Architecture
+- Test runner: `./.venv/bin/pytest tests/ -o asyncio_mode=auto -v`
+- Pass/fail semantics: 100% test pass rate, 0 failures, 0 errors, 0 integrity violations.
+- Test directory structure:
+  - `tests/tier1_unit/`: Isolated unit tests for LLM generation, prompt injection, schemas, turn locks, prefetch queue, and avatar assets.
+  - `tests/tier2_integration/`: Multi-turn integration tests for `AgentChatService.stream_chat()` driving `create_companion_graph`, WebSocket reader/dispatcher, and protocol timings.
+  - `tests/tier3_e2e_api/`: End-to-end API and WebSocket streaming tests asserting read receipts (`2` -> `1` -> `0`), typing indicator frames, speaker tagging, and session history restoration.
+  - `tests/tier4_application/`: Full application scenarios verifying group chat conversation flows, multi-turn banter, and barge-in interruption.
 
----
+## Real-World Application Scenarios (Tier 4)
+| # | Scenario | Features Exercised | Complexity |
+|---|----------|--------------------|------------|
+| 1 | Master's Exhausting Day (Tag-Team Remediation) | F1, F2, F3, F4, F5, F7, F8, F9, F11 | High |
+| 2 | Debate & Banter (Vera & Miu Collaborative Turn) | F2, F3, F6, F7, F8, F9, F11 | High |
+| 3 | User Barge-In Interruption Mid-Stream | F5, F6, F7, F8, F11 | High |
+| 4 | Rapid Multi-Message Burst & Read Receipts | F6, F8, F9, F11 | Medium |
+| 5 | Past Conversation Restoration & Continuous Chat | F4, F10, F11, F12 | Medium |
 
-## 3. Test Architecture & Directory Layout
-```
-tests/
-├── conftest.py                             # Shared pytest fixtures (async DB engine, mock adapters, auth)
-├── tier1_unit/
-│   ├── test_alembic_migrations.py          # [Phase 4] Migration upgrade/downgrade, drift, SQLite batch
-│   ├── test_smart_session.py               # [Phase 3] Session lifecycle & decay models
-│   ├── test_tool_registry_and_cag.py       # [Phase 3] Static CAG & tool registry
-│   ├── test_mcp_client_adapter.py          # [Phase 3] MCP Client JSON-RPC protocol
-│   ├── test_google_workspace_adapters.py   # [Phase 3] Calendar & Gmail adapters
-│   ├── test_dynamic_slicer.py              # [Phase 3] 5-factor dynamic slicing
-│   ├── test_okf_engine.py                  # [Phase 1] OKF Markdown engine
-│   ├── test_storage_manager.py             # [Phase 1] Multi-tenant storage manager
-│   └── test_adversarial_*.py               # Adversarial and stress unit suites
-├── tier2_integration/
-│   ├── test_infra_config.py                # [Phase 4] Dockerfile, Compose, Nginx, Env, Scripts
-│   ├── test_langgraph_pipeline.py          # [Phase 3] LangGraph multi-turn loop & ReAct
-│   ├── test_knowledge_extractor.py         # [Phase 3] Background self-evolution loop
-│   ├── test_db_reconciliation.py           # [Phase 1] DB & storage synchronization
-│   └── test_adversarial_*.py               # Adversarial fallback & stress integration suites
-├── tier3_e2e_api/
-│   ├── test_chat_streaming_api.py          # [Phase 2] WebSocket & SSE streaming endpoints
-│   ├── test_auth_api.py                    # [Phase 1/2] JWT signup/login/token validation
-│   ├── test_persona_api.py                 # [Phase 2] TARS settings slider & config API
-│   ├── test_greeting_api.py                # [Phase 3] Proactive greeting endpoint
-│   └── test_static_pwa_api.py              # [Phase 2] PWA static files, manifest, sw.js
-└── tier4_application/
-    ├── test_full_conversation_loop.py      # Multi-turn conversation & knowledge self-evolution
-    └── test_deployment_readiness.py        # Infrastructure readiness & startup flow verification
-```
-
----
-
-## 4. Real-World End-to-End Scenarios
-1. **Database Schema Lifecycle & Rollback Scenario**:
-   - Starting from an uninitialized database, `alembic upgrade head` provisions all 5 core entity tables (`users`, `tars_settings`, `user_wikis`, `chat_sessions`, `chat_messages`) and the `alembic_version` metadata table.
-   - Reverting with `alembic downgrade base` cleanly removes all application tables without orphan foreign key constraint violations.
-   - Autogenerate drift check (`alembic check`) asserts zero discrepancies between ORM models and migration revisions.
-2. **Container Multi-Stage Build & Security Isolation Scenario**:
-   - The multi-stage `Dockerfile` uses `python:3.11-slim` with `uv` cache mounting for sub-second deterministic builds.
-   - The runtime container operates strictly under non-root system user `tarsuser` (UID: 10001, GID: 10001) with persistent data directories (`/app/storage`, `/app/data`).
-   - Container healthcheck (`curl -f http://localhost:8000/health`) responds within 5 seconds of container boot.
-3. **Zero-Buffering Reverse Proxy Streaming Scenario**:
-   - `nginx/conf.d/default.conf` configures `proxy_buffering off`, `proxy_cache off`, and `chunked_transfer_encoding on` for `/api/v1/chat/stream` (SSE), preventing token batching.
-   - WebSocket proxying (`/api/v1/chat/ws`) maps `$connection_upgrade` and sets `proxy_read_timeout 3600s`, ensuring long-lived persistent connections.
-4. **SSL Bootstrap & Certificate Renewal Scenario**:
-   - `scripts/init_ssl.sh` generates self-signed SAN certificates for local development and provisions Let's Encrypt certificates in production via Certbot webroot ACME challenge.
-
----
-
-## 5. Coverage Thresholds & Quality Gates
-| Tier | Description | Minimum Coverage Target | Enforcement Tool |
-|------|-------------|:-----------------------:|:----------------:|
-| **Tier 1** | Unit & Migration Tests | >= 5 assertions per feature | `pytest tests/tier1_unit/` |
-| **Tier 2** | Infrastructure & Integration Tests | 100% config directives validated | `pytest tests/tier2_integration/` |
-| **Tier 3** | E2E API & Protocol Tests | 100% route & status code coverage | `pytest tests/tier3_e2e_api/` |
-| **Tier 4** | Real-World Application Scenarios | Complete multi-service lifecycle | `pytest tests/tier4_application/` |
-| **Static Analysis** | Strict Typing & Zero Lint Warnings | 100% Pass (0 errors) | `mypy --strict`, `ruff check` |
-
----
-
-## 6. Test Execution Commands
-- **Full Test Suite Execution**:
-  ```bash
-  uv run pytest tests/ -v
-  ```
-- **Phase 4 Infrastructure Tests Only**:
-  ```bash
-  uv run pytest tests/tier1_unit/test_alembic_migrations.py tests/tier2_integration/test_infra_config.py -v
-  ```
-- **Strict Static Type Checking**:
-  ```bash
-  uv run mypy --strict tars tests
-  ```
-- **Linter & Code Formatting Check**:
-  ```bash
-  uv run ruff check tars tests
-  ```
+## Coverage Thresholds
+- Tier 1: ≥5 per feature (Total: ≥60 unit tests)
+- Tier 2: ≥5 per feature with boundaries (Total: ≥60 integration tests)
+- Tier 3: Pairwise coverage of major feature combinations (Total: ≥12 E2E tests)
+- Tier 4: ≥5 realistic application scenarios
+- **Total test suite target**: ≥137 test cases

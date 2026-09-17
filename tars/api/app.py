@@ -5,10 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 # Ensure all domain models are loaded into Base.metadata before table creation
 import tars.domains.auth.models  # noqa: F401
@@ -80,51 +78,6 @@ def create_app() -> FastAPI:
 
     # Include Health & Telemetry Router (/health, /health/readiness, /metrics)
     app.include_router(health_router)
-
-    # PWA Root Endpoints
-    @app.get("/", include_in_schema=False)
-    async def serve_index() -> FileResponse:
-        index_file = settings.static_dir / "index.html"
-        if not index_file.is_file():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="PWA index.html not found.",
-            )
-        return FileResponse(index_file)
-
-    @app.get("/manifest.json", include_in_schema=False)
-    async def serve_manifest() -> FileResponse:
-        manifest_file = settings.static_dir / "manifest.json"
-        if not manifest_file.is_file():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="PWA manifest.json not found.",
-            )
-        return FileResponse(
-            manifest_file,
-            media_type="application/manifest+json",
-        )
-
-    @app.get("/sw.js", include_in_schema=False)
-    async def serve_sw() -> FileResponse:
-        sw_file = settings.static_dir / "sw.js"
-        if not sw_file.is_file():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="PWA sw.js not found.",
-            )
-        return FileResponse(
-            sw_file,
-            media_type="application/javascript",
-        )
-
-    # Mount Static Files Directory
-    if settings.static_dir.exists():
-        app.mount(
-            "/static",
-            StaticFiles(directory=str(settings.static_dir)),
-            name="static",
-        )
 
     return app
 

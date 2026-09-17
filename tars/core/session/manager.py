@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from tars.core.database import get_session_factory
 from tars.core.session.detector import TopicShiftDetector
-from tars.core.session.models import SessionRoutingAction, SessionRoutingDecision
+from tars.core.session.schemas import SessionRoutingAction, SessionRoutingDecision
 from tars.domains.chat.models import ChatMessage, ChatSession
 from tars.domains.knowledge.extractor.worker import SelfEvolvingKnowledgeWorker
 from tars.domains.knowledge.storage.manager import FileStorageManager

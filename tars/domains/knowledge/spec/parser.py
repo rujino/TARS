@@ -16,7 +16,7 @@ from tars.domains.knowledge.spec.errors import (
     OKFValidationError,
     OKFVersionError,
 )
-from tars.domains.knowledge.spec.models import OKFDocument, OKFMetadata
+from tars.domains.knowledge.spec.schemas import OKFDocument, OKFMetadata
 
 FRONTMATTER_DELIMITER_PATTERN = re.compile(r"^---\s*$")
 

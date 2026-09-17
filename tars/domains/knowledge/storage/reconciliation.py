@@ -12,8 +12,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.domains.knowledge.models import UserWikiIndex
-from tars.domains.knowledge.spec.models import OKFDocument
 from tars.domains.knowledge.spec.parser import parse_okf_text
+from tars.domains.knowledge.spec.schemas import OKFDocument
 from tars.domains.knowledge.storage.manager import FileStorageManager, IFileStorageManager
 
 

@@ -2,7 +2,6 @@
 
 Supports:
 - SSE / HTTP REST transports via httpx
-- Deterministic Mock transport for unit/integration testing
 - Full lifecycle: initialize, tools/list, tools/call, ping, and close
 """
 
@@ -10,23 +9,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
 from typing import Any
 
 import httpx
 
-from tars.domains.tools.mcp.models import (
+from tars.domains.tools.mcp.schemas import (
     MCPCallResult,
     MCPServerConfig,
     MCPToolMeta,
-    MCPTransportType,
 )
 
 logger = logging.getLogger("tars.domains.tools.mcp.client")
 
 
 class AsyncMCPClient:
-    """Asynchronous client communicating with an MCP server via JSON-RPC 2.0."""
+    """Async MCP Client managing JSON-RPC 2.0 protocol over HTTP/SSE transports."""
 
     def __init__(
         self,
@@ -39,9 +36,6 @@ class AsyncMCPClient:
         self._is_connected = False
         self._request_id = 0
         self._server_info: dict[str, Any] = {}
-        # In-memory mock tools registry for mock transport
-        self._mock_tools: dict[str, MCPToolMeta] = {}
-        self._mock_handlers: dict[str, Callable[..., Any]] = {}
 
     def _next_id(self) -> int:
         self._request_id += 1
@@ -51,16 +45,6 @@ class AsyncMCPClient:
         if self._http_client is None:
             self._http_client = httpx.AsyncClient(timeout=self.config.timeout)
         return self._http_client
-
-    def register_mock_tool(
-        self,
-        tool_meta: MCPToolMeta,
-        handler: Callable[..., Any] | None = None,
-    ) -> None:
-        """Register a mock tool and optional execution handler for testing."""
-        self._mock_tools[tool_meta.name] = tool_meta
-        if handler:
-            self._mock_handlers[tool_meta.name] = handler
 
     async def connect(self) -> dict[str, Any]:
         """Establish connection and execute initialize handshake with the MCP server."""
@@ -75,16 +59,6 @@ class AsyncMCPClient:
                 "clientInfo": {"name": "TARS", "version": "1.0.0"},
             },
         }
-
-        if self.config.transport == MCPTransportType.MOCK:
-            self._is_connected = True
-            self._server_info = {
-                "protocolVersion": "2024-11-05",
-                "serverInfo": {"name": self.config.name, "version": "1.0.0-mock"},
-                "capabilities": {"tools": {"listChanged": False}},
-            }
-            logger.info("Connected to Mock MCP server: %s", self.config.name)
-            return self._server_info
 
         if not self.config.url:
             raise ValueError(
@@ -112,9 +86,6 @@ class AsyncMCPClient:
         """Query available tools from the MCP server (tools/list)."""
         if not self._is_connected:
             await self.connect()
-
-        if self.config.transport == MCPTransportType.MOCK:
-            return list(self._mock_tools.values())
 
         req_id = self._next_id()
         payload = {
@@ -181,46 +152,8 @@ class AsyncMCPClient:
         name: str,
         arguments: dict[str, Any] | None = None,
     ) -> MCPCallResult:
-        args = arguments or {}
-        if self.config.transport == MCPTransportType.MOCK:
-            if name not in self._mock_tools:
-                return MCPCallResult(
-                    content=[
-                        {"type": "text", "text": f"Error: Tool '{name}' not found on mock server."}
-                    ],
-                    isError=True,
-                )
-            handler = self._mock_handlers.get(name)
-            if handler is not None:
-                try:
-                    import inspect
-
-                    if inspect.iscoroutinefunction(handler):
-                        res = await handler(**args)
-                    else:
-                        res = handler(**args)
-
-                    if isinstance(res, MCPCallResult):
-                        return res
-                    if isinstance(res, str):
-                        return MCPCallResult(content=[{"type": "text", "text": res}], isError=False)
-                    return MCPCallResult(
-                        content=[{"type": "text", "text": str(res)}],
-                        isError=False,
-                        structured_data=res if isinstance(res, (dict, list)) else None,
-                    )
-                except Exception as exc:
-                    return MCPCallResult(
-                        content=[{"type": "text", "text": f"Execution error in {name}: {exc}"}],
-                        isError=True,
-                    )
-            return MCPCallResult(
-                content=[{"type": "text", "text": f"Mock executed {name} with args: {args}"}],
-                isError=False,
-                structured_data={"status": "mock_success", "tool": name, "arguments": args},
-            )
-
         req_id = self._next_id()
+        args = arguments or {}
         payload = {
             "jsonrpc": "2.0",
             "id": req_id,
@@ -295,8 +228,6 @@ class AsyncMCPClient:
     async def ping(self) -> bool:
         """Check if MCP server connection is healthy."""
         try:
-            if self.config.transport == MCPTransportType.MOCK:
-                return self._is_connected
             if not self.config.url:
                 return False
             client = self._get_http_client()

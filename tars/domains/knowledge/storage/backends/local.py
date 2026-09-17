@@ -9,8 +9,8 @@ from tars.domains.knowledge.spec.errors import (
     OKFNotFoundError,
     OKFStorageError,
 )
-from tars.domains.knowledge.spec.models import OKFDocument, OKFMetadata
 from tars.domains.knowledge.spec.parser import parse_okf_text
+from tars.domains.knowledge.spec.schemas import OKFDocument, OKFMetadata
 from tars.domains.knowledge.spec.serializer import serialize_okf_document
 from tars.domains.knowledge.storage.backends.base import OKFStorageBase
 

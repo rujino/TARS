@@ -1,8 +1,8 @@
 # TARS 🤖
 
-> *"Humor: 90%, Honesty: 95%"*
+> *"Thoughtful Adaptive Reflective System (주인님의 전속 수행원)"*
 
-영화 *인터스텔라*의 AI 로봇 TARS를 오마주한 **오브젝트 스토리지 + DB + OKF 삼위일체 기반 벤더 무관 하이브리드 AI 동반자 서빙 시스템**입니다.
+**오브젝트 스토리지 + DB + OKF 삼위일체 기반의 2-Tier 인지형 정서 동반자 및 전속 수행원 시스템**입니다.
 
 ## 📌 주요 문서
 - [프로젝트 요구사항 정의서 (PRD.md)](docs/PRD.md)

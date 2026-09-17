@@ -304,6 +304,7 @@ class HybridLLMRouter:
         )
 
         if decision.target_engine == LLMEngineType.SLM:
+            first_chunk_yielded = False
             try:
                 stream_iter = self.slm_adapter.astream(
                     messages=messages,
@@ -316,6 +317,7 @@ class HybridLLMRouter:
                             stream_iter.__anext__(),
                             timeout=self.slm_timeout_sec,
                         )
+                        first_chunk_yielded = True
                         yield chunk
                     except StopAsyncIteration:
                         break
@@ -328,6 +330,12 @@ class HybridLLMRouter:
                     if str(slm_err)
                     else type(slm_err).__name__
                 )
+                if first_chunk_yielded:
+                    logger.error(
+                        "SLM streaming failed (%s) after partial delivery; cannot cleanly fallback to Gemini without corrupting stream.",
+                        err_detail,
+                    )
+                    raise
                 logger.warning(
                     "SLM streaming failed or timed out (%s). Falling back to Gemini.", err_detail
                 )

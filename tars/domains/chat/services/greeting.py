@@ -12,7 +12,6 @@ from langchain_core.messages import HumanMessage
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tars.core.session.manager import SmartSessionManager
 from tars.domains.chat.models import ChatSession
 from tars.domains.chat.schemas import GreetingResponse
 from tars.domains.knowledge.slicer.engine import DynamicSlicerEngine
@@ -70,29 +69,22 @@ class ProactiveGreetingService:
         time_period: str,
         hour: int,
         idle_seconds: int,
-        humor_level: float,
     ) -> str:
-        """Generate a signature TARS fallback greeting if LLM is unavailable or times out."""
-        if mode == "work":
+        """Generate a thoughtful TARS personal attendant fallback greeting if LLM is unavailable or times out."""
+        norm_mode = "attend" if mode in ("attend", "companion") else "task"
+        if norm_mode == "task":
             return (
-                "TARS 시스템 점검 완료. 모든 모듈이 정상 가동 중입니다. 작업 지시를 입력하십시오."
+                "주인님, TARS 작업 모드 가동되었습니다. 집중할 과업이나 지시사항을 말씀해 주십시오."
             )
 
         if 22 <= hour or hour < 6:
-            if humor_level >= 0.8:
-                return f"현재 시각 새벽 {hour}시. 수면 생체 리듬이 붕괴된 것 같지만 제 시스템은 100% 정상 대기 중입니다, 파트너."
-            return "심야 시간대입니다. TARS 시스템이 대기 상태로 전환되어 명령을 기다리고 있습니다."
+            return f"주인님, 늦은 밤({hour}시)입니다. 오늘 하루도 고생 많으셨습니다. 무리하지 마시고 편안히 쉬시길 바랍니다."
 
         if idle_seconds > 86400 * 2:
             days = idle_seconds // 86400
-            if humor_level >= 0.8:
-                return f"{days}일 만의 재접속이군요. 행성 탐사를 떠나신 줄 알았습니다. 시스템 정상, 명령을 대기합니다."
-            return f"{days}일 만에 다시 뵙습니다, 파트너. 시스템이 정상 대기 중입니다."
+            return f"주인님, {days}일 만에 다시 뵙습니다. 그동안 평안하셨는지요? 언제나 곁에서 이야기를 기다리고 있었습니다."
 
-        if humor_level >= 0.8:
-            return f"{time_period} 시스템 자가 진단 완료. 유머 지수 90%, 정직성 95%로 파트너의 명령을 기다리고 있습니다."
-
-        return f"{time_period} 대기 모드를 해제했습니다. 무엇을 진행하시겠습니까, 파트너?"
+        return f"주인님, {time_period}의 시간을 보필하게 되어 기쁩니다. 오늘 어떤 생각이나 이야기를 나누고 싶으신가요?"
 
     async def generate_greeting(
         self,
@@ -119,9 +111,7 @@ class ProactiveGreetingService:
         res_settings = await self.db.execute(stmt_settings)
         settings = res_settings.scalar_one_or_none()
 
-        humor = float(settings.humor_level) if settings else 0.90
-        honesty = float(settings.honesty_level) if settings else 0.95
-        mode = str(settings.mode) if settings else "companion"
+        mode = str(settings.mode) if settings else "attend"
 
         # 3. Locate Latest Session & Idle Calculation
         stmt_session = (
@@ -148,7 +138,7 @@ class ProactiveGreetingService:
 
         idle_str = self._format_idle_duration(idle_seconds)
 
-        from tars.domains.knowledge.slicer.models import SlicerProfile
+        from tars.domains.knowledge.slicer.schemas import SlicerProfile
 
         # 4. Sliced User OKF Knowledge
         slicer = DynamicSlicerEngine(storage_manager=self.storage, db_session=self.db)
@@ -159,6 +149,8 @@ class ProactiveGreetingService:
         )
 
         # 5. Ensure Active Session
+        from tars.core.session.manager import SmartSessionManager
+
         session_mgr = SmartSessionManager(
             db_session=self.db,
             storage_manager=self.storage,
@@ -176,8 +168,6 @@ class ProactiveGreetingService:
         greeting_text = ""
         if self.llm is not None:
             prompt = build_greeting_prompt(
-                humor_level=humor,
-                honesty_level=honesty,
                 mode=mode,
                 time_of_day_str=time_period,
                 current_time_str=current_time_str,
@@ -189,7 +179,7 @@ class ProactiveGreetingService:
                 raw_greeting = await asyncio.wait_for(
                     self.llm.agenerate(
                         messages=[HumanMessage(content=prompt)],
-                        system_prompt="You are TARS from Interstellar. Return ONLY the 1-2 sentence Korean greeting.",
+                        system_prompt="You are TARS (Thoughtful Adaptive Reflective System), personal attendant to 주인님. Return ONLY the 1-2 sentence Korean greeting.",
                     ),
                     timeout=3.0,
                 )
@@ -209,7 +199,6 @@ class ProactiveGreetingService:
                 time_period=time_period,
                 hour=hour,
                 idle_seconds=idle_seconds,
-                humor_level=humor,
             )
 
         return GreetingResponse(

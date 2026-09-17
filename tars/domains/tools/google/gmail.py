@@ -6,7 +6,6 @@ Supports:
 - gmail_get_thread: Retrieve complete conversation thread with ball-in-court ownership analysis
 - gmail_send_message: Send an email message (supports HTML, threading, attachments, and quoting)
 - gmail_draft_message: Create a safe draft email for human-in-the-loop review
-- Deterministic in-memory mock mode for offline testing
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ import base64
 import email.message
 import logging
 import mimetypes
-import uuid
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -79,32 +77,6 @@ class GmailAdapter:
         auth_helper: GoogleAuthHelper | None = None,
     ) -> None:
         self.auth_helper = auth_helper or GoogleAuthHelper()
-        # In-memory store for deterministic mock testing
-        self._mock_messages: dict[str, dict[str, Any]] = {
-            "msg_001": {
-                "id": "msg_001",
-                "threadId": "th_001",
-                "from": "cooper@endurance.space",
-                "to": "tars@endurance.space",
-                "subject": "Trajectory Calculation Request",
-                "snippet": "TARS, please verify slingshot gravity assist around Gargantua.",
-                "body": "TARS, please verify slingshot gravity assist around Gargantua. Make sure humor setting is below 95%.",
-                "date": "2026-08-25T08:30:00Z",
-                "is_unread": True,
-            },
-            "msg_002": {
-                "id": "msg_002",
-                "threadId": "th_002",
-                "from": "brand@endurance.space",
-                "to": "tars@endurance.space",
-                "subject": "Plan B Ecosystem Check",
-                "snippet": "All biological samples intact.",
-                "body": "All biological samples intact. Ready for Edmunds planet arrival.",
-                "date": "2026-08-25T12:00:00Z",
-                "is_unread": False,
-            },
-        }
-        self._mock_drafts: dict[str, dict[str, Any]] = {}
 
     async def close(self) -> None:
         """Close underlying authentication and HTTP resources."""
@@ -123,46 +95,6 @@ class GmailAdapter:
     ) -> list[dict[str, Any]]:
         """Search messages with query filter, returning metadata and web interface links."""
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            q_lower = query.lower()
-            results: list[dict[str, Any]] = []
-            for msg in self._mock_messages.values():
-                matches = False
-                if "is:unread" in q_lower and msg.get("is_unread", False):
-                    matches = True
-                elif "from:" in q_lower:
-                    from_val = q_lower.split("from:")[1].split()[0]
-                    if from_val in msg.get("from", "").lower():
-                        matches = True
-                elif "subject:" in q_lower:
-                    sub_val = q_lower.split("subject:")[1].split()[0]
-                    if sub_val in msg.get("subject", "").lower():
-                        matches = True
-                elif (
-                    q_lower in msg.get("subject", "").lower()
-                    or q_lower in msg.get("body", "").lower()
-                    or q_lower in msg.get("from", "").lower()
-                ):
-                    matches = True
-
-                if matches:
-                    th_id = msg.get("threadId", msg["id"])
-                    results.append(
-                        {
-                            "id": msg["id"],
-                            "threadId": th_id,
-                            "from": msg.get("from", ""),
-                            "subject": msg.get("subject", ""),
-                            "snippet": msg.get("snippet", ""),
-                            "date": msg.get("date", ""),
-                            "web_link": f"https://mail.google.com/mail/u/0/#inbox/{th_id}",
-                        }
-                    )
-            return results[:max_results]
-
         url = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
         params: dict[str, str | int] = {"q": query, "maxResults": max_results}
         client = self.auth_helper._get_http_client()
@@ -175,14 +107,6 @@ class GmailAdapter:
     async def get_message(self, message_id: str, user_id: str | None = None) -> dict[str, Any]:
         """Retrieve message details by ID."""
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            if message_id in self._mock_messages:
-                return self._mock_messages[message_id]
-            raise KeyError(f"Gmail message ID '{message_id}' not found.")
-
         url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
         client = self.auth_helper._get_http_client()
         resp = await client.get(url, headers=headers)
@@ -198,41 +122,6 @@ class GmailAdapter:
     ) -> dict[str, Any]:
         """Retrieve full conversation thread with ownership analysis."""
         headers = await self.auth_helper.get_auth_headers(user_id=user_id)
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            thread_messages = [
-                msg
-                for msg in self._mock_messages.values()
-                if msg.get("threadId") == thread_id or msg.get("id") == thread_id
-            ]
-            if not thread_messages:
-                raise KeyError(f"Gmail thread ID '{thread_id}' not found.")
-
-            # Sort chronologically
-            thread_messages.sort(key=lambda m: m.get("date", ""))
-            participants = list({m.get("from") for m in thread_messages if m.get("from")})
-            last_msg = thread_messages[-1]
-            last_sender = last_msg.get("from", "")
-
-            # Ownership verdict: If last sender is TARS/authenticated user, ball is in other's court
-            is_self = "tars" in last_sender.lower()
-            ball_in_court = "waiting_for_reply" if is_self else "action_required"
-
-            res: dict[str, Any] = {
-                "thread_id": thread_id,
-                "messages": thread_messages,
-                "message_count": len(thread_messages),
-            }
-            if include_analysis:
-                res["analysis"] = {
-                    "last_sender": last_sender,
-                    "ball_in_court_of": ball_in_court,
-                    "participants": participants,
-                }
-            return res
-
         url = f"https://gmail.googleapis.com/gmail/v1/users/me/threads/{thread_id}"
         client = self.auth_helper._get_http_client()
         resp = await client.get(url, headers=headers, params={"format": "full"})
@@ -344,76 +233,28 @@ class GmailAdapter:
         effective_body = body
 
         if quote_original and thread_id:
-            if (
-                self.auth_helper.mock_mode
-                or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-            ):
-                matching = [
-                    m for m in self._mock_messages.values() if m.get("threadId") == thread_id
-                ]
-                if matching:
-                    orig = matching[-1]
-                    quote = (
-                        f"\n\nOn {orig.get('date', '')}, {orig.get('from', 'sender')} wrote:\n> "
-                        + orig.get("body", "").replace("\n", "\n> ")
+            try:
+                thread_data = await self.get_thread(
+                    thread_id, include_analysis=False, user_id=user_id
+                )
+                raw_msgs = thread_data.get("messages", [])
+                if raw_msgs:
+                    last_raw = raw_msgs[-1]
+                    headers_list = last_raw.get("payload", {}).get("headers", [])
+                    h_map = {
+                        h.get("name", "").lower(): h.get("value", "")
+                        for h in headers_list
+                        if isinstance(h, dict)
+                    }
+                    orig_date = h_map.get("date") or last_raw.get("date", "")
+                    orig_from = h_map.get("from") or last_raw.get("from", "sender")
+                    orig_text = last_raw.get("snippet", "")
+                    quote = f"\n\nOn {orig_date}, {orig_from} wrote:\n> " + orig_text.replace(
+                        "\n", "\n> "
                     )
                     effective_body = body + quote
-            else:
-                try:
-                    thread_data = await self.get_thread(
-                        thread_id, include_analysis=False, user_id=user_id
-                    )
-                    raw_msgs = thread_data.get("messages", [])
-                    if raw_msgs:
-                        last_raw = raw_msgs[-1]
-                        headers_list = last_raw.get("payload", {}).get("headers", [])
-                        h_map = {
-                            h.get("name", "").lower(): h.get("value", "")
-                            for h in headers_list
-                            if isinstance(h, dict)
-                        }
-                        orig_date = h_map.get("date") or last_raw.get("date", "")
-                        orig_from = h_map.get("from") or last_raw.get("from", "sender")
-                        orig_text = last_raw.get("snippet", "")
-                        quote = f"\n\nOn {orig_date}, {orig_from} wrote:\n> " + orig_text.replace(
-                            "\n", "\n> "
-                        )
-                        effective_body = body + quote
-                except Exception as exc:
-                    logger.warning(
-                        "Could not fetch thread %s for quote_original: %s", thread_id, exc
-                    )
-
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            msg_id = f"msg_{uuid.uuid4().hex[:8]}"
-            th_id = thread_id or f"th_{uuid.uuid4().hex[:8]}"
-            sent_msg = {
-                "id": msg_id,
-                "threadId": th_id,
-                "from": "tars@endurance.space",
-                "to": norm_to,
-                "cc": norm_cc,
-                "bcc": norm_bcc,
-                "subject": subject,
-                "snippet": effective_body[:50],
-                "body": effective_body,
-                "body_format": body_format,
-                "date": "2026-08-26T00:00:00Z",
-                "is_unread": False,
-                "status": "sent",
-            }
-            self._mock_messages[msg_id] = sent_msg
-            logger.info("Mock sent email: %s to %s ('%s')", msg_id, norm_to, subject)
-            return {
-                "id": msg_id,
-                "threadId": th_id,
-                "status": "sent",
-                "to": norm_to,
-                "subject": subject,
-            }
+            except Exception as exc:
+                logger.warning("Could not fetch thread %s for quote_original: %s", thread_id, exc)
 
         mime_msg = self._assemble_mime_message(
             to=norm_to,
@@ -457,36 +298,6 @@ class GmailAdapter:
         norm_to = normalize_recipients(to) or ""
         norm_cc = normalize_recipients(cc)
         norm_bcc = normalize_recipients(bcc)
-
-        if (
-            self.auth_helper.mock_mode
-            or headers.get("Authorization") == "Bearer mock_google_oauth2_access_token"
-        ):
-            draft_id = f"draft_{uuid.uuid4().hex[:8]}"
-            th_id = thread_id or f"th_{uuid.uuid4().hex[:8]}"
-            draft_entry = {
-                "id": draft_id,
-                "message": {
-                    "id": f"msg_draft_{uuid.uuid4().hex[:6]}",
-                    "threadId": th_id,
-                    "to": norm_to,
-                    "subject": subject,
-                    "body": body,
-                    "body_format": body_format,
-                    "cc": norm_cc,
-                    "bcc": norm_bcc,
-                },
-                "status": "draft_created",
-            }
-            self._mock_drafts[draft_id] = draft_entry
-            logger.info("Mock created email draft: %s ('%s')", draft_id, subject)
-            return {
-                "id": draft_id,
-                "threadId": th_id,
-                "status": "draft_created",
-                "to": norm_to,
-                "subject": subject,
-            }
 
         mime_msg = self._assemble_mime_message(
             to=norm_to,

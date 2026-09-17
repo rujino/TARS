@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tars.domains.knowledge.spec.models import OKFDocument, OKFMetadata
+    from tars.domains.knowledge.spec.schemas import OKFDocument, OKFMetadata
 
 
 class OKFStorageBase(ABC):

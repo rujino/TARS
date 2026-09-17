@@ -1,7 +1,7 @@
 [project]
 name = "tars"
 version = "0.1.0"
-description = "TARS - Tactical Autonomous Robotic System (Phase 1 Core MVP)"
+description = "TARS - Thoughtful Adaptive Reflective System"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

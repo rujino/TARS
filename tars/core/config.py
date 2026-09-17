@@ -58,12 +58,6 @@ class Settings(BaseSettings):
         description="S3 secret key",
     )
 
-    # Static files settings
-    static_dir: Path = Field(
-        default_factory=lambda: Path(__file__).resolve().parent.parent / "static",
-        description="Root directory for static assets and PWA client",
-    )
-
     # Database settings
     database_url: str = Field(
         default="postgresql+asyncpg://tarsuser:tarspassword@localhost:5432/tars",
@@ -77,6 +71,35 @@ class Settings(BaseSettings):
         default=1800, description="SQLAlchemy connection recycle in seconds"
     )
     db_pool_pre_ping: bool = Field(default=True, description="Enable connection health pre-ping")
+
+    # Redis Backplane & Turn Lock settings
+    redis_enabled: bool = Field(
+        default=False, description="Enable Redis distributed runtime backplane"
+    )
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        description="Async Redis connection URL for distributed locks and pub/sub",
+    )
+    redis_watchdog_ttl_ms: int = Field(
+        default=15000,
+        ge=1000,
+        description="Watchdog TTL in milliseconds for distributed session turn locks",
+    )
+    redis_heartbeat_interval_seconds: float = Field(
+        default=3.0,
+        ge=0.1,
+        description="Turn lock watchdog heartbeat renewal interval in seconds",
+    )
+    redis_socket_timeout: float = Field(
+        default=2.0, ge=0.1, description="Redis socket timeout in seconds"
+    )
+    redis_max_connections: int = Field(
+        default=10, ge=1, description="Redis maximum connection pool size"
+    )
+    pod_id: str = Field(
+        default="pod-primary-1",
+        description="Unique identifier for this runtime pod/instance",
+    )
 
     # CORS Settings (SEC-01)
     cors_origins: list[str] = Field(
@@ -101,14 +124,8 @@ class Settings(BaseSettings):
     )
 
     # TARS Persona default parameters
-    default_humor_level: float = Field(
-        default=0.90, ge=0.0, le=1.0, description="Default humor level (0.0 to 1.0)"
-    )
-    default_honesty_level: float = Field(
-        default=0.95, ge=0.0, le=1.0, description="Default honesty level (0.0 to 1.0)"
-    )
-    default_mode: Literal["companion", "work"] = Field(
-        default="companion", description="Default TARS operating mode"
+    default_mode: Literal["attend", "task", "companion", "work"] = Field(
+        default="attend", description="Default TARS operating mode ('attend' or 'task')"
     )
 
     # External LLM / SLM Endpoints
@@ -135,10 +152,6 @@ class Settings(BaseSettings):
     )
 
     # Google Workspace Settings
-    google_mock_mode: bool = Field(
-        default=False,
-        description="Enable deterministic offline mock mode for Google Workspace APIs",
-    )
     google_client_id: str = Field(default="", description="Google OAuth2 Client ID")
     google_client_secret: str = Field(default="", description="Google OAuth2 Client Secret")
     google_refresh_token: str = Field(default="", description="Google OAuth2 Refresh Token")

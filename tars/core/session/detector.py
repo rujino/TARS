@@ -7,13 +7,15 @@ import json
 import logging
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
-from tars.core.session.models import TopicShiftResult
-from tars.domains.chat.models import ChatMessage
+from tars.core.session.schemas import TopicShiftResult
 from tars.engine.adapters.base import BaseLLMAdapter
+
+if TYPE_CHECKING:
+    from tars.domains.chat.models import ChatMessage
 
 logger = logging.getLogger("tars.core.session.detector")
 
@@ -67,12 +69,12 @@ class TopicShiftDetector:
         """Convert sequence of chat messages into a concise string for LLM analysis."""
         lines: list[str] = []
         for turn in turns[-6:]:  # Max last 3 full turns (6 messages)
-            if isinstance(turn, ChatMessage):
-                role = turn.role.upper()
-                content = turn.content.strip()
-            else:
-                role = turn.type.upper()
+            if hasattr(turn, "role"):
+                role = str(turn.role).upper()
                 content = str(turn.content).strip()
+            else:
+                role = getattr(turn, "type", "UNKNOWN").upper()
+                content = str(getattr(turn, "content", "")).strip()
             lines.append(f"{role}: {content}")
         return "\n".join(lines)
 

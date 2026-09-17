@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from tars.domains.knowledge.spec.errors import OKFSerializationError
-from tars.domains.knowledge.spec.models import OKFDocument
+from tars.domains.knowledge.spec.schemas import OKFDocument
 
 
 def serialize_okf_document(doc: OKFDocument) -> str:
@@ -52,9 +52,15 @@ def serialize_okf_document(doc: OKFDocument) -> str:
             frontmatter_dict["category"] = meta.category
 
         frontmatter_dict["tags"] = list(meta.tags)
+        if getattr(meta, "aliases", None):
+            frontmatter_dict["aliases"] = list(meta.aliases)
         frontmatter_dict["importance"] = (
             meta.importance.value if hasattr(meta.importance, "value") else str(meta.importance)
         )
+        if getattr(meta, "status", None):
+            frontmatter_dict["status"] = (
+                meta.status.value if hasattr(meta.status, "value") else str(meta.status)
+            )
         frontmatter_dict["source"] = (
             meta.source.value if hasattr(meta.source, "value") else str(meta.source)
         )

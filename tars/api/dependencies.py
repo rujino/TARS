@@ -20,7 +20,7 @@ from tars.domains.tools.google.calendar import GoogleCalendarAdapter
 from tars.domains.tools.google.gmail import GmailAdapter
 from tars.domains.tools.mcp.adapter import register_mcp_server_tools
 from tars.domains.tools.mcp.client import AsyncMCPClient
-from tars.domains.tools.mcp.models import MCPServerConfig
+from tars.domains.tools.mcp.schemas import MCPServerConfig
 from tars.domains.tools.registry import ToolRegistry
 
 logger = logging.getLogger("tars.api.dependencies")

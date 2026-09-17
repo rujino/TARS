@@ -12,14 +12,12 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-from tars.core.session.models import RoutingDecision
-from tars.domains.knowledge.spec.models import OKFDocument
+from tars.domains.knowledge.spec.schemas import OKFDocument
 from tars.engine.adapters.base import ToolCallData
+from tars.engine.adapters.router import RoutingDecision
 
 # Default persona and execution configuration constants
-DEFAULT_HUMOR_LEVEL: float = 0.90
-DEFAULT_HONESTY_LEVEL: float = 0.95
-DEFAULT_MODE: str = "companion"
+DEFAULT_MODE: str = "attend"
 DEFAULT_MAX_TOOL_ITERATIONS: int = 5
 
 
@@ -32,9 +30,7 @@ class TARSState(TypedDict, total=False):
         user_id: Unique user identifier for storage and DB partitioning.
         session_id: Active dialogue session ID for memory checkpointing.
         active_query: Current user query string being processed in this turn.
-        humor_level: TARS humor parameter in range [0.0, 1.0] (default: 0.90).
-        honesty_level: TARS honesty parameter in range [0.0, 1.0] (default: 0.95).
-        mode: Operational mode ('companion' for TARS dry wit vs. 'work' for CASE precision).
+        mode: Operational mode ('attend' for care/reflection vs. 'task' for structured execution).
         routing_decision: Output summary of session routing evaluation.
         is_reset: Boolean flag indicating if current turn is a natural language reset command.
         reset_message: Notice message presented to user upon session archiving/reset.
@@ -56,8 +52,6 @@ class TARSState(TypedDict, total=False):
     active_query: str
 
     # 2. 페르소나 파라미터
-    humor_level: float
-    honesty_level: float
     mode: str
 
     # 3. 세션 라우팅 및 제어
@@ -84,8 +78,6 @@ class TARSState(TypedDict, total=False):
 
 
 __all__ = [
-    "DEFAULT_HONESTY_LEVEL",
-    "DEFAULT_HUMOR_LEVEL",
     "DEFAULT_MAX_TOOL_ITERATIONS",
     "DEFAULT_MODE",
     "TARSState",

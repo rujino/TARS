@@ -8,12 +8,18 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import BackgroundTasks
+from sqlalchemy import select
 
-from tars.engine.orchestrator.models import AgentStreamEvent
+from tars.core.database import get_session_factory
+from tars.domains.chat.models import ChatSession
+from tars.engine.orchestrator.schemas import AgentStreamEvent
 from tars.engine.orchestrator.state import TARSState
+
+if TYPE_CHECKING:
+    from tars.engine.orchestrator.graphs.companion import CompanionState
 
 logger = logging.getLogger("tars.engine.orchestrator.stream_bridge")
 
@@ -21,11 +27,43 @@ logger = logging.getLogger("tars.engine.orchestrator.stream_bridge")
 class LangGraphStreamBridge:
     """Bridges LangGraph execution event streams to unified AgentStreamEvent generator."""
 
+    @staticmethod
+    async def _resolve_session_title(
+        sid: str | None,
+        output: Any = None,
+        initial_state: dict[str, Any] | TARSState | CompanionState | None = None,
+    ) -> str | None:
+        """Resolve updated session title from output, database, or first-turn query."""
+        if isinstance(output, dict):
+            t = output.get("title") or output.get("session_title")
+            if t:
+                return str(t)
+
+        if sid:
+            try:
+                factory = get_session_factory()
+                async with factory() as session_db:
+                    res = await session_db.execute(
+                        select(ChatSession.title).where(ChatSession.id == sid)
+                    )
+                    db_title = res.scalar_one_or_none()
+                    if db_title and db_title not in ("New Dialogue", "Reset Session"):
+                        return str(db_title)
+            except Exception:
+                pass
+
+        if initial_state and isinstance(initial_state, dict):
+            query = initial_state.get("active_query")
+            if query and isinstance(query, str) and query.strip():
+                return query.strip().split("\n")[0][:40]
+
+        return None
+
     @classmethod
     async def stream_graph_events(
         cls,
         graph: Any,
-        initial_state: dict[str, Any] | TARSState,
+        initial_state: dict[str, Any] | TARSState | CompanionState,
         background_tasks: BackgroundTasks | None = None,
         config: dict[str, Any] | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
@@ -58,6 +96,22 @@ class LangGraphStreamBridge:
         stream_ended = False
         current_engine: str | None = None
         current_model_name: str | None = None
+        init_dict: dict[str, Any] = dict(initial_state) if isinstance(initial_state, dict) else {}
+        current_speaker: str | None = (
+            str(init_dict["speaker"]) if init_dict.get("speaker") is not None else None
+        )
+        current_avatar: str | None = (
+            str(init_dict["avatar"]) if init_dict.get("avatar") is not None else None
+        )
+        current_turn_epoch: int | None = None
+        if init_dict.get("turn_epoch") is not None:
+            try:
+                current_turn_epoch = int(init_dict["turn_epoch"])
+            except (ValueError, TypeError):
+                pass
+        current_turn_state: str | None = (
+            str(init_dict["turn_state"]) if init_dict.get("turn_state") is not None else None
+        )
 
         try:
             if not hasattr(graph, "astream_events"):
@@ -75,19 +129,79 @@ class LangGraphStreamBridge:
                 # 2. Track session_id updates from session_node and emit stream_start
                 if ev_type == "on_chain_end" and ev_name == "session_node":
                     output = data.get("output", {})
-                    if isinstance(output, dict) and output.get("session_id"):
-                        active_session_id = str(output["session_id"])
+                    if isinstance(output, dict):
+                        if output.get("session_id"):
+                            active_session_id = str(output["session_id"])
+                        if output.get("speaker"):
+                            current_speaker = str(output["speaker"])
+                        if output.get("avatar"):
+                            current_avatar = str(output["avatar"])
+                        if output.get("turn_epoch") is not None:
+                            try:
+                                current_turn_epoch = int(output["turn_epoch"])
+                            except (ValueError, TypeError):
+                                pass
+                        if output.get("turn_state"):
+                            current_turn_state = str(output["turn_state"])
                     if not stream_started:
-                        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
+                        yield AgentStreamEvent(
+                            type="stream_start",
+                            session_id=active_session_id,
+                            speaker=current_speaker,
+                            avatar=current_avatar,
+                            turn_epoch=current_turn_epoch,
+                            turn_state=current_turn_state,
+                        )
                         stream_started = True
 
                 # 3. Handle custom events dispatched via adispatch_custom_event
                 elif ev_type == "on_custom_event":
                     if not stream_started:
-                        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
+                        yield AgentStreamEvent(
+                            type="stream_start",
+                            session_id=active_session_id,
+                            speaker=current_speaker,
+                            avatar=current_avatar,
+                            turn_epoch=current_turn_epoch,
+                            turn_state=current_turn_state,
+                        )
                         stream_started = True
                     if ev_name == "token":
                         delta = str(data.get("delta", ""))
+                        ev_speaker = data.get("speaker")
+                        ev_avatar = data.get("avatar")
+                        ev_turn_epoch = data.get("turn_epoch")
+                        ev_turn_state = data.get("turn_state")
+
+                        if ev_speaker is not None:
+                            current_speaker = str(ev_speaker)
+                        if ev_avatar is not None:
+                            current_avatar = str(ev_avatar)
+                        if ev_turn_epoch is not None:
+                            try:
+                                current_turn_epoch = int(ev_turn_epoch)
+                            except (ValueError, TypeError):
+                                pass
+                        if ev_turn_state is not None:
+                            current_turn_state = str(ev_turn_state)
+
+                        resolved_speaker = (
+                            str(ev_speaker) if ev_speaker is not None else current_speaker
+                        )
+                        resolved_avatar = (
+                            str(ev_avatar) if ev_avatar is not None else current_avatar
+                        )
+                        resolved_epoch = (
+                            int(ev_turn_epoch) if ev_turn_epoch is not None else current_turn_epoch
+                        )
+                        resolved_state = (
+                            str(ev_turn_state) if ev_turn_state is not None else current_turn_state
+                        )
+
+                        if resolved_speaker and not resolved_avatar:
+                            resolved_avatar = f"/static/avatars/{resolved_speaker}.png"
+                            current_avatar = resolved_avatar
+
                         if delta:
                             accumulated_chunks.append(delta)
                             token_count += 1
@@ -95,6 +209,10 @@ class LangGraphStreamBridge:
                                 type="token",
                                 delta=delta,
                                 content=delta,
+                                speaker=resolved_speaker,
+                                avatar=resolved_avatar,
+                                turn_epoch=resolved_epoch,
+                                turn_state=resolved_state,
                             )
 
                     elif ev_name == "tool_start":
@@ -245,14 +363,43 @@ class LangGraphStreamBridge:
                                     error=res.get("error"),
                                 )
 
-                # 8. Fallback token extraction and model metadata from llm_node & postprocess_node
-                elif ev_type == "on_chain_end" and ev_name in ("llm_node", "postprocess_node"):
+                # 8. Fallback token extraction and model metadata from companion_dispatch_node, postprocess_node, llm_node
+                elif ev_type == "on_chain_end" and ev_name in (
+                    "companion_dispatch_node",
+                    "postprocess_node",
+                    "llm_node",
+                ):
                     output = data.get("output", {})
                     if isinstance(output, dict):
                         if output.get("engine"):
                             current_engine = str(output["engine"])
                         if output.get("model_name"):
                             current_model_name = str(output["model_name"])
+                        if output.get("speaker"):
+                            current_speaker = str(output["speaker"])
+                        if output.get("avatar"):
+                            current_avatar = str(output["avatar"])
+                        if output.get("turn_epoch") is not None:
+                            try:
+                                current_turn_epoch = int(output["turn_epoch"])
+                            except (ValueError, TypeError):
+                                pass
+                        if output.get("turn_state"):
+                            current_turn_state = str(output["turn_state"])
+
+                        # Resolve speaker from group_messages if available
+                        if not current_speaker and output.get("group_messages"):
+                            gms = output["group_messages"]
+                            if isinstance(gms, list) and len(gms) > 0:
+                                last_gm = gms[-1]
+                                sid = getattr(last_gm, "sender_id", None) or (
+                                    last_gm.get("sender_id") if isinstance(last_gm, dict) else None
+                                )
+                                if sid:
+                                    current_speaker = str(sid)
+                                    if not current_avatar:
+                                        current_avatar = f"/static/avatars/{current_speaker}.png"
+
                         tool_calls = output.get("tool_calls", [])
                         final_resp = output.get("final_response")
                         # Only emit token if there are no tool calls pending and no tokens have been streamed yet
@@ -260,17 +407,32 @@ class LangGraphStreamBridge:
                             not tool_calls
                             and final_resp
                             and token_count == 0
-                            and ev_name == "llm_node"
+                            and ev_name in ("llm_node", "companion_dispatch_node")
                         ):
                             resp_str = str(final_resp)
                             accumulated_chunks.append(resp_str)
                             token_count += 1
-                            yield AgentStreamEvent(type="token", delta=resp_str, content=resp_str)
+                            yield AgentStreamEvent(
+                                type="token",
+                                delta=resp_str,
+                                content=resp_str,
+                                speaker=current_speaker,
+                                avatar=current_avatar,
+                                turn_epoch=current_turn_epoch,
+                                turn_state=current_turn_state,
+                            )
 
                 # 9. Top-level graph completion
                 elif ev_type == "on_chain_end" and ev_name == "LangGraph":
                     if not stream_started:
-                        yield AgentStreamEvent(type="stream_start", session_id=active_session_id)
+                        yield AgentStreamEvent(
+                            type="stream_start",
+                            session_id=active_session_id,
+                            speaker=current_speaker,
+                            avatar=current_avatar,
+                            turn_epoch=current_turn_epoch,
+                            turn_state=current_turn_state,
+                        )
                         stream_started = True
 
                     output = data.get("output", {})
@@ -279,13 +441,30 @@ class LangGraphStreamBridge:
                             current_engine = str(output["engine"])
                         if output.get("model_name"):
                             current_model_name = str(output["model_name"])
+                        if output.get("speaker"):
+                            current_speaker = str(output["speaker"])
+                        if output.get("avatar"):
+                            current_avatar = str(output["avatar"])
+                        if output.get("turn_epoch") is not None:
+                            try:
+                                current_turn_epoch = int(output["turn_epoch"])
+                            except (ValueError, TypeError):
+                                pass
+                        if output.get("turn_state"):
+                            current_turn_state = str(output["turn_state"])
 
                     final_text = "".join(accumulated_chunks)
                     if not final_text and isinstance(output, dict) and output.get("final_response"):
                         final_text = str(output["final_response"])
                         if token_count == 0:
                             yield AgentStreamEvent(
-                                type="token", delta=final_text, content=final_text
+                                type="token",
+                                delta=final_text,
+                                content=final_text,
+                                speaker=current_speaker,
+                                avatar=current_avatar,
+                                turn_epoch=current_turn_epoch,
+                                turn_state=current_turn_state,
                             )
                             token_count += 1
 
@@ -296,13 +475,20 @@ class LangGraphStreamBridge:
                         output.get("tools_used") if isinstance(output, dict) else None
                     ) or tools_used
 
+                    resolved_title = await cls._resolve_session_title(sid, output, initial_state)
+
                     yield AgentStreamEvent(
                         type="stream_end",
                         session_id=sid,
+                        title=resolved_title,
                         content=final_text,
                         tools_used=used,
                         engine=current_engine,
                         model_name=current_model_name,
+                        speaker=current_speaker,
+                        avatar=current_avatar,
+                        turn_epoch=current_turn_epoch,
+                        turn_state=current_turn_state,
                     )
                     yield AgentStreamEvent(type="done")
                     stream_ended = True
@@ -310,20 +496,36 @@ class LangGraphStreamBridge:
             # End of async for: if stream_end has not been emitted yet, emit it
             if not stream_ended:
                 final_text = "".join(accumulated_chunks)
+                resolved_title = await cls._resolve_session_title(
+                    active_session_id, None, initial_state
+                )
                 yield AgentStreamEvent(
                     type="stream_end",
                     session_id=active_session_id,
+                    title=resolved_title,
                     content=final_text,
                     tools_used=tools_used,
                     engine=current_engine,
                     model_name=current_model_name,
+                    speaker=current_speaker,
+                    avatar=current_avatar,
+                    turn_epoch=current_turn_epoch,
+                    turn_state=current_turn_state,
                 )
                 yield AgentStreamEvent(type="done")
                 stream_ended = True
 
         except Exception as exc:
             logger.error("Error during LangGraph stream execution: %s", exc, exc_info=True)
-            yield AgentStreamEvent(type="error", error=str(exc), content=str(exc))
+            yield AgentStreamEvent(
+                type="error",
+                error=str(exc),
+                content=str(exc),
+                speaker=current_speaker,
+                avatar=current_avatar,
+                turn_epoch=current_turn_epoch,
+                turn_state=current_turn_state,
+            )
             return
 
 

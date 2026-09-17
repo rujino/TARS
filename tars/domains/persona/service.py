@@ -27,11 +27,8 @@ class UserSettingsService:
             now = datetime.now(UTC)
             settings = TARSSettings(
                 user_id=user_id,
-                humor_level=0.90,
-                honesty_level=0.95,
-                mode="companion",
+                mode="attend",
                 disabled_tools=[],
-                google_mock_linked=False,
                 created_at=now,
                 updated_at=now,
             )
@@ -45,10 +42,6 @@ class UserSettingsService:
         """Partially update persona configuration parameters."""
         settings = await self.get_or_create_settings(user_id)
 
-        if payload.humor_level is not None:
-            settings.humor_level = payload.humor_level
-        if payload.honesty_level is not None:
-            settings.honesty_level = payload.honesty_level
         if payload.mode is not None:
             settings.mode = payload.mode
 
@@ -58,12 +51,10 @@ class UserSettingsService:
         return settings
 
     async def reset_settings(self, user_id: str) -> TARSSettings:
-        """Reset configuration back to Interstellar defaults."""
+        """Reset configuration back to defaults (Mode: attend)."""
         settings = await self.get_or_create_settings(user_id)
 
-        settings.humor_level = 0.90
-        settings.honesty_level = 0.95
-        settings.mode = "companion"
+        settings.mode = "attend"
         settings.updated_at = datetime.now(UTC)
 
         await self.db.commit()
