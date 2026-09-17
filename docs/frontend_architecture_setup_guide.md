@@ -181,3 +181,32 @@ npm run build
    ```
 2. **Mock Fallback 내장**:
    현재 [`frontend/src/api/endpoints/task.api.ts`](file:///home/ryuji/Workspace/TARS/frontend/src/api/endpoints/task.api.ts)에는 백엔드 서버가 아직 실행되지 않은 상태에서도 프론트엔드 UI/기능(조회, 추가, 토글, 삭제)을 독립적으로 검증할 수 있는 LocalStorage 기반 Mock Fallback이 구현되어 있습니다. 백엔드 API가 준비되면 자동으로 실제 API 엔드포인트와 연동됩니다.
+
+---
+
+## 9. 쿠버네티스(K3s) 프로덕션 배포 아키텍처
+
+TARS 시스템은 FastAPI 백엔드와 React SPA 프론트엔드가 컨테이너 단위로 완전히 분리되어 배포됩니다.
+
+```mermaid
+flowchart TD
+    Client["User Browser"] -->|HTTPS 443 / SSL 종료| Ingress["Traefik Ingress (k8s/05-ingress.yaml)"]
+    Ingress -->|Path: /api, /health| BackendSvc["tars-backend:8000 (FastAPI)"]
+    Ingress -->|Path: / (Default)| FrontendSvc["tars-frontend:80 (Nginx SPA)"]
+    FrontendSvc --> FrontendPods["Frontend Pods (2 Replicas)"]
+    BackendSvc --> BackendPods["Backend Pods (3 Replicas)"]
+```
+
+1. **프론트엔드 컨테이너화 (`frontend/Dockerfile`)**:
+   - Multi-stage 빌드를 통해 `node:24-alpine`에서 번들링 후, 초경량 `nginx:1.27-alpine` 웹서버로 산출물 서빙
+   - `frontend/nginx.conf`: SPA 라우팅 Fallback(`try_files $uri $uri/ /index.html;`) 및 정적 에셋 장기 캐싱, Gzip 압축
+2. **K8s 리소스 (`k8s/08-frontend.yaml`)**:
+   - `Deployment`: 2 Replicas, 무중단 롤링 업데이트, `/healthz` 프로브
+   - `Service`: ClusterIP (80 포트)
+3. **Traefik Ingress 트래픽 분기 (`k8s/05-ingress.yaml`)**:
+   - `/api`, `/health` ➔ `tars-backend:8000`
+   - `/` ➔ `tars-frontend:80` (React SPA 웹앱)
+4. **원클릭 자동화 배포 (`k8s/deploy.sh`)**:
+   - `bash k8s/deploy.sh [all|frontend|backend]` 인자 지원
+   - 백엔드와 프론트엔드 이미지를 선택적 또는 일괄 빌드/푸시하고 무중단 롤아웃 수행
+   - `.agents/skills/tars-deploy/SKILL.md`: AI 에이전트(Antigravity) 전용 배포 및 디스크 자동 청소 런북 연동 완료
