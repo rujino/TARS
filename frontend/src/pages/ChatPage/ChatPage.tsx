@@ -42,7 +42,7 @@ export const ChatPage: React.FC = () => {
   // Optimistic & local turns appended during active session
   const [appendedMessages, setAppendedMessages] = useState<ChatMessageResponse[]>([]);
   const [prevSessionId, setPrevSessionId] = useState(activeSessionId);
-  const [streamingState, setStreamingState] = useState<StreamingMessageState | null>(null);
+  const [streamingMessages, setStreamingMessages] = useState<StreamingMessageState[]>([]);
   const [typingState, setTypingState] = useState<{ sender: string; label?: string } | null>(null);
   const [readReceipts, setReadReceipts] = useState<
     Record<string, { veraRead?: boolean; miuRead?: boolean; unreadCount?: number }>
@@ -55,11 +55,11 @@ export const ChatPage: React.FC = () => {
     const isNewSessionAssignment =
       prevSessionId === null &&
       activeSessionId !== null &&
-      (appendedMessages.length > 0 || streamingState !== null);
+      (appendedMessages.length > 0 || streamingMessages.length > 0);
 
     if (!isNewSessionAssignment) {
       setAppendedMessages([]);
-      setStreamingState(null);
+      setStreamingMessages([]);
     }
   }
 
@@ -84,21 +84,30 @@ export const ChatPage: React.FC = () => {
 
     const unsubscribe = tarsWsClient.subscribe({
       onToken: ({ speaker, token }) => {
-        setStreamingState((prev) => {
-          if (!prev) {
-            return {
-              speaker,
-              content: token,
+        const normalizedSpeaker = (speaker || 'vera').toLowerCase();
+        setStreamingMessages((prev) => {
+          const existingIndex = prev.findIndex(
+            (m) => m.speaker.toLowerCase() === normalizedSpeaker
+          );
+          if (existingIndex >= 0) {
+            const updated = [...prev];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              content: updated[existingIndex].content + token,
               isStreaming: true,
-              isAborted: false,
             };
+            return updated;
+          } else {
+            return [
+              ...prev,
+              {
+                speaker: normalizedSpeaker,
+                content: token,
+                isStreaming: true,
+                isAborted: false,
+              },
+            ];
           }
-          return {
-            ...prev,
-            speaker: speaker || prev.speaker,
-            content: prev.content + token,
-            isStreaming: true,
-          };
         });
       },
       onTypingIndicator: ({ sender, status, label }) => {
@@ -127,30 +136,30 @@ export const ChatPage: React.FC = () => {
         if (session_id && !activeSessionIdRef.current) {
           setActiveSession(session_id);
         }
-        setStreamingState({
-          speaker: 'vera',
-          content: '',
-          isStreaming: true,
-          isAborted: false,
-        });
+        setStreamingMessages([]);
       },
       onStreamEnd: async ({ session_id }) => {
         const targetSid = session_id || activeSessionIdRef.current || 'default_session';
-        setStreamingState((current) => {
-          if (current && current.content) {
-            const newAssistantMsg: ChatMessageResponse = {
-              id: `msg-${Date.now()}`,
-              session_id: targetSid,
-              user_id: user?.id || 'anonymous',
-              role: 'assistant',
-              speaker: current.speaker,
-              content: current.content,
-              tokens: current.content.length,
-              created_at: new Date().toISOString(),
-            };
-            setAppendedMessages((prev) => [...prev, newAssistantMsg]);
+        setStreamingMessages((currentList) => {
+          if (currentList && currentList.length > 0) {
+            const completedTurns: ChatMessageResponse[] = currentList
+              .filter((m) => m.content && m.content.trim().length > 0)
+              .map((m, index) => ({
+                id: `msg-${Date.now()}-${index}`,
+                session_id: targetSid,
+                user_id: user?.id || 'anonymous',
+                role: 'assistant',
+                speaker: m.speaker,
+                content: m.content,
+                tokens: m.content.length,
+                created_at: new Date(Date.now() + index * 50).toISOString(),
+              }));
+
+            if (completedTurns.length > 0) {
+              setAppendedMessages((prev) => [...prev, ...completedTurns]);
+            }
           }
-          return null;
+          return [];
         });
         setTypingState(null);
         refetchSessionsRef.current?.();
@@ -164,8 +173,8 @@ export const ChatPage: React.FC = () => {
         }
       },
       onStreamAbort: ({ reason }) => {
-        setStreamingState((prev) =>
-          prev ? { ...prev, isStreaming: false, isAborted: true } : null
+        setStreamingMessages((prev) =>
+          prev.map((m) => ({ ...m, isStreaming: false, isAborted: true }))
         );
         setTypingState(null);
         console.info('[Stream Aborted]:', reason);
@@ -184,6 +193,26 @@ export const ChatPage: React.FC = () => {
     if (!isLoggedIn) {
       openModal('auth');
       return;
+    }
+
+    // Flush any ongoing streaming messages into appendedMessages before starting new turn
+    if (streamingMessages.length > 0) {
+      const pendingTurns: ChatMessageResponse[] = streamingMessages
+        .filter((m) => m.content && m.content.trim().length > 0)
+        .map((m, index) => ({
+          id: `msg-flushed-${Date.now()}-${index}`,
+          session_id: activeSessionIdRef.current || 'default_session',
+          user_id: user?.id || 'anonymous',
+          role: 'assistant',
+          speaker: m.speaker,
+          content: m.content,
+          tokens: m.content.length,
+          created_at: new Date(Date.now() + index * 50).toISOString(),
+        }));
+      if (pendingTurns.length > 0) {
+        setAppendedMessages((prev) => [...prev, ...pendingTurns]);
+      }
+      setStreamingMessages([]);
     }
 
     const messageId = `user-${Date.now()}`;
@@ -233,7 +262,8 @@ export const ChatPage: React.FC = () => {
     );
   }
 
-  const showGreeting = allMessages.length === 0 && !streamingState;
+  const isCurrentlyStreaming = streamingMessages.some((m) => m.isStreaming);
+  const showGreeting = allMessages.length === 0 && streamingMessages.length === 0;
 
   return (
     <div className={styles.pageContainer}>
@@ -245,7 +275,7 @@ export const ChatPage: React.FC = () => {
 
       <ChatFeed
         messages={allMessages}
-        streamingMessage={streamingState}
+        streamingMessages={streamingMessages}
         readReceipts={readReceipts}
         userName={user?.username || '나'}
       />
@@ -263,7 +293,7 @@ export const ChatPage: React.FC = () => {
         onSendMessage={handleSendMessage}
         onBargeIn={handleBargeIn}
         onTyping={handleTyping}
-        isStreaming={!!streamingState?.isStreaming}
+        isStreaming={isCurrentlyStreaming}
       />
     </div>
   );

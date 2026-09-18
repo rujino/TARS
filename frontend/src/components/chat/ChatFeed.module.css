@@ -117,6 +117,14 @@
   border-color: var(--color-primary);
 }
 
+.bubbleStreamingVera {
+  border-color: var(--color-vera);
+}
+
+.bubbleStreamingMiu {
+  border-color: var(--color-miu);
+}
+
 .cursor {
   display: inline-block;
   width: 7px;
@@ -125,6 +133,14 @@
   margin-left: 4px;
   animation: blink 0.8s infinite;
   vertical-align: middle;
+}
+
+.cursorVera {
+  background-color: var(--color-vera);
+}
+
+.cursorMiu {
+  background-color: var(--color-miu);
 }
 
 .receiptRow {

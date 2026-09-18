@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import styles from './ChatFeed.module.css';
 import type { ChatMessageResponse } from '@/types/chat.types';
+import { cleanSpeakerPrefix, splitMultiSpeakerMessage } from '@/utils/chat.utils';
 
 export interface StreamingMessageState {
   speaker: string;
@@ -11,6 +12,8 @@ export interface StreamingMessageState {
 
 interface ChatFeedProps {
   messages: ChatMessageResponse[];
+  streamingMessages?: StreamingMessageState[] | null;
+  /** @deprecated Kept for backwards compatibility */
   streamingMessage?: StreamingMessageState | null;
   readReceipts?: Record<string, { veraRead?: boolean; miuRead?: boolean; unreadCount?: number }>;
   userName?: string;
@@ -18,11 +21,36 @@ interface ChatFeedProps {
 
 export const ChatFeed: React.FC<ChatFeedProps> = ({
   messages,
+  streamingMessages,
   streamingMessage,
   readReceipts = {},
   userName = '나',
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
+
+  const activeStreamingMessages: StreamingMessageState[] = useMemo(() => {
+    if (streamingMessages && streamingMessages.length > 0) {
+      return streamingMessages;
+    }
+    if (streamingMessage) {
+      return [streamingMessage];
+    }
+    return [];
+  }, [streamingMessages, streamingMessage]);
+
+  // Split any multi-speaker combined messages (e.g. from server history)
+  const processedMessages = useMemo(() => {
+    const result: ChatMessageResponse[] = [];
+    for (const msg of messages) {
+      if (msg.role === 'assistant' && msg.content) {
+        const splits = splitMultiSpeakerMessage(msg);
+        result.push(...splits);
+      } else {
+        result.push(msg);
+      }
+    }
+    return result;
+  }, [messages]);
 
   const scrollToBottom = () => {
     if (feedRef.current) {
@@ -32,14 +60,15 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, streamingMessage?.content]);
+  }, [processedMessages, activeStreamingMessages]);
 
   return (
     <div className={styles.feedContainer} ref={feedRef}>
-      {messages.map((msg) => {
+      {processedMessages.map((msg) => {
         const isUser = msg.role === 'user';
         const speaker = (msg.speaker || (isUser ? 'user' : 'vera')).toLowerCase();
         const receipt = readReceipts[msg.id];
+        const displayContent = isUser ? msg.content : cleanSpeakerPrefix(msg.content, speaker);
 
         return (
           <div
@@ -78,7 +107,7 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
                   isUser ? styles.bubbleUser : styles.bubbleAssistant
                 }`}
               >
-                {msg.content}
+                {displayContent}
               </div>
 
               {isUser && (
@@ -111,45 +140,62 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
         );
       })}
 
-      {/* 실시간 스트리밍 버블 */}
-      {streamingMessage && streamingMessage.content && (
-        <div className={`${styles.messageRow} ${styles.messageRowAssistant}`}>
+      {/* 실시간 스트리밍 버블들 (미우, 베라 등 다자간 동시/순차 발화 지원) */}
+      {activeStreamingMessages.map((sm, index) => {
+        if (!sm.content && !sm.isStreaming) return null;
+        const speaker = (sm.speaker || 'vera').toLowerCase();
+        const displayContent = cleanSpeakerPrefix(sm.content, speaker);
+
+        return (
           <div
-            className={`${styles.avatar} ${
-              streamingMessage.speaker === 'miu' ? styles.avatarMiu : styles.avatarVera
-            }`}
+            key={`streaming-${speaker}-${index}`}
+            className={`${styles.messageRow} ${styles.messageRowAssistant}`}
           >
-            {streamingMessage.speaker === 'miu' ? '미우' : '베라'}
-          </div>
-
-          <div className={styles.bubbleWrapper}>
             <div
-              className={`${styles.speakerName} ${
-                streamingMessage.speaker === 'miu' ? styles.speakerMiu : styles.speakerVera
+              className={`${styles.avatar} ${
+                speaker === 'miu' ? styles.avatarMiu : styles.avatarVera
               }`}
             >
-              <span>
-                {streamingMessage.speaker === 'miu' ? '🐾 미우' : '🏛️ 베라'}
-              </span>
+              {speaker === 'miu' ? '미우' : '베라'}
             </div>
 
-            <div
-              className={`${styles.bubble} ${styles.bubbleAssistant} ${
-                streamingMessage.isStreaming ? styles.bubbleStreaming : ''
-              }`}
-            >
-              {streamingMessage.content}
-              {streamingMessage.isStreaming && <span className={styles.cursor} />}
-            </div>
-
-            {streamingMessage.isAborted && (
-              <div className={styles.abortedNotice}>
-                <span>⛔ 0ms Barge-in (발화 중단됨)</span>
+            <div className={styles.bubbleWrapper}>
+              <div
+                className={`${styles.speakerName} ${
+                  speaker === 'miu' ? styles.speakerMiu : styles.speakerVera
+                }`}
+              >
+                <span>{speaker === 'miu' ? '🐾 미우' : '🏛️ 베라'}</span>
               </div>
-            )}
+
+              <div
+                className={`${styles.bubble} ${styles.bubbleAssistant} ${
+                  sm.isStreaming
+                    ? speaker === 'miu'
+                      ? styles.bubbleStreamingMiu
+                      : styles.bubbleStreamingVera
+                    : ''
+                }`}
+              >
+                {displayContent}
+                {sm.isStreaming && (
+                  <span
+                    className={`${styles.cursor} ${
+                      speaker === 'miu' ? styles.cursorMiu : styles.cursorVera
+                    }`}
+                  />
+                )}
+              </div>
+
+              {sm.isAborted && (
+                <div className={styles.abortedNotice}>
+                  <span>⛔ 0ms Barge-in (발화 중단됨)</span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 };
