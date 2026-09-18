@@ -1,0 +1,133 @@
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  gap: var(--spacing-2);
+}
+
+.tabButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-subtle);
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.tabButtonActive {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.input {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  color: var(--color-text-main);
+  font-size: var(--font-size-sm);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.input:focus {
+  border-color: var(--color-primary);
+}
+
+.submitBtn {
+  margin-top: var(--spacing-2);
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-primary);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.submitBtn:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.errorMessage {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-danger-subtle);
+  border: 1px solid var(--color-danger);
+  color: #fca5a5;
+  font-size: var(--font-size-xs);
+}
+
+.profileCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+}
+
+.profileRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding-bottom: 6px;
+}
+
+.profileRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.profileKey {
+  color: var(--color-text-subtle);
+}
+
+.profileVal {
+  color: var(--color-text-main);
+  font-weight: 500;
+}
+
+.ticketBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  background-color: var(--color-bg-secondary);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3);
+  font-size: var(--font-size-xs);
+}
+
+.ticketValue {
+  font-family: var(--font-family-mono);
+  background-color: var(--color-bg-primary);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  color: var(--color-vera);
+}
