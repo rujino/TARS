@@ -2,7 +2,6 @@
 
 from tars.domains.chat.models import ChatMessage, ChatSession
 from tars.domains.chat.schemas import (
-    ChatStreamRequest,
     GreetingResponse,
     SessionInfoResponse,
     WSMessageIn,
@@ -15,7 +14,6 @@ __all__ = [
     "AgentChatService",
     "ChatMessage",
     "ChatSession",
-    "ChatStreamRequest",
     "GreetingResponse",
     "ProactiveGreetingService",
     "SessionInfoResponse",

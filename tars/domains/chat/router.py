@@ -1,4 +1,4 @@
-"""Chat Streaming REST (SSE), WebSocket real-time communication, and Proactive Greeting routers.
+"""WebSocket real-time communication, Session history, and Proactive Greeting routers.
 
 Thin Controller pattern: Delegates orchestration and session workflows to AgentChatService and ProactiveGreetingService.
 """
@@ -10,27 +10,22 @@ import json
 import logging
 import random
 import uuid
-from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     HTTPException,
     Query,
-    Request,
     WebSocket,
     WebSocketDisconnect,
     status,
 )
-from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocketState
 
 from tars.api.dependencies import (
-    get_agent_chat_service,
     get_current_user,
     get_db_session,
     get_proactive_greeting_service,
@@ -47,7 +42,6 @@ from tars.domains.chat.schemas import (
     ChatSessionDeleteResponse,
     ChatSessionItem,
     ChatSessionListResponse,
-    ChatStreamRequest,
     GreetingResponse,
     compute_date_group,
 )
@@ -241,100 +235,8 @@ async def delete_chat_session(
     return ChatSessionDeleteResponse(success=True, session_id=session_id)
 
 
+# WebSocket Authentication & Session Helpers
 # ============================================================================
-# Streaming & Session Helpers (Thin Controller Delegation)
-# ============================================================================
-
-
-async def _generate_sse_stream(
-    agent_service: AgentChatService,
-    user_id: str,
-    payload: ChatStreamRequest,
-    background_tasks: BackgroundTasks,
-    request: Request,
-) -> AsyncIterator[str]:
-    """Generate SSE events from AgentChatService with heartbeat ping and disconnect termination."""
-    queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
-    sentinel = object()
-
-    async def producer() -> None:
-        try:
-            async for event in agent_service.stream_chat(
-                user_id=user_id,
-                message=payload.message,
-                session_id=payload.session_id,
-                client_timezone=payload.timezone,
-                background_tasks=background_tasks,
-            ):
-                if await request.is_disconnected():
-                    logger.info("Client disconnected from SSE stream; terminating graph execution")
-                    break
-                await queue.put(event)
-        except asyncio.CancelledError:
-            logger.info("Client disconnected from SSE stream; terminating graph execution")
-            raise
-        except Exception as exc:
-            await queue.put(exc)
-        finally:
-            await queue.put(sentinel)
-
-    producer_task = asyncio.create_task(producer())
-
-    try:
-        while True:
-            try:
-                item = await asyncio.wait_for(queue.get(), timeout=15.0)
-            except TimeoutError:
-                if await request.is_disconnected():
-                    logger.info("Client disconnected from SSE stream; terminating graph execution")
-                    break
-                yield ": ping\n\n"
-                continue
-
-            if item is sentinel:
-                break
-            if isinstance(item, Exception):
-                logger.error("Error encountered in SSE stream: %s", item, exc_info=True)
-                yield f"event: error\ndata: {json.dumps({'error': str(item)})}\n\n"
-                break
-
-            if await request.is_disconnected():
-                logger.info("Client disconnected from SSE stream; terminating graph execution")
-                break
-
-            yield item.to_sse_event()
-    finally:
-        if not producer_task.done():
-            producer_task.cancel()
-            try:
-                await producer_task
-            except (asyncio.CancelledError, Exception):
-                pass
-
-
-def _create_sse_streaming_response(
-    agent_service: AgentChatService,
-    user_id: str,
-    payload: ChatStreamRequest,
-    background_tasks: BackgroundTasks,
-    request: Request,
-) -> StreamingResponse:
-    """Create a configured StreamingResponse for SSE chat streaming."""
-    return StreamingResponse(
-        _generate_sse_stream(
-            agent_service=agent_service,
-            user_id=user_id,
-            payload=payload,
-            background_tasks=background_tasks,
-            request=request,
-        ),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 async def _authenticate_ws_connection(
@@ -821,25 +723,6 @@ async def _handle_ws_chat_session(
 # ============================================================================
 
 
-@router.post(
-    "/stream",
-    summary="Stream real-time tokens via Server-Sent Events (SSE)",
-)
-async def chat_sse_stream(
-    request: Request,
-    payload: ChatStreamRequest,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    agent_service: AgentChatService = Depends(get_agent_chat_service),
-) -> StreamingResponse:
-    """Stream model response tokens using standard SSE protocol with unified Agent ReAct pipeline."""
-    return _create_sse_streaming_response(
-        agent_service=agent_service,
-        user_id=current_user.id,
-        payload=payload,
-        background_tasks=background_tasks,
-        request=request,
-    )
 
 
 @router.websocket("/ws")
