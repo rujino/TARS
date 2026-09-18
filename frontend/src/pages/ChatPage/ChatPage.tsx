@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import styles from './ChatPage.module.css';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useChatQuery } from '@/queries/useChatQuery';
@@ -25,6 +25,20 @@ export const ChatPage: React.FC = () => {
     refetchMessages,
   } = useChatQuery(activeSessionId);
 
+  // Stable references for WebSocket event handlers
+  const activeSessionIdRef = useRef(activeSessionId);
+  const refetchMessagesRef = useRef(refetchMessages);
+  const refetchSessionsRef = useRef(refetchSessions);
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    refetchMessagesRef.current = refetchMessages;
+    refetchSessionsRef.current = refetchSessions;
+  }, [refetchMessages, refetchSessions]);
+
   // Optimistic & local turns appended during active session
   const [appendedMessages, setAppendedMessages] = useState<ChatMessageResponse[]>([]);
   const [prevSessionId, setPrevSessionId] = useState(activeSessionId);
@@ -34,14 +48,33 @@ export const ChatPage: React.FC = () => {
     Record<string, { veraRead?: boolean; miuRead?: boolean; unreadCount?: number }>
   >({});
 
-  // Reset appended messages during render when session changes
+  // Reset appended messages when switching sessions,
+  // but preserve optimistic turns and streaming state when transitioning from null -> new session_id for the ongoing turn.
   if (prevSessionId !== activeSessionId) {
     setPrevSessionId(activeSessionId);
-    setAppendedMessages([]);
-    setStreamingState(null);
+    const isNewSessionAssignment =
+      prevSessionId === null &&
+      activeSessionId !== null &&
+      (appendedMessages.length > 0 || streamingState !== null);
+
+    if (!isNewSessionAssignment) {
+      setAppendedMessages([]);
+      setStreamingState(null);
+    }
   }
 
-  const allMessages = [...remoteMessages, ...appendedMessages];
+  // Deduplicate: filter out optimistic messages if the server messages already include them
+  const pendingAppended =
+    remoteMessages.length > 0
+      ? appendedMessages.filter(
+          (appMsg) =>
+            !remoteMessages.some(
+              (rm) => rm.role === appMsg.role && rm.content === appMsg.content
+            )
+        )
+      : appendedMessages;
+
+  const allMessages = [...remoteMessages, ...pendingAppended];
 
   // WebSocket lifecycle & event subscriptions
   useEffect(() => {
@@ -91,7 +124,7 @@ export const ChatPage: React.FC = () => {
         });
       },
       onStreamStart: ({ session_id }) => {
-        if (session_id && !activeSessionId) {
+        if (session_id && !activeSessionIdRef.current) {
           setActiveSession(session_id);
         }
         setStreamingState({
@@ -101,12 +134,13 @@ export const ChatPage: React.FC = () => {
           isAborted: false,
         });
       },
-      onStreamEnd: ({ session_id }) => {
+      onStreamEnd: async ({ session_id }) => {
+        const targetSid = session_id || activeSessionIdRef.current || 'default_session';
         setStreamingState((current) => {
           if (current && current.content) {
             const newAssistantMsg: ChatMessageResponse = {
               id: `msg-${Date.now()}`,
-              session_id: session_id || activeSessionId || 'default_session',
+              session_id: targetSid,
               user_id: user?.id || 'anonymous',
               role: 'assistant',
               speaker: current.speaker,
@@ -119,8 +153,15 @@ export const ChatPage: React.FC = () => {
           return null;
         });
         setTypingState(null);
-        refetchSessions();
-        refetchMessages();
+        refetchSessionsRef.current?.();
+        try {
+          const res = await refetchMessagesRef.current?.();
+          if (res?.data && res.data.length > 0) {
+            setAppendedMessages([]);
+          }
+        } catch (e) {
+          console.error('[Failed to refetch messages after stream]:', e);
+        }
       },
       onStreamAbort: ({ reason }) => {
         setStreamingState((prev) =>
@@ -137,7 +178,7 @@ export const ChatPage: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [isLoggedIn, activeSessionId, user?.id, setActiveSession, refetchSessions, refetchMessages]);
+  }, [isLoggedIn, user?.id, setActiveSession]);
 
   const handleSendMessage = (content: string) => {
     if (!isLoggedIn) {
@@ -146,7 +187,7 @@ export const ChatPage: React.FC = () => {
     }
 
     const messageId = `user-${Date.now()}`;
-    const targetSessionId = activeSessionId || 'default_session';
+    const targetSessionId = activeSessionIdRef.current || 'default_session';
 
     // Optimistic user turn
     const newMsg: ChatMessageResponse = {
@@ -168,11 +209,11 @@ export const ChatPage: React.FC = () => {
   };
 
   const handleBargeIn = () => {
-    tarsWsClient.sendBargeIn(activeSessionId || 'default_session');
+    tarsWsClient.sendBargeIn(activeSessionIdRef.current || 'default_session');
   };
 
   const handleTyping = () => {
-    tarsWsClient.sendTyping(activeSessionId || 'default_session', 'active');
+    tarsWsClient.sendTyping(activeSessionIdRef.current || 'default_session', 'active');
   };
 
   if (!isLoggedIn) {
@@ -192,7 +233,7 @@ export const ChatPage: React.FC = () => {
     );
   }
 
-  const showGreeting = !activeSessionId || allMessages.length === 0;
+  const showGreeting = allMessages.length === 0 && !streamingState;
 
   return (
     <div className={styles.pageContainer}>
