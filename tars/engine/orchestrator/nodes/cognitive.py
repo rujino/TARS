@@ -261,9 +261,9 @@ async def unified_cognitive_node(
                     valid_personas.append(reg.get(pid))
                 else:
                     logger.warning("Unknown persona ID '%s' in active_persona_ids; ignoring.", pid)
-            active_personas = valid_personas if valid_personas else reg.list_active(["vera", "miu"])
+            active_personas = valid_personas if valid_personas else reg.list_all()
         else:
-            active_personas = reg.list_active(["vera", "miu"])
+            active_personas = reg.list_all()
 
     # Extract recent speakers history for least-recent rotation
     recent_speakers: list[str] = []

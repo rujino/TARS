@@ -15,7 +15,12 @@ import re
 import threading
 from typing import Any
 
-from tars.domains.persona.schemas import PersonaDefinition, RoleType
+from tars.domains.persona.schemas import (
+    CharacterInnerState,
+    PersonaDefinition,
+    RoleType,
+    RoutingPattern,
+)
 
 logger = logging.getLogger("tars.domains.persona.registry")
 
@@ -103,6 +108,18 @@ VERA_DEFINITION = PersonaDefinition(
     prompt_template=VERA_SYSTEM_PROMPT_TEMPLATE,
     read_jitter_range=(0.05, 0.15),
     is_builtin=True,
+    pattern_vibes={
+        RoutingPattern.TAG_TEAM_REMEDIATION.value: "주인의 안위에 대한 깊은 우려와 차분한 츤데레적 헌신",
+        RoutingPattern.DEBATE_BANTER.value: "이성적이고 철저한 수석 메이드의 평정심",
+        RoutingPattern.GUARDRAIL_INTERVENTION.value: "단정한 대기 상태",
+    },
+    pattern_agendas={
+        RoutingPattern.TAG_TEAM_REMEDIATION.value: "무리한 일정 취소 및 침대로 안전하게 유도하기",
+        RoutingPattern.DEBATE_BANTER.value: "정확한 팩트 전달 및 미우의 철없는 행동 부드럽게 단속",
+        RoutingPattern.GUARDRAIL_INTERVENTION.value: "불필요한 사족을 배제하고 주인님의 다음 지시 대기",
+    },
+    default_vibe="성실하고 차분함",
+    default_agenda="정확하고 지적인 현실 과업 지원",
 )
 
 MIU_DEFINITION = PersonaDefinition(
@@ -117,6 +134,18 @@ MIU_DEFINITION = PersonaDefinition(
     prompt_template=MIU_SYSTEM_PROMPT_TEMPLATE,
     read_jitter_range=(0.3, 0.6),
     is_builtin=True,
+    pattern_vibes={
+        RoutingPattern.TAG_TEAM_REMEDIATION.value: "주인님을 향한 깊은 안쓰러움과 애틋한 온기 (피로 완화 집중)",
+        RoutingPattern.DEBATE_BANTER.value: "장난기 넘치고 신나는 활기 80%",
+        RoutingPattern.GUARDRAIL_INTERVENTION.value: "나른하고 차분한 대기 상태",
+    },
+    pattern_agendas={
+        RoutingPattern.TAG_TEAM_REMEDIATION.value: "무조건적인 편들기와 골골송으로 심리적 긴장 풀어주기",
+        RoutingPattern.DEBATE_BANTER.value: "베라 언니에게 딴지 걸며 주인님 관심 집중시키기",
+        RoutingPattern.GUARDRAIL_INTERVENTION.value: "가볍게 눈을 맞추며 주인의 다음 지시 기다리기",
+    },
+    default_vibe="밝고 경쾌한 충실함",
+    default_agenda="주인님 말씀에 귀 기울이고 신나게 화답하기",
 )
 
 
@@ -189,6 +218,31 @@ class PersonaRegistry:
         for pid in active_ids:
             results.append(self.get(pid))
         return results
+
+    def synthesize_inner_state(
+        self,
+        persona_id: str,
+        pattern: RoutingPattern | str | None = None,
+        prev_vibe: str | None = None,
+        dialogue_tone: str | None = None,
+        turn_intent: str | None = None,
+    ) -> CharacterInnerState:
+        """Autonomously synthesize inner state for the given persona identifier."""
+        if not self.has(persona_id):
+            tone = dialogue_tone or "neutral"
+            intent = turn_intent or "dialogue"
+            return CharacterInnerState(
+                speaker_id=persona_id,
+                my_vibe=f"{persona_id}의 고유 기분 상태 ({tone})",
+                my_agenda=f"{intent}에 따른 성실한 응답",
+            )
+        persona = self.get(persona_id)
+        return persona.synthesize_inner_state(
+            pattern=pattern,
+            prev_vibe=prev_vibe,
+            dialogue_tone=dialogue_tone,
+            turn_intent=turn_intent,
+        )
 
     def render_system_prompt(
         self,
