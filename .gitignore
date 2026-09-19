@@ -283,3 +283,6 @@ k8s/*secret*.yaml
 # vscode settings
 .vscode/settings.json
 .vscode/
+
+# AGENTS.md
+AGENTS.md

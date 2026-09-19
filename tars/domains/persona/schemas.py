@@ -75,6 +75,23 @@ class PersonaDefinition(BaseModel):
     )
     is_builtin: bool = Field(default=False, description="Whether this persona is built into TARS")
 
+    pattern_vibes: dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping of RoutingPattern values to inner vibe descriptions",
+    )
+    pattern_agendas: dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping of RoutingPattern values to inner agenda descriptions",
+    )
+    default_vibe: str = Field(
+        default="성실하고 차분함",
+        description="Default baseline emotional vibe",
+    )
+    default_agenda: str = Field(
+        default="주인님 말씀에 귀 기울이고 성실하게 화답하기",
+        description="Default baseline inner agenda",
+    )
+
     def __init__(self, **data: Any) -> None:
         if "role_type" in data and "role" not in data:
             data["role"] = data.pop("role_type")
@@ -95,6 +112,44 @@ class PersonaDefinition(BaseModel):
         if min_j > max_j:
             raise ValueError("read_jitter_range min value cannot exceed max value.")
         return v
+
+    def synthesize_inner_state(
+        self,
+        pattern: RoutingPattern | str | None = None,
+        prev_vibe: str | None = None,
+        dialogue_tone: str | None = None,
+        turn_intent: str | None = None,
+    ) -> CharacterInnerState:
+        """Autonomously synthesize inner state (vibe and agenda) based on persona metadata."""
+        pattern_str = pattern.value if isinstance(pattern, RoutingPattern) else str(pattern or "SOLO")
+
+        # 1. Resolve vibe
+        if pattern_str in self.pattern_vibes:
+            my_vibe = self.pattern_vibes[pattern_str]
+        elif prev_vibe:
+            my_vibe = f"{prev_vibe}의 여운을 이어받은 {self.default_vibe}"
+        elif dialogue_tone and dialogue_tone != "neutral":
+            my_vibe = f"{self.name}의 고유 기분 상태 ({dialogue_tone})"
+        else:
+            my_vibe = self.default_vibe
+
+        # 2. Resolve agenda
+        if pattern_str in self.pattern_agendas:
+            my_agenda = self.pattern_agendas[pattern_str]
+        elif turn_intent and turn_intent not in (
+            "dialogue",
+            "single_persona_session",
+            "single_agent_response",
+        ):
+            my_agenda = f"{turn_intent}에 따른 성실한 응답"
+        else:
+            my_agenda = self.default_agenda
+
+        return CharacterInnerState(
+            speaker_id=self.id,
+            my_vibe=my_vibe,
+            my_agenda=my_agenda,
+        )
 
     @property
     def role_type(self) -> RoleType:

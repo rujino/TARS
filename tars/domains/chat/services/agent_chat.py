@@ -134,6 +134,7 @@ class AgentChatService:
         background_tasks: BackgroundTasks | None = None,
         messages: list[BaseMessage] | None = None,
         turn_epoch: int | None = None,
+        active_persona_ids: list[str] | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Execute full agent turn with session routing, dynamic slicing, companion pipeline, and token streaming."""
         from tars.core.session.manager import SmartSessionManager
@@ -143,10 +144,11 @@ class AgentChatService:
             create_companion_graph,
         )
 
+        reg = get_default_registry()
         graph = create_companion_graph(
             router=self.router,
             slicer=self.slicer,
-            registry=get_default_registry(),
+            registry=reg,
             session_manager=SmartSessionManager(self.db, self.storage),
             db_session=self.db,
             storage_manager=self.storage,
@@ -159,13 +161,18 @@ class AgentChatService:
         )
         resolved_session_id = session_id or "default_session"
         resolved_turn_epoch = turn_epoch if turn_epoch is not None else 1
+        resolved_persona_ids = (
+            list(active_persona_ids)
+            if active_persona_ids is not None and len(active_persona_ids) > 0
+            else [p.id for p in reg.list_all()]
+        )
 
         initial_state: CompanionState = {
             "user_id": user_id,
             "session_id": resolved_session_id,
             "active_query": message,
             "messages": chat_messages,
-            "active_persona_ids": ["vera", "miu"],
+            "active_persona_ids": resolved_persona_ids,
         }
         initial_state["turn_epoch"] = resolved_turn_epoch  # type: ignore[typeddict-unknown-key]
 

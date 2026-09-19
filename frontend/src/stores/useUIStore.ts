@@ -1,17 +1,15 @@
 import { create } from 'zustand';
 
+export type ModalType = 'auth' | 'persona' | 'tools' | 'system' | null;
+
 interface UIState {
-  isCreateModalOpen: boolean;
-  openCreateModal: () => void;
-  closeCreateModal: () => void;
+  activeModal: ModalType;
+  openModal: (modal: Exclude<ModalType, null>) => void;
+  closeModal: () => void;
 }
 
-/**
- * 전역 UI 클라이언트 상태 스토어
- * - 서버 데이터와 무관한 순수 뷰/인터랙션 상태만 관리합니다.
- */
 export const useUIStore = create<UIState>((set) => ({
-  isCreateModalOpen: false,
-  openCreateModal: () => set({ isCreateModalOpen: true }),
-  closeCreateModal: () => set({ isCreateModalOpen: false }),
+  activeModal: null,
+  openModal: (modal) => set({ activeModal: modal }),
+  closeModal: () => set({ activeModal: null }),
 }));

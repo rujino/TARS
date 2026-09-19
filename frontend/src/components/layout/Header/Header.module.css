@@ -1,65 +1,169 @@
 .header {
-  height: 64px;
-  background-color: var(--color-surface);
+  height: 56px;
+  background-color: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--spacing-8);
+  padding: 0 var(--spacing-4);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 40;
+  user-select: none;
 }
 
-.brand {
+.leftSection {
   display: flex;
   align-items: center;
   gap: var(--spacing-3);
+}
+
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  background: transparent;
+  transition: all var(--transition-fast);
+}
+
+.iconButton:hover {
+  color: var(--color-text-main);
+  background-color: var(--color-surface-hover);
 }
 
 .logo {
+  font-size: var(--font-size-lg);
   font-weight: 700;
-  font-size: var(--font-size-xl);
-  color: var(--color-primary);
-  letter-spacing: -0.025em;
-}
-
-.badge {
-  background-color: var(--color-primary-light);
-  color: var(--color-primary);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-}
-
-.nav {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-4);
-  margin-left: var(--spacing-6);
-}
-
-.navLink {
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--color-text-muted);
-  padding: var(--spacing-1) var(--spacing-2);
-  border-radius: var(--radius-sm);
-  transition: color var(--transition-fast);
-}
-
-.navLink:hover {
+  letter-spacing: 0.05em;
   color: var(--color-text-main);
-}
-
-.navLinkActive {
-  color: var(--color-primary) !important;
-  font-weight: 600;
-}
-
-.actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: var(--spacing-2);
+}
+
+.logoBadge {
+  font-size: var(--font-size-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.modeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  font-size: var(--font-size-xs);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-main);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.modeBadge:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-primary);
+}
+
+.rightSection {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.healthIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.healthIndicator:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-focus);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-text-subtle);
+}
+
+.statusDotReady {
+  background-color: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
+}
+
+.statusDotDegraded {
+  background-color: var(--color-danger);
+  box-shadow: 0 0 8px var(--color-danger);
+}
+
+.navButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-text-main);
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.navButton:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-focus);
+}
+
+.userBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-main);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.userBadge:hover {
+  border-color: var(--color-primary);
+}
+
+.avatarCircle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
 }

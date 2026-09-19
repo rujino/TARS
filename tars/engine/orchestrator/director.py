@@ -31,9 +31,41 @@ CRISIS_KEYWORDS_REGEX = re.compile(
     re.IGNORECASE,
 )
 
+# Regex pattern for collective/all-persona mention keywords in Korean (e.g. '둘 다', '모두', '너희 둘 다', '다들')
+COLLECTIVE_MENTION_REGEX = re.compile(
+    r"(?:^|(?<![가-힣a-zA-Z0-9]))("
+    r"둘\s*다|"
+    r"둘\s*모두|"
+    r"둘다|"
+    r"너희\s*(?:들|둘\s*다|둘)?|"
+    r"너네\s*(?:들|둘\s*다|둘)?|"
+    r"모두(?:에게|한테|는|도)?|"
+    r"다들|"
+    r"다\s*같이|"
+    r"함께|"
+    r"전부|"
+    r"두\s*(?:사람|녀석|명|분|마리)\s*(?:다|모두)?"
+    r")(?:(?![가-힣a-zA-Z0-9])|$)",
+    re.IGNORECASE,
+)
+
 
 class FloorDirectorGatekeeper:
     """Deterministic, 0ms latency code rules engine for multi-agent turn arbitration."""
+
+    @classmethod
+    def is_collective_mention(cls, user_text: str) -> bool:
+        """Check if user text addresses all active personas collectively (e.g., '둘 다', '모두', '너희').
+
+        Args:
+            user_text: Raw user input text.
+
+        Returns:
+            True if user explicitly addresses all or dual personas together.
+        """
+        if not user_text:
+            return False
+        return bool(COLLECTIVE_MENTION_REGEX.search(user_text))
 
     @staticmethod
     def is_directly_mentioned(user_text: str, persona: PersonaDefinition) -> bool:
@@ -88,6 +120,8 @@ class FloorDirectorGatekeeper:
         """Arbitrate turn routing across active personas using deterministic 0ms code rules.
 
         Rules:
+        - Rule 0 (Collective / Multi-Mention Guarantee): User mentions collective ('둘 다', '모두')
+          or multiple personas -> Unconditionally guarantee multi-persona response (no solo cutoff).
         - Rule 1 (Direct Mention): User mentions persona name -> +4 bonus. Mentioned persona
           is never silenced into SOLO by an unmentioned persona.
         - Rule 2 (Tiki-taka / Dual High Desire): top1 >= 7 and top2 >= 7.
@@ -113,9 +147,20 @@ class FloorDirectorGatekeeper:
         if not active_personas:
             raise ValueError("활성화된 컴패니언 페르소나가 없습니다.")
 
-        # 1. Apply Rule 1: Direct Mention Bonus (+4)
+        # 1. Apply Rule 1: Direct Mention Bonus (+4) & Collective Mention Detection
+        is_collective = cls.is_collective_mention(user_text) and len(active_personas) >= 2
         scores: list[tuple[PersonaDefinition, int]] = []
-        mentioned_personas = [p for p in active_personas if cls.is_directly_mentioned(user_text, p)]
+
+        if is_collective:
+            mentioned_personas = list(active_personas)
+            logger.debug(
+                "Collective mention triggered ('%s'): all %d personas boosted",
+                user_text,
+                len(active_personas),
+            )
+        else:
+            mentioned_personas = [p for p in active_personas if cls.is_directly_mentioned(user_text, p)]
+
         mentioned_ids = {p.id for p in mentioned_personas}
 
         for p in active_personas:
@@ -123,7 +168,7 @@ class FloorDirectorGatekeeper:
             if p.id in mentioned_ids:
                 base_score += 4
                 logger.debug(
-                    "Persona '%s' directly mentioned: score boosted to %d", p.id, base_score
+                    "Persona '%s' directly/collectively mentioned: score boosted to %d", p.id, base_score
                 )
             scores.append((p, base_score))
 
@@ -150,6 +195,49 @@ class FloorDirectorGatekeeper:
             )
 
         top2_p, top2_score = scores[1]
+
+        # Rule 0 (Unconditional Multi-Response Guarantee):
+        # When user explicitly addresses multiple or all personas ("둘 다", "모두에게", "미우, 베라" 등),
+        # NEVER fall back to SOLO or GUARDRAIL silence. Both personas must respond unconditionally!
+        is_multi_mention = is_collective or len(mentioned_personas) >= 2
+        if is_multi_mention:
+            master_state_text = subconscious.master_state if subconscious else ""
+            is_crisis = bool(
+                CRISIS_KEYWORDS_REGEX.search(master_state_text)
+                or CRISIS_KEYWORDS_REGEX.search(user_text)
+            )
+            if is_crisis:
+                if (
+                    top1_p.role != RoleType.SYSTEM_1_EMOTIONAL
+                    and top2_p.role == RoleType.SYSTEM_1_EMOTIONAL
+                ):
+                    primary_id = top2_p.id
+                    secondary_id = top1_p.id
+                    remedy_desc = f"{top2_p.name}(정서 선빵) -> {top1_p.name}(현실 수습)"
+                else:
+                    primary_id = top1_p.id
+                    secondary_id = top2_p.id
+                    remedy_desc = f"{top1_p.name}(정서 선빵) -> {top2_p.name}(현실 수습)"
+
+                return TurnRoutingDecision(
+                    pattern=RoutingPattern.TAG_TEAM_REMEDIATION,
+                    primary_speaker_id=primary_id,
+                    secondary_speaker_id=secondary_id,
+                    dialogue_tone="empathetic_remediation",
+                    turn_intent="emotional_first_strike_then_reality_remedy",
+                    reason=f"복수/전체 호명 및 정서 위기 감지: {remedy_desc} (전원 응답 보장)",
+                )
+
+            # Normal multi-agent response (collaborative discussion/banter)
+            # Both top personas are guaranteed to respond in sequence
+            return TurnRoutingDecision(
+                pattern=RoutingPattern.DEBATE_BANTER,
+                primary_speaker_id=top1_p.id,
+                secondary_speaker_id=top2_p.id,
+                dialogue_tone="collaborative_banter",
+                turn_intent="collective_all_response",
+                reason=f"복수/전체 호명('둘 다'/'모두' 등)에 따른 전원 연속 발화 보장: {top1_p.name}({top1_score}점) -> {top2_p.name}({top2_score}점)",
+            )
 
         # Rule 4: Low-desire guardrail (All scores < 5)
         if top1_score < 5:

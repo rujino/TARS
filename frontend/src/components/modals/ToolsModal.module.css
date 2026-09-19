@@ -1,0 +1,232 @@
+.sectionTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text-main);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-2);
+}
+
+.serverCard {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-3);
+}
+
+.serverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.serverBadgeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.serverName {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.serverTypeBadge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.serverStatusConnected {
+  font-size: 11px;
+  color: var(--color-success);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.serverStatusOffline {
+  font-size: 11px;
+  color: var(--color-danger);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.testBtn {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.testBtn:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-main);
+  border-color: var(--color-border-focus);
+}
+
+.toolList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background-color: var(--color-bg-primary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-2);
+}
+
+.toolItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+}
+
+.toolItemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolItemName {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  font-family: var(--font-family-mono);
+  color: var(--color-text-main);
+}
+
+.toolItemDesc {
+  font-size: 11px;
+  color: var(--color-text-subtle);
+}
+
+.toggleSwitch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+}
+
+.toggleSwitch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-bg-tertiary);
+  transition: 0.2s;
+  border-radius: 20px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--color-primary);
+}
+
+input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
+.googleCard {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.googleInputs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.googleInputRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.googleInput {
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--color-text-main);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-mono);
+}
+
+.googleActionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.googleConnectBtn {
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-primary);
+  color: #ffffff;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color var(--transition-fast);
+}
+
+.googleConnectBtn:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.googleDisconnectBtn {
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-danger-subtle);
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.googleDisconnectBtn:hover {
+  background-color: var(--color-danger);
+  color: #ffffff;
+}
