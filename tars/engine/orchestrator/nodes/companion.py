@@ -115,7 +115,7 @@ def _synthesize_inner_state(
     if persona_id:
         target_id = persona_id
     elif persona is not None:
-        target_id = persona.id if hasattr(persona, "id") else str(persona)
+        target_id = persona.id if isinstance(persona, PersonaDefinition) else str(persona)
     elif routing is not None:
         target_id = (
             routing.secondary_speaker_id
@@ -154,12 +154,8 @@ async def companion_dispatch_node(
     registry: PersonaRegistry | None = None,
     router: HybridLLMRouter | None = None,
 ) -> dict[str, Any]:
-    """Execute Tier 2 conscious companion dispatching and genuine LLM generation.
-
-    Zero Mock Policy: Completely eliminates canned dialogue templates.
-    Companions independently infer responses via HybridLLMRouter using
-    dynamically rendered system prompts from PersonaRegistry with
-    Theory of Mind, perspective context, and emotional inertia injected.
+    """
+    Execute Tier 2 conscious companion dispatching and genuine LLM generation.
     """
     reg = registry or get_default_registry()
     subconscious = state.get("subconscious")
