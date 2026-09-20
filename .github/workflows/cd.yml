@@ -1,0 +1,95 @@
+name: CD Lab PC Deployment
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '배포 대상 선택 (all, frontend, backend)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - frontend
+          - backend
+
+concurrency:
+  group: deploy-lab-pc
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 🚀 Deploy to Lab PC (K3s)
+    runs-on: self-hosted
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 🔍 Determine Deployment Target
+        id: target
+        run: |
+          # 수동 실행(workflow_dispatch)인 경우 선택된 인풋 사용
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.target }}" >> $GITHUB_OUTPUT
+            echo "🎯 Selected target by manual trigger: ${{ inputs.target }}"
+            exit 0
+          fi
+
+          # 최초 커밋이거나 이전 커밋 히스토리가 부족한 경우 전체 배포
+          if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+            echo "mode=all" >> $GITHUB_OUTPUT
+            echo "🎯 Initial commit detected, targeting: all"
+            exit 0
+          fi
+
+          # 변경된 파일 감지
+          FRONTEND_CHANGED=false
+          BACKEND_CHANGED=false
+          K8S_CHANGED=false
+
+          if git diff --name-only HEAD~1 HEAD | grep -q "^frontend/"; then
+            FRONTEND_CHANGED=true
+          fi
+
+          if git diff --name-only HEAD~1 HEAD | grep -q -E "^(tars/|main.py|Dockerfile|pyproject.toml|migrations/|alembic.ini)"; then
+            BACKEND_CHANGED=true
+          fi
+
+          if git diff --name-only HEAD~1 HEAD | grep -q "^k8s/"; then
+            K8S_CHANGED=true
+          fi
+
+          echo "Frontend changed: $FRONTEND_CHANGED"
+          echo "Backend changed: $BACKEND_CHANGED"
+          echo "K8s manifests changed: $K8S_CHANGED"
+
+          if [ "$K8S_CHANGED" = "true" ] || ( [ "$FRONTEND_CHANGED" = "true" ] && [ "$BACKEND_CHANGED" = "true" ] ); then
+            echo "mode=all" >> $GITHUB_OUTPUT
+          elif [ "$FRONTEND_CHANGED" = "true" ]; then
+            echo "mode=frontend" >> $GITHUB_OUTPUT
+          elif [ "$BACKEND_CHANGED" = "true" ]; then
+            echo "mode=backend" >> $GITHUB_OUTPUT
+          else
+            echo "mode=all" >> $GITHUB_OUTPUT
+          fi
+
+      - name: ⚙️ Execute K3s Deployment Script
+        run: |
+          TARGET="${{ steps.target.outputs.mode }}"
+          echo "========================================================"
+          echo "🚀 Starting Deployment for target: $TARGET"
+          echo "========================================================"
+          
+          # 배포 스크립트 실행
+          bash k8s/deploy.sh "$TARGET"
+
+      - name: 🧹 Clean up Docker Dangling Images
+        if: always()
+        run: |
+          echo "🧹 Cleaning up unused Docker dangling images..."
+          docker image prune -f || true
