@@ -43,15 +43,59 @@ logger = logging.getLogger("tars.engine.orchestrator.nodes.companion")
 
 async def companion_session_node(
     state: CompanionState,
+    session_manager: SmartSessionManager | None = None,
+    db_session: AsyncSession | None = None,
+    storage_manager: FileStorageManager | None = None,
+    router: HybridLLMRouter | None = None,
+    background_tasks: BackgroundTasks | None = None,
     registry: PersonaRegistry | None = None,
 ) -> dict[str, Any]:
-    """Initialize session parameters and resolve active personas dynamically."""
-    reg = registry or get_default_registry()
-    messages = state.get("messages", [])
+    """Initialize session: In-Memory Hot Path if ongoing, Cold Start DB Hydration if empty."""
+    user_id = state.get("user_id", "")
+    session_id = state.get("session_id")
+    messages = list(state.get("messages", []))
     extracted_query = _extract_active_query(messages)
-    query = extracted_query if extracted_query else state.get("active_query", "")
-    active_ids = state.get("active_persona_ids")
+    active_query = extracted_query if extracted_query else state.get("active_query", "")
 
+    # 1. Hot Path vs Cold Start 판별:
+    # 이미 2개 이상의 턴(이전 문답)이 인메모리 messages에 누적되어 있다면 대화 진행 중(Hot Path)임.
+    # 이 경우 DB를 조회하지 않고 인메모리 메시지를 그대로 사용함 (DB Read 0ms).
+    is_hot_path = len(messages) > 1 and any(isinstance(m, AIMessage) for m in messages)
+
+    if is_hot_path:
+        active_session_id = session_id or "default_session"
+        hydrated_messages = messages
+        if not isinstance(hydrated_messages[-1], HumanMessage):
+            hydrated_messages.append(HumanMessage(content=active_query))
+    else:
+        # Cold Start: 새로고침, 재접속, 첫 대화 진입 시에만 DB 1회 조회 (Hydration)
+        session_mgr = session_manager
+        if session_mgr is None and db_session is not None:
+            from tars.core.session.manager import SmartSessionManager
+            from tars.domains.knowledge.storage.manager import FileStorageManager
+
+            session_mgr = SmartSessionManager(
+                db_session=db_session,
+                storage_manager=storage_manager or FileStorageManager(),
+                llm_adapter=router,
+            )
+
+        if session_mgr is not None and user_id:
+            active_session, working_memory, _ = await session_mgr.route_session(
+                user_id=user_id,
+                requested_session_id=session_id,
+                incoming_message=active_query,
+                background_tasks=background_tasks,
+            )
+            active_session_id = active_session.id
+            hydrated_messages = list(working_memory) + [HumanMessage(content=active_query)]
+        else:
+            active_session_id = session_id or "default_session"
+            hydrated_messages = list(messages) if messages else [HumanMessage(content=active_query)]
+
+    # 2. 페르소나 레지스트리 해소
+    reg = registry or get_default_registry()
+    active_ids = state.get("active_persona_ids")
     if active_ids:
         valid_personas = [reg.get(pid) for pid in active_ids if reg.has(pid)]
         active_personas = valid_personas if valid_personas else reg.list_all()
@@ -62,7 +106,9 @@ async def companion_session_node(
     persona_states = dict(state.get("persona_states") or {})
 
     return {
-        "active_query": query,
+        "session_id": active_session_id,
+        "active_query": active_query,
+        "messages": hydrated_messages,
         "active_persona_ids": active_ids,
         "active_personas": active_personas,
         "persona_states": persona_states,
@@ -277,8 +323,8 @@ async def companion_dispatch_node(
         inner_state_snapshot=primary_inner,
     )
     group_messages.append(primary_group_msg)
-    out_messages.append(AIMessage(content=primary_content, name=primary_id))
-    response_texts.append(f"{primary_p.name}: {primary_content}")
+    out_messages.append(AIMessage(content=f"[{primary_p.name}]: {primary_content}", name=primary_id))
+    response_texts.append(f"[{primary_p.name}]: {primary_content}")
 
     # 2. Secondary Speaker Generation (if multi-speaker pattern)
     secondary_id = routing.secondary_speaker_id
@@ -302,7 +348,7 @@ async def companion_dispatch_node(
         persona_states[secondary_id] = secondary_inner
 
         sec_perspective = (
-            f"{primary_p.name}의 발화에 이은 {secondary_p.name} 연계 발화 "
+            f"{primary_p.name}의 발화('[ {primary_p.name}]: {primary_content}')에 이은 {secondary_p.name} 연계 발화 "
             f"(패턴: {routing.pattern.value}, 내면: {secondary_inner.my_agenda})"
         )
         sec_system_prompt = reg.render_system_prompt(
@@ -316,7 +362,9 @@ async def companion_dispatch_node(
         sec_llm_messages: list[BaseMessage] = list(state.get("messages", []))
         if not sec_llm_messages or not isinstance(sec_llm_messages[-1], HumanMessage):
             sec_llm_messages.append(HumanMessage(content=user_query))
-        sec_llm_messages.append(AIMessage(content=primary_content, name=primary_id))
+        sec_llm_messages.append(
+            AIMessage(content=f"[{primary_p.name}]: {primary_content}", name=primary_id)
+        )
 
         try:
             sec_router_res: Any = await router.route_and_generate(
@@ -372,8 +420,10 @@ async def companion_dispatch_node(
             reply_to_id=primary_group_msg.id,
         )
         group_messages.append(secondary_group_msg)
-        out_messages.append(AIMessage(content=secondary_content, name=secondary_id))
-        response_texts.append(f"{secondary_p.name}: {secondary_content}")
+        out_messages.append(
+            AIMessage(content=f"[{secondary_p.name}]: {secondary_content}", name=secondary_id)
+        )
+        response_texts.append(f"[{secondary_p.name}]: {secondary_content}")
 
     combined_response = "\n\n".join(response_texts)
 
@@ -392,11 +442,78 @@ async def companion_postprocess_node(
     session_manager: SmartSessionManager | None = None,
     db_session: AsyncSession | None = None,
     storage_manager: FileStorageManager | None = None,
+    router: HybridLLMRouter | None = None,
     background_tasks: BackgroundTasks | None = None,
 ) -> dict[str, Any]:
-    """Persist session state and completed companion turn."""
+    """Persist completed multi-companion turn into DB as single combined assistant turn."""
+    user_id = state.get("user_id", "")
+    session_id = state.get("session_id", "")
+    active_query = state.get("active_query", "")
+    final_response = state.get("final_response", "")
     engine = state.get("engine") or "gemini"
     model_name = state.get("model_name") or "gemini-3.7-flash"
+
+    session_mgr = session_manager
+    if session_mgr is None and db_session is not None:
+        from tars.core.session.manager import SmartSessionManager
+        from tars.domains.knowledge.storage.manager import FileStorageManager
+
+        session_mgr = SmartSessionManager(
+            db_session=db_session,
+            storage_manager=storage_manager or FileStorageManager(),
+            llm_adapter=router,
+        )
+
+    # 1. DB 턴 영속화 (Write-Only): User 발화 + 복합 컴패니언 응답 단일 assistant 레코드
+    if session_mgr is not None and user_id and session_id and active_query and final_response:
+        try:
+            await session_mgr.record_turn(
+                session_id=session_id,
+                user_id=user_id,
+                user_content=active_query,
+                assistant_content=final_response,
+            )
+        except Exception as exc:
+            logger.error("Failed to record multi-companion turn in DB: %s", exc, exc_info=True)
+
+    # 2. 백그라운드 지식 추출 스케줄링
+    if user_id and active_query and final_response and storage_manager is not None:
+        turns: list[BaseMessage] = [
+            HumanMessage(content=active_query),
+            AIMessage(content=final_response),
+        ]
+        from tars.domains.chat.services.agent_chat import execute_background_knowledge_extraction
+
+        if background_tasks is not None:
+            background_tasks.add_task(
+                execute_background_knowledge_extraction,
+                user_id=user_id,
+                conversation_turns=turns,
+                storage=storage_manager,
+                llm_adapter=router,
+            )
+        else:
+            try:
+                import asyncio
+                from tars.engine.orchestrator.nodes.postprocess import _background_node_tasks
+
+                task = asyncio.create_task(
+                    execute_background_knowledge_extraction(
+                        user_id=user_id,
+                        conversation_turns=turns,
+                        storage=storage_manager,
+                        llm_adapter=router,
+                    )
+                )
+                _background_node_tasks.add(task)
+                task.add_done_callback(_background_node_tasks.discard)
+            except Exception as bg_err:
+                logger.error(
+                    "Failed to dispatch background knowledge extraction in companion_postprocess_node: %s",
+                    bg_err,
+                    exc_info=True,
+                )
+
     return {
         "engine": engine,
         "model_name": model_name,

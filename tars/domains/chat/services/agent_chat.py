@@ -145,13 +145,19 @@ class AgentChatService:
         )
 
         reg = get_default_registry()
+        session_mgr = SmartSessionManager(
+            db_session=self.db,
+            storage_manager=self.storage,
+            llm_adapter=self.router,
+        )
         graph = create_companion_graph(
             router=self.router,
             slicer=self.slicer,
             registry=reg,
-            session_manager=SmartSessionManager(self.db, self.storage),
+            session_manager=session_mgr,
             db_session=self.db,
             storage_manager=self.storage,
+            background_tasks=background_tasks,
         )
 
         chat_messages: list[BaseMessage] = (

@@ -109,7 +109,7 @@ class GeminiAdapter(BaseLLMAdapter):
         messages: Sequence[BaseMessage],
         system_prompt: str = "",
     ) -> list[dict[str, str]]:
-        """Convert LangChain BaseMessage sequence into Gemini chat format."""
+        """Convert LangChain BaseMessage sequence into Gemini chat format, coalescing consecutive assistant messages."""
         formatted: list[dict[str, str]] = []
         for msg in messages:
             if isinstance(msg, SystemMessage):
@@ -117,7 +117,20 @@ class GeminiAdapter(BaseLLMAdapter):
             elif isinstance(msg, HumanMessage):
                 formatted.append({"role": "user", "content": str(msg.content)})
             elif isinstance(msg, AIMessage):
-                formatted.append({"role": "assistant", "content": str(msg.content)})
+                speaker_name = getattr(msg, "name", None)
+                content_text = str(msg.content)
+                if (
+                    speaker_name
+                    and not content_text.startswith(f"[{speaker_name}]")
+                    and not content_text.startswith(f"{speaker_name}:")
+                ):
+                    content_text = f"[{speaker_name}]: {content_text}"
+
+                # Fail-Safe Coalescer: 직전 메시지가 이미 assistant인 경우 본문 뒤에 병합 (교차 턴 유지)
+                if formatted and formatted[-1]["role"] == "assistant":
+                    formatted[-1]["content"] += f"\n\n{content_text}"
+                else:
+                    formatted.append({"role": "assistant", "content": content_text})
             else:
                 formatted.append({"role": "user", "content": str(msg.content)})
         return formatted
