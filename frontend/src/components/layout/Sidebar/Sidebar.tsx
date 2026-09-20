@@ -14,11 +14,28 @@ export const Sidebar: React.FC = () => {
   const setActiveSession = useSessionStore((state) => state.setActiveSession);
   const openModal = useUIStore((state) => state.openModal);
 
-  const { sessionGroups, deleteSession, isDeletingSession } = useChatQuery(activeSessionId);
+  const { sessionGroups, deleteSession, isDeletingSession, deleteAllSessions, isDeletingAllSessions } = useChatQuery(activeSessionId);
   const { user, isLoggedIn, logout } = useAuthQuery();
 
   const handleNewChat = () => {
+    if (activeSessionId) {
+      const proceed = confirm(
+        '⚠️ 새 대화를 시작하시겠습니까?\n\n현재 일일 대화와의 연속성이 분리되며 새로운 대화 세션이 생성됩니다.\n(이전 대화는 사이드바 기록에서 언제든 다시 확인할 수 있습니다.)'
+      );
+      if (!proceed) return;
+    }
     setActiveSession(null, null);
+  };
+
+  const handleDeleteAllSessions = async () => {
+    if (confirm('⚠️ 정말 모든 대화 세션을 초기화(삭제)하시겠습니까?\n이 작업은 DB의 모든 대화 기록을 완전히 삭제하며 되돌릴 수 없습니다.')) {
+      try {
+        await deleteAllSessions();
+        setActiveSession(null, null);
+      } catch (err) {
+        alert('전체 세션 삭제에 실패했습니다: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    }
   };
 
   const handleDeleteSession = async (e: React.MouseEvent, session: ChatSessionItem) => {
@@ -115,6 +132,36 @@ export const Sidebar: React.FC = () => {
         ) : (
           <div className={styles.emptyTimeline}>
             <span>대화 기록이 없습니다.</span>
+          </div>
+        )}
+
+        {hasAnySessions && (
+          <div style={{ padding: '0.5rem 0.75rem', marginTop: 'auto' }}>
+            <button
+              onClick={handleDeleteAllSessions}
+              disabled={isDeletingAllSessions}
+              style={{
+                width: '100%',
+                padding: '0.4rem 0.5rem',
+                fontSize: '0.75rem',
+                color: 'var(--color-danger, #ef4444)',
+                background: 'transparent',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.35rem',
+              }}
+              title="현재 사용자의 전체 대화 세션 및 메시지 영구 삭제"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span>{isDeletingAllSessions ? '초기화 중...' : '대화 기록 전체 초기화'}</span>
+            </button>
           </div>
         )}
       </div>

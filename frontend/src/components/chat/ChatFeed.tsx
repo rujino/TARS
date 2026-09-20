@@ -142,9 +142,10 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
 
       {/* 실시간 스트리밍 버블들 (미우, 베라 등 다자간 동시/순차 발화 지원) */}
       {activeStreamingMessages.map((sm, index) => {
-        if (!sm.content && !sm.isStreaming) return null;
+        if (!sm.content || !sm.content.trim()) return null;
         const speaker = (sm.speaker || 'vera').toLowerCase();
         const displayContent = cleanSpeakerPrefix(sm.content, speaker);
+        if (!displayContent && !sm.isStreaming) return null;
 
         return (
           <div

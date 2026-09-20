@@ -1,29 +1,30 @@
 import type { ChatMessageResponse } from '@/types/chat.types';
 
 /**
- * Remove redundant speaker prefixes like "베라:", "🏛️ 베라:", "미우:", "🐾 미우:"
+ * Remove redundant speaker prefixes like "베라:", "🏛️ 베라:", "[베라]:", "미우:", "🐾 미우:", "[미우]:"
  * from the beginning of message content when rendered inside a labeled bubble.
  */
-export function cleanSpeakerPrefix(content: string, speaker: string): string {
-  const s = speaker.toLowerCase();
+export function cleanSpeakerPrefix(content: string, speaker?: string): string {
+  if (!content) return '';
+  const s = (speaker || '').toLowerCase();
   if (s === 'vera') {
-    return content.replace(/^(?:\[?(?:🏛️\s*)?(?:베라|Vera)\]?)\s*:\s*/i, '');
+    return content.replace(/^(?:\[?(?:🏛️\s*)?(?:베라|Vera)\]?)\s*[:：]?\s*/i, '').trim();
   }
   if (s === 'miu') {
-    return content.replace(/^(?:\[?(?:🐾\s*)?(?:미우|Miu)\]?)\s*:\s*/i, '');
+    return content.replace(/^(?:\[?(?:🐾\s*)?(?:미우|Miu)\]?)\s*[:：]?\s*/i, '').trim();
   }
-  return content;
+  return content.replace(/^(?:\[?(?:🏛️\s*)?(?:베라|Vera)\]?|\[?(?:🐾\s*)?(?:미우|Miu)\]?)\s*[:：]?\s*/i, '').trim();
 }
 
 /**
  * Split a combined assistant message containing turns from multiple speakers
- * (e.g. "베라: ...\n\n미우: ...") into individual ChatMessageResponse turns
+ * (e.g. "[베라]: ...\n\n[미우]: ...") into individual ChatMessageResponse turns
  * so that both agents have their own distinct speech bubble.
  */
 export function splitMultiSpeakerMessage(msg: ChatMessageResponse): ChatMessageResponse[] {
   if (msg.role !== 'assistant' || !msg.content) return [msg];
 
-  const regex = /(?:^|\n+)(?:\[?(?:🏛️\s*)?(?:베라|Vera)\]?|\[?(?:🐾\s*)?(?:미우|Miu)\]?)\s*:\s*/gi;
+  const regex = /(?:^|\n+)(?:\[(?:🏛️\s*)?(?:베라|Vera)\]|\[(?:🐾\s*)?(?:미우|Miu)\]|(?:🏛️\s*)?(?:베라|Vera)\s*[:：]|(?:🐾\s*)?(?:미우|Miu)\s*[:：])\s*[:：]?\s*/gi;
   const matches = [...msg.content.matchAll(regex)];
 
   if (matches.length === 0) {

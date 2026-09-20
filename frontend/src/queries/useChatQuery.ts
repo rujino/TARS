@@ -21,10 +21,14 @@ export const useChatQuery = (activeSessionId?: string | null) => {
     staleTime: 10 * 1000,
   });
 
+  // Guard: placeholder session IDs (e.g. 'default_session') are not real DB entities
+  const PLACEHOLDER_SESSION_IDS = new Set(['default_session', 'ws_session', 'ws_default_session']);
+  const isValidSessionId = !!activeSessionId && !PLACEHOLDER_SESSION_IDS.has(activeSessionId);
+
   const messagesQuery = useQuery({
-    queryKey: activeSessionId ? queryKeys.chat.messages(activeSessionId) : ['chat', 'messages', 'none'],
-    queryFn: () => (activeSessionId ? chatApi.getSessionMessages(activeSessionId) : Promise.resolve([])),
-    enabled: !!token && !!activeSessionId,
+    queryKey: isValidSessionId ? queryKeys.chat.messages(activeSessionId) : ['chat', 'messages', 'none'],
+    queryFn: () => (isValidSessionId ? chatApi.getSessionMessages(activeSessionId) : Promise.resolve([])),
+    enabled: !!token && isValidSessionId,
     staleTime: 30 * 1000,
   });
 
@@ -33,6 +37,14 @@ export const useChatQuery = (activeSessionId?: string | null) => {
     onSuccess: (_, deletedSessionId) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.chat.sessions() });
       queryClient.removeQueries({ queryKey: queryKeys.chat.messages(deletedSessionId) });
+    },
+  });
+
+  const deleteAllSessionsMutation = useMutation({
+    mutationFn: () => chatApi.deleteAllSessions(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chat.sessions() });
+      queryClient.removeQueries({ queryKey: ['chat', 'messages'] });
     },
   });
 
@@ -56,5 +68,7 @@ export const useChatQuery = (activeSessionId?: string | null) => {
     // Delete
     deleteSession: deleteSessionMutation.mutateAsync,
     isDeletingSession: deleteSessionMutation.isPending,
+    deleteAllSessions: deleteAllSessionsMutation.mutateAsync,
+    isDeletingAllSessions: deleteAllSessionsMutation.isPending,
   };
 };

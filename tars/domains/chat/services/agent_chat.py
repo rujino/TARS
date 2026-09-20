@@ -135,6 +135,7 @@ class AgentChatService:
         messages: list[BaseMessage] | None = None,
         turn_epoch: int | None = None,
         active_persona_ids: list[str] | None = None,
+        force_new: bool = False,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Execute full agent turn with session routing, dynamic slicing, companion pipeline, and token streaming."""
         from tars.core.session.manager import SmartSessionManager
@@ -162,7 +163,7 @@ class AgentChatService:
 
         chat_messages: list[BaseMessage] = (
             list(messages)
-            if messages is not None and len(messages) > 0
+            if not force_new and messages is not None and len(messages) > 0
             else [HumanMessage(content=message)]
         )
         resolved_session_id = session_id or "default_session"
@@ -179,6 +180,8 @@ class AgentChatService:
             "active_query": message,
             "messages": chat_messages,
             "active_persona_ids": resolved_persona_ids,
+            "force_new": force_new,
+            "client_timezone": client_timezone,
         }
         initial_state["turn_epoch"] = resolved_turn_epoch  # type: ignore[typeddict-unknown-key]
 

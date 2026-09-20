@@ -7,6 +7,7 @@ import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -267,18 +268,44 @@ class SmartSessionManager:
         incoming_message: str,
         background_tasks: BackgroundTasks | None = None,
         now: datetime | None = None,
+        force_new: bool = False,
+        client_timezone: str = "Asia/Seoul",
     ) -> tuple[ChatSession, list[BaseMessage], SessionRoutingDecision]:
-        """Evaluate session lifecycle via natural reset, time decay (15m/2h), and topic shift.
+        """Evaluate session lifecycle via explicit new session request, natural reset, and day-boundary grouping.
 
         Returns:
             (active_session, working_memory_messages, routing_decision)
         """
         current_time = now or datetime.now(UTC)
+        try:
+            tz = ZoneInfo(client_timezone)
+        except Exception:
+            tz = ZoneInfo("Asia/Seoul")
 
-        # 1. Natural Language Reset Command Check
+        # 1. Explicit New Session Request (User clicked 'New Chat')
+        if force_new:
+            logger.info("Explicit new session requested for user %s", user_id)
+            latest = await self.get_latest_active_session(user_id=user_id)
+            if latest is not None and latest.status == "active":
+                await self.archive_session(latest, background_tasks=background_tasks)
+
+            new_session = await self.create_new_session(
+                user_id=user_id,
+                title="New Dialogue",
+            )
+            await self.db.commit()
+
+            decision = SessionRoutingDecision(
+                action=SessionRoutingAction.FRESH_RESET,
+                session_id=new_session.id,
+                is_reset=True,
+                reason="User explicitly requested a new session",
+            )
+            return new_session, [], decision
+
+        # 2. Natural Language Reset Command Check
         if self.detector.is_reset_command(incoming_message):
             logger.info("Natural reset command detected for user %s: %s", user_id, incoming_message)
-            # Find active session to archive
             active_session = None
             if requested_session_id:
                 active_session = await self.get_session_by_id(requested_session_id, user_id=user_id)
@@ -302,7 +329,7 @@ class SmartSessionManager:
             )
             return new_session, [], decision
 
-        # 2. Locate Active Candidate Session
+        # 3. Locate Active Candidate Session
         candidate_session: ChatSession | None = None
         if requested_session_id and requested_session_id not in (
             "default_session",
@@ -315,7 +342,7 @@ class SmartSessionManager:
         if candidate_session is None or candidate_session.status != "active":
             candidate_session = await self.get_latest_active_session(user_id=user_id)
 
-        # If no active session exists at all, initialize fresh session
+        # If no active session exists at all, initialize fresh day session
         if candidate_session is None:
             new_session = await self.create_new_session(
                 user_id=user_id,
@@ -330,97 +357,39 @@ class SmartSessionManager:
             )
             return new_session, [], decision
 
-        # 3. Calculate Time Decay (Delta Seconds)
+        # 4. Day-Boundary Evaluation (Fixed daily conversation session)
         last_active = candidate_session.last_active_at
         if last_active.tzinfo is None:
             last_active = last_active.replace(tzinfo=UTC)
 
-        delta_seconds = max(0.0, (current_time - last_active).total_seconds())
+        local_now = current_time.astimezone(tz)
+        local_last_active = last_active.astimezone(tz)
+        is_same_day = local_now.date() == local_last_active.date()
 
-        # 4. Stage Evaluation
-        # Stage 1: Short-term (<= 15 mins / 900s) -> Maintain session unless topic shift occurs
-        if delta_seconds <= SHORT_TERM_THRESHOLD_SECONDS:
-            # Check Semantic Topic Shift
-            shift_result = await self.detector.detect_topic_shift(
-                recent_turns=candidate_session.messages,
-                new_query=incoming_message,
-            )
-
-            if shift_result.is_topic_shift:
-                logger.info(
-                    "Topic shift detected in session %s -> new topic: %s",
-                    candidate_session.id,
-                    shift_result.new_topic,
-                )
-                await self.archive_session(candidate_session, background_tasks=background_tasks)
-                new_topic_title = shift_result.new_topic or incoming_message[:30]
-                new_session = await self.create_new_session(
-                    user_id=user_id,
-                    title=new_topic_title,
-                    parent_session_id=candidate_session.id,
-                )
-                await self.db.commit()
-                decision = SessionRoutingDecision(
-                    action=SessionRoutingAction.TOPIC_SHIFT,
-                    session_id=new_session.id,
-                    is_reset=False,
-                    reason=f"Topic shift detected; branched new session '{new_topic_title}'",
-                )
-                return new_session, [], decision
-
-            # Normal continuation: Maintain Working Memory
+        if is_same_day:
+            # Maintain active session within the same calendar day
             working_memory = self._convert_db_messages_to_langchain(candidate_session.messages)
             decision = SessionRoutingDecision(
                 action=SessionRoutingAction.MAINTAIN,
                 session_id=candidate_session.id,
                 is_reset=False,
-                reason="Within 15 minutes and consistent topic; maintained working memory",
+                reason="Within the same calendar day; maintained active session working memory",
             )
             return candidate_session, working_memory, decision
 
-        # Stage 2: Mid-term (15 mins < delta <= 2 hours) -> Branch with Bridge Summary
-        if delta_seconds <= MID_TERM_THRESHOLD_SECONDS:
-            logger.info(
-                "Mid-term decay (%.1fs) for session %s; generating bridge summary",
-                delta_seconds,
-                candidate_session.id,
-            )
-            bridge_summary = await self.generate_bridge_summary(candidate_session.messages)
-            await self.archive_session(candidate_session, background_tasks=background_tasks)
-
-            new_session = await self.create_new_session(
-                user_id=user_id,
-                title=f"Bridged: {candidate_session.title}",
-                parent_session_id=candidate_session.id,
-                bridge_summary=bridge_summary,
-            )
-            await self.db.commit()
-
-            bridge_memory: list[BaseMessage] = []
-            if bridge_summary:
-                bridge_memory.append(
-                    SystemMessage(content=f"[Previous Session Context]: {bridge_summary}")
-                )
-
-            decision = SessionRoutingDecision(
-                action=SessionRoutingAction.BRANCH_BRIDGE,
-                session_id=new_session.id,
-                is_reset=False,
-                bridge_summary=bridge_summary,
-                reason="Idle between 15m and 2h; branched with bridge summary",
-            )
-            return new_session, bridge_memory, decision
-
-        # Stage 3: Long-term (> 2 hours / 7200s) -> Full fresh reset & archive old
+        # Day changed (crossed midnight): Archive previous day session and start fresh day session
         logger.info(
-            "Long-term decay (%.1fs) for session %s; archiving and starting fresh session",
-            delta_seconds,
+            "Day boundary crossed for user %s (prev=%s, now=%s); archiving session %s",
+            user_id,
+            local_last_active.date(),
+            local_now.date(),
             candidate_session.id,
         )
         await self.archive_session(candidate_session, background_tasks=background_tasks)
         new_session = await self.create_new_session(
             user_id=user_id,
             title="New Dialogue",
+            parent_session_id=candidate_session.id,
         )
         await self.db.commit()
 
@@ -428,7 +397,7 @@ class SmartSessionManager:
             action=SessionRoutingAction.FRESH_RESET,
             session_id=new_session.id,
             is_reset=False,
-            reason="Idle over 2 hours; initialized fresh session with empty working memory",
+            reason="Day boundary crossed; created fresh day session",
         )
         return new_session, [], decision
 

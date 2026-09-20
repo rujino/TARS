@@ -60,6 +60,17 @@ export const chatApi = {
   },
 
   /**
+   * 모든 세션 및 대화 내역 일괄 삭제 (DB 정리/초기화)
+   * DELETE /api/v1/chat/sessions/all
+   */
+  deleteAllSessions: async (): Promise<ChatSessionDeleteResponse> => {
+    const { data } = await apiClient.delete<ChatSessionDeleteResponse>(
+      '/api/v1/chat/sessions/all'
+    );
+    return data;
+  },
+
+  /**
    * WebSocket 접속 엔드포인트 URL 반환
    * WS /api/v1/chat/ws
    */

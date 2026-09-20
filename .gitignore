@@ -287,3 +287,6 @@ k8s/*secret*.yaml
 
 # AGENTS.md
 AGENTS.md
+
+# playwright-mcp
+.playwright-mcp/

@@ -49,11 +49,12 @@ class WSMessageIn(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     type: str = Field(default="chat_message", description="Message frame type")
-    session_id: str = Field(default="ws_session", description="Dialogue session ID")
+    session_id: str | None = Field(default=None, description="Dialogue session ID")
     content: str = Field(default="", description="User message content")
     timezone: str = Field(default="Asia/Seoul", description="Client IANA timezone")
     message_id: str | None = Field(default=None, description="Client-generated unique message ID")
     status: str | None = Field(default=None, description="User typing status: active | inactive")
+    is_new_session: bool = Field(default=False, description="Whether user explicitly requested a new session")
 
 
 class WSMessageOut(BaseModel):

@@ -75,8 +75,8 @@ async def session_node(
     user_id = state.get("user_id", "")
     session_id = state.get("session_id")
     messages = state.get("messages", [])
-    extracted_query = _extract_active_query(messages)
-    active_query = extracted_query if extracted_query else state.get("active_query", "")
+    explicit_query = state.get("active_query", "")
+    active_query = explicit_query if explicit_query else _extract_active_query(messages)
 
     # 1. Fetch user persona parameters from DB (or state/defaults)
     mode = str(state.get("mode", DEFAULT_MODE))

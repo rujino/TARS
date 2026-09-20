@@ -166,7 +166,12 @@ export class TarsWebSocketClient {
     });
   }
 
-  public sendChatMessage(content: string, sessionId?: string, messageId?: string) {
+  public sendChatMessage(
+    content: string,
+    sessionId?: string,
+    messageId?: string,
+    isNewSession?: boolean
+  ) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket이 연결되어 있지 않습니다.');
     }
@@ -174,9 +179,10 @@ export class TarsWebSocketClient {
       JSON.stringify({
         type: 'chat_message',
         content,
-        session_id: sessionId || 'default_session',
+        session_id: sessionId || undefined,
         message_id: messageId,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Seoul',
+        is_new_session: Boolean(isNewSession),
       })
     );
   }
@@ -186,7 +192,7 @@ export class TarsWebSocketClient {
     this.ws.send(
       JSON.stringify({
         type: 'user_barge_in',
-        session_id: sessionId || 'default_session',
+        session_id: sessionId || undefined,
       })
     );
   }
@@ -196,7 +202,7 @@ export class TarsWebSocketClient {
     this.ws.send(
       JSON.stringify({
         type: 'user_typing',
-        session_id: sessionId || 'default_session',
+        session_id: sessionId || undefined,
         status,
       })
     );

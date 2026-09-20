@@ -53,8 +53,9 @@ export const ChatPage: React.FC = () => {
   if (prevSessionId !== activeSessionId) {
     setPrevSessionId(activeSessionId);
     const isNewSessionAssignment =
-      prevSessionId === null &&
+      (prevSessionId === null || prevSessionId === 'default_session') &&
       activeSessionId !== null &&
+      activeSessionId !== 'default_session' &&
       (appendedMessages.length > 0 || streamingMessages.length > 0);
 
     if (!isNewSessionAssignment) {
@@ -63,18 +64,38 @@ export const ChatPage: React.FC = () => {
     }
   }
 
-  // Deduplicate: filter out optimistic messages if the server messages already include them
-  const pendingAppended =
-    remoteMessages.length > 0
-      ? appendedMessages.filter(
-          (appMsg) =>
-            !remoteMessages.some(
-              (rm) => rm.role === appMsg.role && rm.content === appMsg.content
-            )
-        )
-      : appendedMessages;
+  // Deduplicate: filter out optimistic user messages if the server messages already include them
+  const pendingAppended = React.useMemo(() => {
+    if (remoteMessages.length === 0) return appendedMessages;
+    return appendedMessages.filter((appMsg) => {
+      return !remoteMessages.some((rm) => {
+        if (rm.role !== appMsg.role) return false;
+        return rm.content.trim() === appMsg.content.trim();
+      });
+    });
+  }, [remoteMessages, appendedMessages]);
 
-  const allMessages = [...remoteMessages, ...pendingAppended];
+  const allMessages = React.useMemo(() => {
+    return [...remoteMessages, ...pendingAppended];
+  }, [remoteMessages, pendingAppended]);
+
+  // Clean up transient streaming & appended states when fresh remote messages arrive
+  useEffect(() => {
+    if (remoteMessages && remoteMessages.length > 0) {
+      setStreamingMessages((prev) => {
+        const hasActiveStreaming = prev.some((m) => m.isStreaming);
+        return hasActiveStreaming ? prev : [];
+      });
+      setAppendedMessages((prev) => {
+        return prev.filter((appMsg) => {
+          return !remoteMessages.some((rm) => {
+            if (rm.role !== appMsg.role) return false;
+            return rm.content.trim() === appMsg.content.trim();
+          });
+        });
+      });
+    }
+  }, [remoteMessages]);
 
   // WebSocket lifecycle & event subscriptions
   useEffect(() => {
@@ -133,44 +154,33 @@ export const ChatPage: React.FC = () => {
         });
       },
       onStreamStart: ({ session_id }) => {
-        if (session_id && !activeSessionIdRef.current) {
+        if (session_id && session_id !== 'default_session' && (!activeSessionIdRef.current || activeSessionIdRef.current === 'default_session')) {
           setActiveSession(session_id);
         }
         setStreamingMessages([]);
       },
-      onStreamEnd: async ({ session_id }) => {
-        const targetSid = session_id || activeSessionIdRef.current || 'default_session';
-        setStreamingMessages((currentList) => {
-          if (currentList && currentList.length > 0) {
-            const completedTurns: ChatMessageResponse[] = currentList
-              .filter((m) => m.content && m.content.trim().length > 0)
-              .map((m, index) => ({
-                id: `msg-${Date.now()}-${index}`,
-                session_id: targetSid,
-                user_id: user?.id || 'anonymous',
-                role: 'assistant',
-                speaker: m.speaker,
-                content: m.content,
-                tokens: m.content.length,
-                created_at: new Date(Date.now() + index * 50).toISOString(),
-              }));
-
-            if (completedTurns.length > 0) {
-              setAppendedMessages((prev) => [...prev, ...completedTurns]);
-            }
-          }
-          return [];
-        });
-        setTypingState(null);
-        refetchSessionsRef.current?.();
-        try {
-          const res = await refetchMessagesRef.current?.();
-          if (res?.data && res.data.length > 0) {
-            setAppendedMessages([]);
-          }
-        } catch (e) {
-          console.error('[Failed to refetch messages after stream]:', e);
+      onStreamEnd: ({ session_id }) => {
+        if (session_id && session_id !== 'default_session' && (!activeSessionIdRef.current || activeSessionIdRef.current === 'default_session')) {
+          setActiveSession(session_id);
         }
+        // Stop cursor animation on completed streaming bubbles
+        setStreamingMessages((prev) =>
+          prev.map((m) => ({ ...m, isStreaming: false }))
+        );
+        setTypingState(null);
+        setAppendedMessages([]);
+        refetchSessionsRef.current?.();
+        void (async () => {
+          try {
+            const res = await refetchMessagesRef.current?.();
+            if (res?.data && res.data.length > 0) {
+              setStreamingMessages([]);
+              setAppendedMessages([]);
+            }
+          } catch (e) {
+            console.error('[Failed to refetch messages after stream]:', e);
+          }
+        })();
       },
       onStreamAbort: ({ reason }) => {
         setStreamingMessages((prev) =>
@@ -195,54 +205,38 @@ export const ChatPage: React.FC = () => {
       return;
     }
 
-    // Flush any ongoing streaming messages into appendedMessages before starting new turn
-    if (streamingMessages.length > 0) {
-      const pendingTurns: ChatMessageResponse[] = streamingMessages
-        .filter((m) => m.content && m.content.trim().length > 0)
-        .map((m, index) => ({
-          id: `msg-flushed-${Date.now()}-${index}`,
-          session_id: activeSessionIdRef.current || 'default_session',
-          user_id: user?.id || 'anonymous',
-          role: 'assistant',
-          speaker: m.speaker,
-          content: m.content,
-          tokens: m.content.length,
-          created_at: new Date(Date.now() + index * 50).toISOString(),
-        }));
-      if (pendingTurns.length > 0) {
-        setAppendedMessages((prev) => [...prev, ...pendingTurns]);
-      }
-      setStreamingMessages([]);
-    }
+    // Reset previous streaming bubble state before starting a new turn
+    setStreamingMessages([]);
 
     const messageId = `user-${Date.now()}`;
-    const targetSessionId = activeSessionIdRef.current || 'default_session';
+    const targetSessionId = activeSessionIdRef.current || undefined;
+    const isNewSession = !activeSessionIdRef.current;
 
-    // Optimistic user turn
+    // Optimistic user turn (단일 현재 전송 턴만 유지하여 이전 메시지 중복 노출 방지)
     const newMsg: ChatMessageResponse = {
       id: messageId,
-      session_id: targetSessionId,
+      session_id: targetSessionId || '',
       user_id: user?.id || 'anonymous',
       role: 'user',
       content,
       tokens: content.length,
       created_at: new Date().toISOString(),
     };
-    setAppendedMessages((prev) => [...prev, newMsg]);
+    setAppendedMessages([newMsg]);
 
     try {
-      tarsWsClient.sendChatMessage(content, targetSessionId, messageId);
+      tarsWsClient.sendChatMessage(content, targetSessionId, messageId, isNewSession);
     } catch (err) {
       alert('메시지 전송 실패: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
   const handleBargeIn = () => {
-    tarsWsClient.sendBargeIn(activeSessionIdRef.current || 'default_session');
+    tarsWsClient.sendBargeIn(activeSessionIdRef.current || undefined);
   };
 
   const handleTyping = () => {
-    tarsWsClient.sendTyping(activeSessionIdRef.current || 'default_session', 'active');
+    tarsWsClient.sendTyping(activeSessionIdRef.current || undefined, 'active');
   };
 
   if (!isLoggedIn) {
