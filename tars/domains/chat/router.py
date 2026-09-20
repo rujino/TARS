@@ -24,6 +24,7 @@ from fastapi import (
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocketState
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from tars.api.dependencies import (
     get_current_user,
@@ -341,6 +342,7 @@ async def _handle_ws_chat_session(
     active_stream_task: asyncio.Task[None] | None = None
     active_bg_tasks: set[asyncio.Task[Any]] = set()
     last_session_id: list[str] = ["default_session"]
+    session_memory: dict[str, list[BaseMessage]] = {}
 
     async def reader() -> None:
         nonlocal active_stream_task
@@ -529,12 +531,14 @@ async def _handle_ws_chat_session(
                             tool_registry=tool_registry,
                         )
                         token_count = 0
+                        cached_messages = session_memory.get(requested_session_id)
                         async for event in agent_service.stream_chat(
                             user_id=user_id,
                             message=user_content,
                             session_id=requested_session_id,
                             client_timezone=client_timezone,
                             turn_epoch=epoch,
+                            messages=cached_messages,
                         ):
                             if websocket.client_state == WebSocketState.DISCONNECTED:
                                 logger.info(
@@ -611,6 +615,16 @@ async def _handle_ws_chat_session(
                                         except Exception:
                                             pass
                                         typing_active = False
+
+                                    # Accumulate completed turn into in-memory hot path session cache
+                                    sess_msgs = session_memory.setdefault(requested_session_id, [])
+                                    if not sess_msgs or not (
+                                        isinstance(sess_msgs[-1], HumanMessage)
+                                        and sess_msgs[-1].content == user_content
+                                    ):
+                                        sess_msgs.append(HumanMessage(content=user_content))
+                                    if event.content:
+                                        sess_msgs.append(AIMessage(content=str(event.content)))
 
                                     # Ensure Miu has read before concluding the turn with stream_end
                                     if not miu_task.done():

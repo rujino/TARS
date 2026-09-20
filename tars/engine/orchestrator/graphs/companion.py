@@ -103,7 +103,15 @@ def build_companion_graph(
     reg = registry or get_default_registry()
 
     async def _bound_session(state: CompanionState) -> dict[str, Any]:
-        return await companion_session_node(state=state, registry=reg)
+        return await companion_session_node(
+            state=state,
+            session_manager=session_manager,
+            db_session=db_session,
+            storage_manager=storage_manager,
+            router=router,
+            background_tasks=background_tasks,
+            registry=reg,
+        )
 
     async def _bound_slicer(state: CompanionState) -> dict[str, Any]:
         return await companion_slicer_node(state=state, slicer=slicer)
@@ -120,6 +128,7 @@ def build_companion_graph(
             session_manager=session_manager,
             db_session=db_session,
             storage_manager=storage_manager,
+            router=router,
             background_tasks=background_tasks,
         )
 
@@ -158,6 +167,7 @@ def create_companion_graph(
     session_manager: SmartSessionManager | None = None,
     db_session: AsyncSession | None = None,
     storage_manager: FileStorageManager | None = None,
+    background_tasks: BackgroundTasks | None = None,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Convenience factory to build and compile the companion StateGraph."""
@@ -168,6 +178,7 @@ def create_companion_graph(
         session_manager=session_manager,
         db_session=db_session,
         storage_manager=storage_manager,
+        background_tasks=background_tasks,
     )
     return compile_companion_graph(builder=builder, checkpointer=checkpointer)
 
