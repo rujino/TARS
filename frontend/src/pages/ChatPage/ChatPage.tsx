@@ -5,7 +5,6 @@ import { useChatQuery } from '@/queries/useChatQuery';
 import { useAuthQuery } from '@/queries/useAuthQuery';
 import { useUIStore } from '@/stores/useUIStore';
 import { tarsWsClient } from '@/websocket/client';
-import { GreetingBanner } from '@/components/chat/GreetingBanner';
 import { ChatFeed, type StreamingMessageState } from '@/components/chat/ChatFeed';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -18,8 +17,6 @@ export const ChatPage: React.FC = () => {
 
   const { user, isLoggedIn } = useAuthQuery();
   const {
-    greeting,
-    isLoadingGreeting,
     messages: remoteMessages,
     refetchSessions,
     refetchMessages,
@@ -257,16 +254,9 @@ export const ChatPage: React.FC = () => {
   }
 
   const isCurrentlyStreaming = streamingMessages.some((m) => m.isStreaming);
-  const showGreeting = allMessages.length === 0 && streamingMessages.length === 0;
 
   return (
     <div className={styles.pageContainer}>
-      {showGreeting && (
-        <div className={styles.bannerWrapper}>
-          <GreetingBanner greeting={greeting} isLoading={isLoadingGreeting} />
-        </div>
-      )}
-
       <ChatFeed
         messages={allMessages}
         streamingMessages={streamingMessages}

@@ -4,7 +4,6 @@ from tars.domains.persona.models import TARSSettings
 from tars.domains.persona.prompts import (
     TARSPersonaConfig,
     TARSPersonaManager,
-    build_greeting_prompt,
     build_tars_system_prompt,
 )
 from tars.domains.persona.schemas import (
@@ -20,6 +19,5 @@ __all__ = [
     "TARSPersonaManager",
     "TARSSettings",
     "UserSettingsService",
-    "build_greeting_prompt",
     "build_tars_system_prompt",
 ]

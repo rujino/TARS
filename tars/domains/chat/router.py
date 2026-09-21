@@ -1,6 +1,6 @@
-"""WebSocket real-time communication, Session history, and Proactive Greeting routers.
+"""WebSocket real-time communication and Session history routers.
 
-Thin Controller pattern: Delegates orchestration and session workflows to AgentChatService and ProactiveGreetingService.
+Thin Controller pattern: Delegates orchestration and session workflows to AgentChatService.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from tars.api.dependencies import (
     get_current_user,
     get_db_session,
-    get_proactive_greeting_service,
     get_storage_manager,
     get_tool_registry,
 )
@@ -43,11 +42,9 @@ from tars.domains.chat.schemas import (
     ChatSessionDeleteResponse,
     ChatSessionItem,
     ChatSessionListResponse,
-    GreetingResponse,
     compute_date_group,
 )
 from tars.domains.chat.services.agent_chat import AgentChatService
-from tars.domains.chat.services.greeting import ProactiveGreetingService
 from tars.domains.knowledge.storage.manager import FileStorageManager
 from tars.domains.tools.registry import ToolRegistry
 from tars.runtime.turn_lock import (
@@ -59,23 +56,6 @@ from tars.runtime.turn_lock import (
 
 logger = logging.getLogger("tars.domains.chat.router")
 router = APIRouter(prefix="/chat", tags=["Chat & Streaming"])
-
-
-@router.get(
-    "/greeting",
-    response_model=GreetingResponse,
-    summary="Fetch proactive situational greeting upon app startup or foreground entry",
-)
-async def get_proactive_greeting(
-    timezone: str = Query(default="Asia/Seoul", description="Client IANA timezone"),
-    current_user: User = Depends(get_current_user),
-    greeting_service: ProactiveGreetingService = Depends(get_proactive_greeting_service),
-) -> GreetingResponse:
-    """Generate a 5-factor proactive, witty 1-2 sentence opening greeting in Korean."""
-    return await greeting_service.generate_greeting(
-        user_id=current_user.id,
-        client_timezone=timezone,
-    )
 
 
 # ============================================================================

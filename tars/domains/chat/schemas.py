@@ -93,19 +93,6 @@ class WSMessageOut(BaseModel):
     )
 
 
-class GreetingResponse(BaseModel):
-    """Proactive greeting response payload delivered upon client launch."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    greeting: str = Field(..., description="Witty proactive greeting text in Korean")
-    session_id: str = Field(..., description="Active or newly created session ID")
-    mode: str = Field(default="companion", description="Current TARS mode (companion or work)")
-    idle_seconds: int = Field(
-        default=0, description="Seconds elapsed since last user interaction (-1 for new user)"
-    )
-
-
 class SessionInfoResponse(BaseModel):
     """Metadata summary of a conversation session."""
 
@@ -182,7 +169,6 @@ __all__ = [
     "ChatSessionItem",
     "ChatSessionListResponse",
     "ChatStreamRequest",
-    "GreetingResponse",
     "SessionInfoResponse",
     "WSMessageIn",
     "WSMessageOut",

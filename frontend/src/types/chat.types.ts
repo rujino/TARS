@@ -1,10 +1,3 @@
-export interface GreetingResponse {
-  greeting: string;
-  session_id: string;
-  mode: string;
-  idle_seconds: number;
-}
-
 export type DateGroupName = 'Today' | 'Yesterday' | 'Past 7 days' | 'Past 30 days' | 'Older';
 
 export interface ChatSessionItem {

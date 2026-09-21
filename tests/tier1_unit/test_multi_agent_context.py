@@ -152,7 +152,7 @@ async def test_companion_dispatch_node_canonical_formatting() -> None:
         primary_speaker_id="miu",
         secondary_speaker_id="vera",
         dialogue_tone="comfort",
-        turn_intent="greeting",
+        turn_intent="casual_dialogue",
     )
     subconscious = SubconsciousStatePayload(
         context_summary="일상 대화",

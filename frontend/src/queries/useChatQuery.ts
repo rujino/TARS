@@ -6,14 +6,6 @@ export const useChatQuery = (activeSessionId?: string | null) => {
   const queryClient = useQueryClient();
   const token = typeof window !== 'undefined' ? localStorage.getItem('tars_token') : null;
 
-  const greetingQuery = useQuery({
-    queryKey: queryKeys.chat.greeting(),
-    queryFn: () => chatApi.getGreeting(),
-    enabled: !!token,
-    staleTime: 60 * 1000,
-    retry: 1,
-  });
-
   const sessionsQuery = useQuery({
     queryKey: queryKeys.chat.sessions(),
     queryFn: () => chatApi.getSessions(),
@@ -49,11 +41,6 @@ export const useChatQuery = (activeSessionId?: string | null) => {
   });
 
   return {
-    // Greeting
-    greeting: greetingQuery.data,
-    isLoadingGreeting: greetingQuery.isLoading,
-    refetchGreeting: greetingQuery.refetch,
-
     // Sessions
     sessions: sessionsQuery.data?.sessions ?? [],
     sessionGroups: sessionsQuery.data?.groups ?? {},

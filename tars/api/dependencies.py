@@ -146,23 +146,6 @@ async def get_agent_chat_service(
     )
 
 
-async def get_proactive_greeting_service(
-    db: AsyncSession = Depends(get_db_session),
-    storage: FileStorageManager = Depends(get_storage_manager),
-) -> Any:
-    """Provide initialized ProactiveGreetingService instance."""
-    from tars.domains.chat.services.greeting import ProactiveGreetingService
-    from tars.engine.adapters.gemini import GeminiAdapter
-    from tars.engine.adapters.router import HybridLLMRouter
-
-    llm_router = HybridLLMRouter(gemini_adapter=GeminiAdapter())
-    return ProactiveGreetingService(
-        db_session=db,
-        storage_manager=storage,
-        llm_adapter=llm_router,
-    )
-
-
 async def get_auth_service(
     db: AsyncSession = Depends(get_db_session),
 ) -> Any:
@@ -197,7 +180,6 @@ __all__ = [
     "get_auth_service",
     "get_current_user",
     "get_db_session",
-    "get_proactive_greeting_service",
     "get_storage_manager",
     "get_tool_registry",
     "get_tool_service",

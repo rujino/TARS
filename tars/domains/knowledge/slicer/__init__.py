@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from tars.domains.knowledge.slicer.engine import (
     CHAT_TYPE_MAP,
-    GREETING_TYPE_MAP,
     IMPORTANCE_SCORE_MAP,
     PROFILE_TYPE_MAPS,
     PROFILE_WEIGHTS,
@@ -29,7 +28,6 @@ from tars.domains.knowledge.slicer.engine import (
 __all__ = [
     "CHAT_TYPE_MAP",
     "DynamicSlicerEngine",
-    "GREETING_TYPE_MAP",
     "HeuristicTokenCounter",
     "IMPORTANCE_SCORE_MAP",
     "ITokenCounter",

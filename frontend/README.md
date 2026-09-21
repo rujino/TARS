@@ -1,7 +1,7 @@
 # TARS Frontend Application
 
 Vite + React + TypeScript 기반의 TARS(Tactical Autonomous Robotic System) 차세대 프론트엔드 애플리케이션입니다.  
-백엔드 FastAPI의 **전체 24개 엔드포인트(100% 전수 연동)**와 WebSocket 단일 표준 실시간 엔진, 사이드바 대화 세션 타임라인 관리, 미니멀 다크 테마 UI를 제공합니다.
+백엔드 FastAPI의 **전체 23개 엔드포인트(100% 전수 연동)**와 WebSocket 단일 표준 실시간 엔진, 사이드바 대화 세션 타임라인 관리, 미니멀 다크 테마 UI를 제공합니다.
 
 ---
 
@@ -17,7 +17,7 @@ frontend/src/
 │   ├── client.ts           #    Axios 인스턴스 (Bearer 토큰 자동 주입, 401 핸들링)
 │   └── endpoints/          #    도메인별 순수 API 호출 함수들 (전체 24개 엔드포인트 100% 매핑)
 │       ├── auth.api.ts     #    /api/v1/auth (signup, login, me, ws-ticket)
-│       ├── chat.api.ts     #    /api/v1/chat (greeting, sessions, messages, delete, ws)
+│       ├── chat.api.ts     #    /api/v1/chat (sessions, messages, delete, ws)
 │       ├── persona.api.ts  #    /api/v1/tars/config (get, patch, reset)
 │       ├── tools.api.ts    #    /api/v1/tools (servers, toggle, google auth, test)
 │       └── system.api.ts   #    /health, /health/liveness, /health/readiness, /metrics
@@ -26,7 +26,7 @@ frontend/src/
 │   ├── queryClient.ts      #    QueryClient 인스턴스 & 캐시 정책
 │   ├── queryKeys.ts        #    계층형 Query Key Factory
 │   ├── useAuthQuery.ts     #    인증, 회원가입, 프로필, WebSocket 티켓 훅
-│   ├── useChatQuery.ts     #    인사, 세션 목록, 메시지 히스토리, 세션 삭제 훅
+│   ├── useChatQuery.ts     #    세션 목록, 메시지 히스토리, 세션 삭제 훅
 │   ├── usePersonaQuery.ts  #    TARS 운영 모드 조회, 전환, 기본값 리셋 훅
 │   ├── useToolsQuery.ts    #    도구 서버, 스위치 토글, MCP 테스트, Google 연동 훅
 │   └── useSystemQuery.ts   #    Liveness, Readiness, Prometheus 메트릭 훅
@@ -45,7 +45,6 @@ frontend/src/
 │   │   ├── Sidebar/        #    새 대화 시작, 날짜별(Today/Yesterday 등) 세션 타임라인
 │   │   └── Layout.tsx      #    분할 화면 셸 레이아웃
 │   ├── chat/
-│   │   ├── GreetingBanner.tsx # 상황 인지형 인트로 한국어 인사 배너
 │   │   ├── ChatFeed.tsx    # 베라(Vera)/미우(Miu) 다자간 말풍선, 읽음 확인, 0ms 중단 표시
 │   │   ├── TypingIndicator.tsx # 캐릭터 실시간 타이핑 인디케이터
 │   │   └── ChatInput.tsx   # 멀티라인 텍스트 입력, 발화 즉시 중단(Barge-in) 버튼
@@ -76,7 +75,6 @@ frontend/src/
 | **Auth** | `/api/v1/auth/login` | `POST` | 로그인 및 JWT 발급 |
 | **Auth** | `/api/v1/auth/me` | `GET` | 현재 사용자 프로필 및 계정 상태 |
 | **Auth** | `/api/v1/auth/ws-ticket` | `POST` | 30초 단기 1회용 WebSocket 티켓 발급 |
-| **Chat** | `/api/v1/chat/greeting` | `GET` | 상황 인지형 5요인 한국어 인트로 인사 |
 | **Chat** | `/api/v1/chat/sessions` | `GET` | 날짜 그룹 메타데이터 포함 세션 타임라인 |
 | **Chat** | `/api/v1/chat/sessions/{session_id}/messages` | `GET` | 세션별 메시지 턴 전체 복원 |
 | **Chat** | `/api/v1/chat/sessions/{session_id}` | `DELETE` | 대화 세션 및 메시지 cascade 삭제 |
