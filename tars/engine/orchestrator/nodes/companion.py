@@ -302,13 +302,8 @@ async def companion_dispatch_node(
         )
         raise
 
-    is_slm = (
-        primary_content.startswith(getattr(router, "auxiliary_prefix", "[Tactical Uplink"))
-        or "[Auxiliary" in primary_content
-        or "slm" in str(getattr(router_res, "model_name", "")).lower()
-    )
-    executed_engine = "slm" if is_slm else getattr(router_res, "engine", "gemini")
-    executed_model = getattr(router_res, "model_name", "llamacpp" if is_slm else "gemini-3.7-flash")
+    executed_engine = getattr(router_res, "engine", "gemini")
+    executed_model = getattr(router_res, "model_name", "gemini-3.7-flash")
 
     try:
         await adispatch_custom_event(
@@ -395,17 +390,8 @@ async def companion_dispatch_node(
             )
             raise
 
-        sec_is_slm = (
-            secondary_content.startswith(getattr(router, "auxiliary_prefix", "[Tactical Uplink"))
-            or "[Auxiliary" in secondary_content
-            or "slm" in str(getattr(sec_router_res, "model_name", "")).lower()
-        )
-        if sec_is_slm:
-            executed_engine = "slm"
-            executed_model = getattr(sec_router_res, "model_name", "llamacpp")
-        else:
-            executed_engine = getattr(sec_router_res, "engine", executed_engine)
-            executed_model = getattr(sec_router_res, "model_name", executed_model)
+        executed_engine = getattr(sec_router_res, "engine", executed_engine)
+        executed_model = getattr(sec_router_res, "model_name", executed_model)
 
         try:
             await adispatch_custom_event(

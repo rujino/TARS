@@ -8,7 +8,6 @@ data:
   TARS_STORAGE_DIR: "/app/storage"
   TARS_DOMAIN: "localhost"
   TARS_GEMINI_MODEL_NAME: "gemini-3.7-flash"
-  TARS_LLAMACPP_BASE_URL: "http://gemma-4-12b-service.default.svc.cluster.local:8080/v1"
   POSTGRES_DB: "tars"
   POSTGRES_USER: "tarsuser"
   TARS_LANGFUSE_ENABLED: "true"

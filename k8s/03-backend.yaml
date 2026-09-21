@@ -98,11 +98,6 @@ spec:
                 configMapKeyRef:
                   name: tars-config
                   key: TARS_GEMINI_MODEL_NAME
-            - name: TARS_LLAMACPP_BASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: tars-config
-                  key: TARS_LLAMACPP_BASE_URL
             - name: TARS_LANGFUSE_ENABLED
               valueFrom:
                 configMapKeyRef:

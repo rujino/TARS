@@ -128,22 +128,10 @@ class Settings(BaseSettings):
         default="attend", description="Default TARS operating mode ('attend' or 'task')"
     )
 
-    # External LLM / SLM Endpoints
+    # External LLM Endpoints
     gemini_api_key: str = Field(default="", description="Google Gemini API key")
     gemini_model_name: str = Field(
         default="gemini-3.7-flash", description="Google Gemini model identifier"
-    )
-    llamacpp_base_url: str = Field(
-        default="http://localhost:8080/v1", description="Local llama.cpp OpenAI-compatible base URL"
-    )
-    llamacpp_model_name: str = Field(
-        default="default", description="Model name or alias for local llama.cpp server"
-    )
-    llamacpp_timeout_ms: int = Field(
-        default=3000,
-        ge=100,
-        le=60000,
-        description="Timeout in ms for local SLM streaming/generation",
     )
 
     # Dynamic Slicer Settings

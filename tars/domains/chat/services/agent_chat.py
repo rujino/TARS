@@ -21,7 +21,6 @@ from tars.domains.persona.prompts import TARSPersonaManager
 from tars.domains.tools.registry import ToolRegistry
 from tars.engine.adapters.base import BaseLLMAdapter
 from tars.engine.adapters.gemini import GeminiAdapter
-from tars.engine.adapters.llamacpp import LlamaCppAdapter
 from tars.engine.adapters.router import HybridLLMRouter
 from tars.engine.orchestrator.observability import (
     flush_langfuse_handler,
@@ -59,7 +58,6 @@ async def execute_background_knowledge_extraction(
             db = session_factory()
             active_llm = llm_adapter or HybridLLMRouter(
                 gemini_adapter=GeminiAdapter(),
-                slm_adapter=LlamaCppAdapter(),
             )
             worker = SelfEvolvingKnowledgeWorker(
                 extractor_llm=active_llm,
@@ -117,7 +115,6 @@ class AgentChatService:
         self.tool_registry = tool_registry
         self.router = llm_router or HybridLLMRouter(
             gemini_adapter=GeminiAdapter(),
-            slm_adapter=LlamaCppAdapter(),
         )
         self.persona_mgr = persona_manager or TARSPersonaManager()
         self.slicer = slicer or DynamicSlicerEngine(

@@ -153,10 +153,9 @@ async def get_proactive_greeting_service(
     """Provide initialized ProactiveGreetingService instance."""
     from tars.domains.chat.services.greeting import ProactiveGreetingService
     from tars.engine.adapters.gemini import GeminiAdapter
-    from tars.engine.adapters.llamacpp import LlamaCppAdapter
     from tars.engine.adapters.router import HybridLLMRouter
 
-    llm_router = HybridLLMRouter(gemini_adapter=GeminiAdapter(), slm_adapter=LlamaCppAdapter())
+    llm_router = HybridLLMRouter(gemini_adapter=GeminiAdapter())
     return ProactiveGreetingService(
         db_session=db,
         storage_manager=storage,

@@ -16,7 +16,6 @@ from tars.domains.persona.schemas import (
     TurnRoutingDecision,
 )
 from tars.engine.adapters.gemini import GeminiAdapter
-from tars.engine.adapters.llamacpp import LlamaCppAdapter
 from tars.engine.orchestrator.nodes.companion import (
     companion_dispatch_node,
     companion_postprocess_node,
@@ -45,25 +44,6 @@ def test_gemini_adapter_message_coalescing() -> None:
     assert "[miu]: 첫 번째 답변입니다." in formatted[1]["content"]
     assert "[vera]: 두 번째 연계 답변입니다." in formatted[1]["content"]
     assert formatted[2] == {"role": "user", "content": "사용자 질문 2"}
-
-
-@pytest.mark.unit
-def test_llamacpp_adapter_message_coalescing() -> None:
-    """Test that LlamaCppAdapter coalesces consecutive AIMessages into a single assistant block."""
-    adapter = LlamaCppAdapter(base_url="http://localhost:8080")
-    messages: list[BaseMessage] = [
-        HumanMessage(content="사용자 질문"),
-        AIMessage(content="[미우]: 야옹!", name="miu"),
-        AIMessage(content="[베라]: 정숙하십시오.", name="vera"),
-    ]
-
-    formatted = adapter._format_messages_for_slm(messages, system_prompt="System Prompt")
-
-    assert len(formatted) == 3  # system, user, assistant
-    assert formatted[0] == {"role": "system", "content": "System Prompt"}
-    assert formatted[1] == {"role": "user", "content": "사용자 질문"}
-    assert formatted[2]["role"] == "assistant"
-    assert "[미우]: 야옹!\n\n[베라]: 정숙하십시오." == formatted[2]["content"]
 
 
 @pytest.mark.asyncio

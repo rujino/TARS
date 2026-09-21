@@ -20,7 +20,7 @@
 - **Acceleration**: **정적 툴 스키마 CAG** (75% 비용 절감 & 저지연)
 - **Agent Orchestration**: **LangGraph (A2A 커스텀 상태 머신 & ReAct 도구 루프)**
 - **Tool Ecosystem & Plugin Hub**: **MCP (JSON-RPC 2.0 / HTTP, SSE, STDIO, Mock)** + **Google Workspace(Calendar, Gmail)** + **사용자별 원클릭 토글형 플러그인 허브**
-- **Hybrid LLM Engine**: **Google Gemini API** (사용자 대화 응답 100% 전담) + **`llama.cpp` (`llama-server`)** (K3s/온프레미스 기반 내부 경량 추론 & 전처리 전담)
+- **Unified LLM Engine**: **Google Gemini API** (Gemini Flash 기반 고지능 페르소나 및 멀티 컴패니언 전담)
 - **Observability**: **Langfuse** (실시간 트레이싱 및 디버깅)
 - **Container Orchestration & Infra**: **K3s (경량 쿠버네티스)** + **Traefik Ingress** + **cert-manager** (Let's Encrypt 자동 SSL/TLS 발급/갱신) + **FastAPI 3 Replicas** (무중단 롤링 업데이트)
 - **Edge Client (iPhone)**: PWA Web / iOS App + **On-Device TTS (음성 합성)**
