@@ -16,4 +16,5 @@ data:
   TARS_S3_ENDPOINT_URL: "http://seaweedfs-s3.tars.svc.cluster.local:8333"
   TARS_S3_BUCKET_NAME: "tars-okf"
   TARS_S3_REGION: "us-east-1"
+  TARS_FIREBASE_PROJECT_ID: "tars-companion-core"
 

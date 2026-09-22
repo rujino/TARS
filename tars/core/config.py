@@ -189,6 +189,16 @@ class Settings(BaseSettings):
         description="Langfuse server base URL endpoint",
     )
 
+    # Firebase Cloud Messaging (FCM) Settings
+    firebase_project_id: str = Field(
+        default="tars-companion-core",
+        description="Firebase Project ID for FCM and Client SDKs",
+    )
+    firebase_credentials_path: str | None = Field(
+        default=None,
+        description="Path to Firebase service account credentials JSON (or uses ADC / environment)",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

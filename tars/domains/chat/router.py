@@ -47,6 +47,7 @@ from tars.domains.chat.schemas import (
 from tars.domains.chat.services.agent_chat import AgentChatService
 from tars.domains.knowledge.storage.manager import FileStorageManager
 from tars.domains.tools.registry import ToolRegistry
+from tars.runtime.proactive_connection_registry import ProactiveConnectionRegistry
 from tars.runtime.turn_lock import (
     HybridSessionTurnLock,
     LockContentionError,
@@ -330,6 +331,7 @@ async def _handle_ws_chat_session(
 ) -> None:
     """Run full WebSocket conversational session loop with concurrent reader and dispatcher coroutines."""
     await websocket.accept()
+    ProactiveConnectionRegistry.get_instance().register(user_id, websocket)
     logger.info("WebSocket connected for user %s", user_id)
 
     session_factory = get_session_factory()
@@ -760,6 +762,7 @@ async def _handle_ws_chat_session(
             except Exception:
                 pass
         current_acquired_lock[0] = None
+        ProactiveConnectionRegistry.get_instance().unregister(user_id, websocket)
         logger.debug("WebSocket handler connection cleaned up for user %s", user_id)
 
 

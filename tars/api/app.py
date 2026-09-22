@@ -13,6 +13,7 @@ import tars.domains.auth.models  # noqa: F401
 import tars.domains.chat.models  # noqa: F401
 import tars.domains.knowledge.models  # noqa: F401
 import tars.domains.persona.models  # noqa: F401
+import tars.domains.proactive.models  # noqa: F401
 from tars.api.dependencies import close_tool_registry, get_tool_registry
 from tars.api.routers import api_v1_router, health_router
 from tars.config import get_settings
@@ -30,7 +31,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize ToolRegistry singleton on startup
     app.state.tool_registry = await get_tool_registry()
+
+    # Initialize Proactive Coordinator and Scheduler on startup
+    from tars.domains.proactive.coordinator import ProactiveCoordinator
+    from tars.domains.proactive.scheduler.engine import ProactiveScheduler
+
+    coordinator = ProactiveCoordinator()
+    app.state.proactive_coordinator = coordinator
+    proactive_scheduler = ProactiveScheduler(job_handler=coordinator.execute_for_user)
+    await proactive_scheduler.start()
+    app.state.proactive_scheduler = proactive_scheduler
+
     yield
+
+    # Graceful Shutdown: Proactive scheduler
+    if hasattr(app.state, "proactive_scheduler") and app.state.proactive_scheduler is not None:
+        try:
+            await app.state.proactive_scheduler.shutdown()
+        except Exception:
+            pass
 
     # Graceful Shutdown: Drain background knowledge extraction tasks cleanly
     await shutdown_background_tasks(timeout=5.0)

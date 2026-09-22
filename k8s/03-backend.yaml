@@ -168,11 +168,22 @@ spec:
                   name: tars-secret
                   key: TARS_S3_SECRET_KEY
                   optional: true
+            - name: TARS_FIREBASE_PROJECT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: tars-config
+                  key: TARS_FIREBASE_PROJECT_ID
+                  optional: true
+            - name: TARS_FIREBASE_CREDENTIALS_PATH
+              value: "/etc/secrets/firebase/service-account.json"
           volumeMounts:
             - name: storage-data
               mountPath: /app/storage
             - name: app-data
               mountPath: /app/data
+            - name: firebase-credentials
+              mountPath: /etc/secrets/firebase
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /health
@@ -194,6 +205,10 @@ spec:
         - name: app-data
           persistentVolumeClaim:
             claimName: tars-data-pvc
+        - name: firebase-credentials
+          secret:
+            secretName: tars-firebase-secret
+            optional: true
 ---
 apiVersion: v1
 kind: Service
