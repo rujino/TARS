@@ -32,7 +32,7 @@ class AgentStreamEvent(BaseModel):
         default=None, description="List of tools utilized in this turn"
     )
     engine: str | None = Field(
-        default=None, description="Engine that produced the turn response (gemini or slm)"
+        default=None, description="Engine that produced the turn response (gemini)"
     )
     model_name: str | None = Field(
         default=None, description="Model identifier that produced the turn response"

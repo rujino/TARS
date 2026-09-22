@@ -21,7 +21,6 @@ from tars.domains.persona.prompts import TARSPersonaManager
 from tars.domains.tools.registry import ToolRegistry
 from tars.engine.adapters.base import BaseLLMAdapter
 from tars.engine.adapters.gemini import GeminiAdapter
-from tars.engine.adapters.llamacpp import LlamaCppAdapter
 from tars.engine.adapters.router import HybridLLMRouter
 from tars.engine.orchestrator.observability import (
     flush_langfuse_handler,
@@ -59,7 +58,6 @@ async def execute_background_knowledge_extraction(
             db = session_factory()
             active_llm = llm_adapter or HybridLLMRouter(
                 gemini_adapter=GeminiAdapter(),
-                slm_adapter=LlamaCppAdapter(),
             )
             worker = SelfEvolvingKnowledgeWorker(
                 extractor_llm=active_llm,
@@ -117,7 +115,6 @@ class AgentChatService:
         self.tool_registry = tool_registry
         self.router = llm_router or HybridLLMRouter(
             gemini_adapter=GeminiAdapter(),
-            slm_adapter=LlamaCppAdapter(),
         )
         self.persona_mgr = persona_manager or TARSPersonaManager()
         self.slicer = slicer or DynamicSlicerEngine(
@@ -135,6 +132,7 @@ class AgentChatService:
         messages: list[BaseMessage] | None = None,
         turn_epoch: int | None = None,
         active_persona_ids: list[str] | None = None,
+        force_new: bool = False,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Execute full agent turn with session routing, dynamic slicing, companion pipeline, and token streaming."""
         from tars.core.session.manager import SmartSessionManager
@@ -162,7 +160,7 @@ class AgentChatService:
 
         chat_messages: list[BaseMessage] = (
             list(messages)
-            if messages is not None and len(messages) > 0
+            if not force_new and messages is not None and len(messages) > 0
             else [HumanMessage(content=message)]
         )
         resolved_session_id = session_id or "default_session"
@@ -179,6 +177,8 @@ class AgentChatService:
             "active_query": message,
             "messages": chat_messages,
             "active_persona_ids": resolved_persona_ids,
+            "force_new": force_new,
+            "client_timezone": client_timezone,
         }
         initial_state["turn_epoch"] = resolved_turn_epoch  # type: ignore[typeddict-unknown-key]
 

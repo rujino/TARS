@@ -6,14 +6,6 @@ export const useChatQuery = (activeSessionId?: string | null) => {
   const queryClient = useQueryClient();
   const token = typeof window !== 'undefined' ? localStorage.getItem('tars_token') : null;
 
-  const greetingQuery = useQuery({
-    queryKey: queryKeys.chat.greeting(),
-    queryFn: () => chatApi.getGreeting(),
-    enabled: !!token,
-    staleTime: 60 * 1000,
-    retry: 1,
-  });
-
   const sessionsQuery = useQuery({
     queryKey: queryKeys.chat.sessions(),
     queryFn: () => chatApi.getSessions(),
@@ -21,10 +13,14 @@ export const useChatQuery = (activeSessionId?: string | null) => {
     staleTime: 10 * 1000,
   });
 
+  // Guard: placeholder session IDs (e.g. 'default_session') are not real DB entities
+  const PLACEHOLDER_SESSION_IDS = new Set(['default_session', 'ws_session', 'ws_default_session']);
+  const isValidSessionId = !!activeSessionId && !PLACEHOLDER_SESSION_IDS.has(activeSessionId);
+
   const messagesQuery = useQuery({
-    queryKey: activeSessionId ? queryKeys.chat.messages(activeSessionId) : ['chat', 'messages', 'none'],
-    queryFn: () => (activeSessionId ? chatApi.getSessionMessages(activeSessionId) : Promise.resolve([])),
-    enabled: !!token && !!activeSessionId,
+    queryKey: isValidSessionId ? queryKeys.chat.messages(activeSessionId) : ['chat', 'messages', 'none'],
+    queryFn: () => (isValidSessionId ? chatApi.getSessionMessages(activeSessionId) : Promise.resolve([])),
+    enabled: !!token && isValidSessionId,
     staleTime: 30 * 1000,
   });
 
@@ -36,12 +32,15 @@ export const useChatQuery = (activeSessionId?: string | null) => {
     },
   });
 
-  return {
-    // Greeting
-    greeting: greetingQuery.data,
-    isLoadingGreeting: greetingQuery.isLoading,
-    refetchGreeting: greetingQuery.refetch,
+  const deleteAllSessionsMutation = useMutation({
+    mutationFn: () => chatApi.deleteAllSessions(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chat.sessions() });
+      queryClient.removeQueries({ queryKey: ['chat', 'messages'] });
+    },
+  });
 
+  return {
     // Sessions
     sessions: sessionsQuery.data?.sessions ?? [],
     sessionGroups: sessionsQuery.data?.groups ?? {},
@@ -56,5 +55,7 @@ export const useChatQuery = (activeSessionId?: string | null) => {
     // Delete
     deleteSession: deleteSessionMutation.mutateAsync,
     isDeletingSession: deleteSessionMutation.isPending,
+    deleteAllSessions: deleteAllSessionsMutation.mutateAsync,
+    isDeletingAllSessions: deleteAllSessionsMutation.isPending,
   };
 };

@@ -16,7 +16,6 @@ class SlicerProfile(str, Enum):
     """Dynamic slicing context profile."""
 
     CHAT = "chat"
-    GREETING = "greeting"
     TASK = "task"
 
 
@@ -100,14 +99,6 @@ CHAT_TYPE_MAP: Mapping[OKFType, float] = {
     OKFType.CONCEPT: 0.40,
 }
 
-GREETING_TYPE_MAP: Mapping[OKFType, float] = {
-    OKFType.PREFERENCE: 1.00,
-    OKFType.RULE: 0.90,
-    OKFType.ENTITY: 0.60,
-    OKFType.CONCEPT: 0.30,
-    OKFType.PROCEDURE: 0.20,
-}
-
 TASK_TYPE_MAP: Mapping[OKFType, float] = {
     OKFType.PROCEDURE: 1.00,
     OKFType.RULE: 0.90,
@@ -118,7 +109,6 @@ TASK_TYPE_MAP: Mapping[OKFType, float] = {
 
 PROFILE_TYPE_MAPS: Mapping[SlicerProfile, Mapping[OKFType, float]] = {
     SlicerProfile.CHAT: CHAT_TYPE_MAP,
-    SlicerProfile.GREETING: GREETING_TYPE_MAP,
     SlicerProfile.TASK: TASK_TYPE_MAP,
 }
 
@@ -128,12 +118,6 @@ PROFILE_WEIGHTS: Mapping[SlicerProfile, SlicerWeights] = {
         weight_match=0.40,
         weight_type=0.25,
         weight_recency=0.10,
-    ),
-    SlicerProfile.GREETING: SlicerWeights(
-        weight_importance=0.20,
-        weight_match=0.20,
-        weight_type=0.40,
-        weight_recency=0.20,
     ),
     SlicerProfile.TASK: SlicerWeights(
         weight_importance=0.30,
@@ -171,7 +155,6 @@ SlicedKnowledgeResult = SlicedContextResult
 
 __all__ = [
     "CHAT_TYPE_MAP",
-    "GREETING_TYPE_MAP",
     "IMPORTANCE_SCORE_MAP",
     "ITokenCounter",
     "PROFILE_TYPE_MAPS",

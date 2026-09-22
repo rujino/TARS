@@ -54,13 +54,20 @@ async def companion_session_node(
     user_id = state.get("user_id", "")
     session_id = state.get("session_id")
     messages = list(state.get("messages", []))
-    extracted_query = _extract_active_query(messages)
-    active_query = extracted_query if extracted_query else state.get("active_query", "")
+    explicit_query = state.get("active_query", "")
+    active_query = explicit_query if explicit_query else _extract_active_query(messages)
+
+    force_new = bool(state.get("force_new", False))
+    client_tz = state.get("client_timezone") or "Asia/Seoul"
 
     # 1. Hot Path vs Cold Start 판별:
     # 이미 2개 이상의 턴(이전 문답)이 인메모리 messages에 누적되어 있다면 대화 진행 중(Hot Path)임.
-    # 이 경우 DB를 조회하지 않고 인메모리 메시지를 그대로 사용함 (DB Read 0ms).
-    is_hot_path = len(messages) > 1 and any(isinstance(m, AIMessage) for m in messages)
+    # 단, 사용자가 명시적으로 '새 대화'를 요청한 경우(force_new=True)에는 Hot Path를 무시하고 신규 세션을 라우팅함.
+    is_hot_path = (
+        not force_new
+        and len(messages) > 1
+        and any(isinstance(m, AIMessage) for m in messages)
+    )
 
     if is_hot_path:
         active_session_id = session_id or "default_session"
@@ -68,7 +75,7 @@ async def companion_session_node(
         if not isinstance(hydrated_messages[-1], HumanMessage):
             hydrated_messages.append(HumanMessage(content=active_query))
     else:
-        # Cold Start: 새로고침, 재접속, 첫 대화 진입 시에만 DB 1회 조회 (Hydration)
+        # Cold Start 또는 새 대화 요청(force_new): DB 세션 라우팅 1회 실행
         session_mgr = session_manager
         if session_mgr is None and db_session is not None:
             from tars.core.session.manager import SmartSessionManager
@@ -83,15 +90,17 @@ async def companion_session_node(
         if session_mgr is not None and user_id:
             active_session, working_memory, _ = await session_mgr.route_session(
                 user_id=user_id,
-                requested_session_id=session_id,
+                requested_session_id=None if force_new else session_id,
                 incoming_message=active_query,
                 background_tasks=background_tasks,
+                force_new=force_new,
+                client_timezone=client_tz,
             )
             active_session_id = active_session.id
             hydrated_messages = list(working_memory) + [HumanMessage(content=active_query)]
         else:
             active_session_id = session_id or "default_session"
-            hydrated_messages = list(messages) if messages else [HumanMessage(content=active_query)]
+            hydrated_messages = [HumanMessage(content=active_query)] if force_new else (list(messages) if messages else [HumanMessage(content=active_query)])
 
     # 2. 페르소나 레지스트리 해소
     reg = registry or get_default_registry()
@@ -293,13 +302,8 @@ async def companion_dispatch_node(
         )
         raise
 
-    is_slm = (
-        primary_content.startswith(getattr(router, "auxiliary_prefix", "[Tactical Uplink"))
-        or "[Auxiliary" in primary_content
-        or "slm" in str(getattr(router_res, "model_name", "")).lower()
-    )
-    executed_engine = "slm" if is_slm else getattr(router_res, "engine", "gemini")
-    executed_model = getattr(router_res, "model_name", "llamacpp" if is_slm else "gemini-3.7-flash")
+    executed_engine = getattr(router_res, "engine", "gemini")
+    executed_model = getattr(router_res, "model_name", "gemini-3.7-flash")
 
     try:
         await adispatch_custom_event(
@@ -386,17 +390,8 @@ async def companion_dispatch_node(
             )
             raise
 
-        sec_is_slm = (
-            secondary_content.startswith(getattr(router, "auxiliary_prefix", "[Tactical Uplink"))
-            or "[Auxiliary" in secondary_content
-            or "slm" in str(getattr(sec_router_res, "model_name", "")).lower()
-        )
-        if sec_is_slm:
-            executed_engine = "slm"
-            executed_model = getattr(sec_router_res, "model_name", "llamacpp")
-        else:
-            executed_engine = getattr(sec_router_res, "engine", executed_engine)
-            executed_model = getattr(sec_router_res, "model_name", executed_model)
+        executed_engine = getattr(sec_router_res, "engine", executed_engine)
+        executed_model = getattr(sec_router_res, "model_name", executed_model)
 
         try:
             await adispatch_custom_event(

@@ -3,21 +3,9 @@ import type {
   ChatMessageResponse,
   ChatSessionDeleteResponse,
   ChatSessionListResponse,
-  GreetingResponse,
 } from '@/types/chat.types';
 
 export const chatApi = {
-  /**
-   * 앱 시작 시 상황 인지형 인트로 인사 생성
-   * GET /api/v1/chat/greeting
-   */
-  getGreeting: async (timezone: string = 'Asia/Seoul'): Promise<GreetingResponse> => {
-    const { data } = await apiClient.get<GreetingResponse>('/api/v1/chat/greeting', {
-      params: { timezone },
-    });
-    return data;
-  },
-
   /**
    * 세션 목록 조회 (날짜 그룹 메타데이터 포함)
    * GET /api/v1/chat/sessions
@@ -55,6 +43,17 @@ export const chatApi = {
   deleteSession: async (sessionId: string): Promise<ChatSessionDeleteResponse> => {
     const { data } = await apiClient.delete<ChatSessionDeleteResponse>(
       `/api/v1/chat/sessions/${sessionId}`
+    );
+    return data;
+  },
+
+  /**
+   * 모든 세션 및 대화 내역 일괄 삭제 (DB 정리/초기화)
+   * DELETE /api/v1/chat/sessions/all
+   */
+  deleteAllSessions: async (): Promise<ChatSessionDeleteResponse> => {
+    const { data } = await apiClient.delete<ChatSessionDeleteResponse>(
+      '/api/v1/chat/sessions/all'
     );
     return data;
   },

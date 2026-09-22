@@ -70,6 +70,8 @@ class CompanionState(TypedDict, total=False):
     error_message: str | None
     engine: str | None
     model_name: str | None
+    force_new: bool | None
+    client_timezone: str | None
 
 
 def build_companion_graph(

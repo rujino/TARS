@@ -242,8 +242,8 @@ async def unified_cognitive_node(
         State delta containing 'subconscious', 'turn_routing', and 'desire_scores'.
     """
     messages = state.get("messages", [])
-    extracted_query = _extract_active_query(messages)
-    user_query = extracted_query if extracted_query else state.get("active_query", "")
+    explicit_query = state.get("active_query", "")
+    user_query = explicit_query if explicit_query else _extract_active_query(messages)
 
     # Resolve active personas safely
     reg = registry or get_default_registry()

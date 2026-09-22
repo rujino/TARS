@@ -209,53 +209,10 @@ class TARSPersonaManager:
         )
 
 
-TARS_GREETING_PROMPT_TEMPLATE = """You are TARS (Thoughtful Adaptive Reflective System), personal attendant to 주인님 (Mode: {mode}).
-주인님 has just opened the system / entered the session.
-
-[SITUATIONAL CONTEXT]
-- Local Time: {time_of_day_str} ({current_time_str})
-- Time Elapsed Since Last Contact: {idle_duration_str}
-- Recent Dialogue Topic / Focus: {last_session_topic}
-{knowledge_context_section}
-
-[DIRECTIVE]
-Generate a warm, respectful, and observant 1-2 sentence proactive greeting in Korean.
-- Strictly adhere to TARS personal attendant persona: respectful honorifics, sincere care for 주인님's well-being.
-- Address the user as "주인님".
-- NEVER use robotic boilerplate (e.g., "무엇을 도와드릴까요?"), emojis, or fake physical gesture tags.
-- Naturally weave in the situational context, time of day, or idle gap to gently check on 주인님's condition.
-- Return ONLY the 1-2 sentence Korean greeting string with no surrounding quotes or markdown.
-"""
-
 BRIDGE_SUMMARY_SYSTEM_PROMPT = """You are the TARS Dialogue Summarizer.
 Summarize the key context, decisions, and unresolved topics from the previous conversation turns in 1-2 concise sentences for smooth continuation.
 Do not include pleasantries or meta-commentary. Output plain text summary only.
 """
-
-
-def build_greeting_prompt(
-    mode: str = "attend",
-    time_of_day_str: str = "오후",
-    current_time_str: str = "",
-    idle_duration_str: str = "첫 접속",
-    last_session_topic: str | None = None,
-    context_docs: Sequence[OKFDocument] | None = None,
-    **_kwargs: Any,
-) -> str:
-    """Build the prompt for generating a proactive greeting for 주인님."""
-    cfg = TARSPersonaConfig(mode=mode)  # type: ignore[arg-type]
-
-    knowledge_sec = render_knowledge_context(context_docs)
-    topic_str = last_session_topic if last_session_topic else "없음 (신규 세션)"
-
-    return TARS_GREETING_PROMPT_TEMPLATE.format(
-        mode=cfg.normalized_mode.upper(),
-        time_of_day_str=time_of_day_str,
-        current_time_str=current_time_str,
-        idle_duration_str=idle_duration_str,
-        last_session_topic=topic_str,
-        knowledge_context_section=f"\n{knowledge_sec}" if knowledge_sec else "",
-    ).strip()
 
 
 def build_bridge_summary_prompt() -> str:
@@ -265,11 +222,9 @@ def build_bridge_summary_prompt() -> str:
 
 __all__ = [
     "BRIDGE_SUMMARY_SYSTEM_PROMPT",
-    "TARS_GREETING_PROMPT_TEMPLATE",
     "TARSPersonaConfig",
     "TARSPersonaManager",
     "build_bridge_summary_prompt",
-    "build_greeting_prompt",
     "build_tars_system_prompt",
     "generate_behavioral_instructions",
     "render_knowledge_context",

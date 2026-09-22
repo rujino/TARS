@@ -62,16 +62,8 @@ async def llm_node(
     else:
         resp = LLMResponse(content="", tool_calls=[])
 
-    model_name = getattr(resp, "model_name", "") or ""
-    is_slm = (
-        ("slm" in model_name.lower())
-        or ("gemma" in model_name.lower())
-        or resp.content.startswith("[Auxiliary")
-        or resp.content.startswith("[Tactical Uplink")
-    )
-    engine = "slm" if is_slm else "gemini"
-    if not model_name:
-        model_name = "gemma-4-12b" if is_slm else "gemini-3.7-flash"
+    engine = "gemini"
+    model_name = getattr(resp, "model_name", "") or "gemini-3.7-flash"
 
     response_meta = {
         "engine": engine,

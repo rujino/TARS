@@ -9,7 +9,6 @@ export const queryKeys = {
   },
   chat: {
     all: ['chat'] as const,
-    greeting: (tz?: string) => [...queryKeys.chat.all, 'greeting', tz ?? 'Asia/Seoul'] as const,
     sessions: () => [...queryKeys.chat.all, 'sessions'] as const,
     messages: (sessionId: string) => [...queryKeys.chat.all, 'messages', sessionId] as const,
   },

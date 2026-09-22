@@ -78,6 +78,21 @@ jobs:
             echo "mode=all" >> $GITHUB_OUTPUT
           fi
 
+      - name: 🔑 Sync Secrets to K3s
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          if [ -n "$FIREBASE_KEY" ]; then
+            echo "🔑 Syncing Firebase credentials from GitHub Secrets to K3s..."
+            kubectl create secret generic tars-firebase-secret \
+              --namespace tars \
+              --from-literal=service-account.json="$FIREBASE_KEY" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            echo "✅ tars-firebase-secret successfully synchronized to K3s"
+          else
+            echo "ℹ️ FIREBASE_KEY secret not found in GitHub Secrets; skipping secret sync."
+          fi
+
       - name: ⚙️ Execute K3s Deployment Script
         run: |
           TARGET="${{ steps.target.outputs.mode }}"

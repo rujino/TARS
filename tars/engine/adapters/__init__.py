@@ -1,4 +1,4 @@
-"""TARS LLM Adapters and Hybrid Router Package."""
+"""TARS LLM Adapters and Router Package."""
 
 from tars.engine.adapters.base import (
     BaseLLMAdapter,
@@ -8,7 +8,6 @@ from tars.engine.adapters.base import (
     ToolCallData,
 )
 from tars.engine.adapters.gemini import GeminiAdapter
-from tars.engine.adapters.llamacpp import LlamaCppAdapter
 from tars.engine.adapters.router import (
     HybridLLMRouter,
     LLMEngineType,
@@ -22,7 +21,6 @@ __all__ = [
     "LLMEngineType",
     "LLMResponse",
     "LLMStreamChunk",
-    "LlamaCppAdapter",
     "RoutingDecision",
     "TokenUsage",
     "ToolCallData",

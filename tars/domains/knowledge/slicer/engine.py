@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tars.domains.knowledge.slicer.schemas import (
     CHAT_TYPE_MAP,
-    GREETING_TYPE_MAP,
     IMPORTANCE_SCORE_MAP,
     PROFILE_TYPE_MAPS,
     PROFILE_WEIGHTS,
@@ -569,7 +568,6 @@ class DynamicSlicerEngine:
 __all__ = [
     "CHAT_TYPE_MAP",
     "DynamicSlicerEngine",
-    "GREETING_TYPE_MAP",
     "HeuristicTokenCounter",
     "IMPORTANCE_SCORE_MAP",
     "ITokenCounter",

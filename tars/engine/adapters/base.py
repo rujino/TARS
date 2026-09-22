@@ -79,7 +79,7 @@ class LLMStreamChunk(BaseModel):
 
 
 class BaseLLMAdapter(ABC):
-    """Abstract Base Class unifying all LLM and SLM providers in TARS."""
+    """Abstract Base Class unifying LLM providers in TARS."""
 
     @abstractmethod
     def astream(
