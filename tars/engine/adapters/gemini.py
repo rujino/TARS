@@ -85,23 +85,14 @@ class GeminiAdapter(BaseLLMAdapter):
         return self
 
     def _get_client(self) -> Any:
-        """Lazy-initialize Google GenAI or LangChain client."""
+        """Lazy-initialize Google GenAI client."""
         if self._client is None and self.api_key:
             try:
                 from google import genai
 
                 self._client = genai.Client(api_key=self.api_key)
             except ImportError:
-                try:
-                    from langchain_google_genai import ChatGoogleGenerativeAI
-
-                    self._client = ChatGoogleGenerativeAI(
-                        model=self.model_name,
-                        google_api_key=self.api_key,
-                        temperature=self.temperature,
-                    )
-                except ImportError:
-                    logger.warning("Neither google-genai nor langchain-google-genai is installed.")
+                logger.warning("google-genai is not installed.")
         return self._client
 
     def _format_messages_for_gemini(
