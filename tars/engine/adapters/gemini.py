@@ -144,24 +144,26 @@ class GeminiAdapter(BaseLLMAdapter):
         formatted = self._format_messages_for_gemini(messages, system_prompt)
         prompt_text = "\n".join(f"{m['role']}: {m['content']}" for m in formatted)
 
+        config: Any = None
+        try:
+            from google.genai import types
+
+            genai_tools: Any = None
+            if tools:
+                genai_tools = [types.Tool(function_declarations=list(tools))]  # type: ignore[arg-type]
+
+            config = types.GenerateContentConfig(
+                system_instruction=system_prompt if system_prompt else None,
+                temperature=self.temperature,
+                max_output_tokens=self.max_output_tokens,
+                tools=genai_tools,
+            )
+        except Exception as cfg_err:
+            logger.warning("Failed to build GenerateContentConfig: %s", cfg_err)
+            config = None
+
         # 1. Direct google-genai async SDK
         if hasattr(client, "aio") and hasattr(client.aio, "models"):
-            try:
-                from google.genai import types
-
-                genai_tools: Any = None
-                if tools:
-                    genai_tools = [types.Tool(function_declarations=list(tools))]  # type: ignore[arg-type]
-
-                config = types.GenerateContentConfig(
-                    system_instruction=system_prompt if system_prompt else None,
-                    temperature=self.temperature,
-                    max_output_tokens=self.max_output_tokens,
-                    tools=genai_tools,
-                )
-            except Exception as cfg_err:
-                logger.warning("Failed to build GenerateContentConfig: %s", cfg_err)
-                config = None
 
             if config is not None:
                 resp = await client.aio.models.generate_content(
