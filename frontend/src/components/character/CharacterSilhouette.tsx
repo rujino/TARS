@@ -16,7 +16,6 @@ export const CharacterSilhouette: React.FC<CharacterSilhouetteProps> = ({
 
   // 베라(슬레이트 인디고) vs 미우(코랄 오렌지) 테마 컬러
   const primaryGradientId = isVera ? 'veraGradient' : 'miuGradient';
-  const glowColor = isVera ? 'rgba(99, 102, 241, 0.4)' : 'rgba(249, 115, 22, 0.4)';
 
   return (
     <svg
@@ -25,10 +24,10 @@ export const CharacterSilhouette: React.FC<CharacterSilhouetteProps> = ({
       height="100%"
       preserveAspectRatio="xMidYMax meet"
       style={{
-        filter: isActive ? `drop-shadow(0 0 12px ${glowColor})` : 'none',
+        filter: 'none',
         transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-        transform: isActive ? 'scale(1.02)' : 'scale(0.98)',
-        opacity: isActive ? 1 : 0.72,
+        transform: isActive ? 'scale(1.02)' : 'scale(1.0)',
+        opacity: 1,
       }}
     >
       <defs>

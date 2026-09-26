@@ -80,12 +80,11 @@
 
 /* 활성 캐릭터 하이라이트 */
 .characterActive {
-  transform: scale(1.03) translateY(-4px);
-  filter: brightness(1.08);
+  transform: scale(1.02) translateY(-4px);
+  z-index: 7;
 }
 
-/* 비활성 캐릭터 부드러운 딤 */
+/* 비활성/기본 캐릭터 (하얀 워시아웃/블러 방지를 위해 100% 불투명 유지) */
 .characterDimmed {
-  opacity: 0.65;
-  transform: scale(0.97);
+  opacity: 1;
 }

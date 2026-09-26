@@ -83,7 +83,8 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background-color: var(--color-bg-primary);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--spacing-2);
 }
@@ -94,7 +95,8 @@
   justify-content: space-between;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
-  background-color: var(--color-surface);
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border-subtle);
 }
 
 .toolItemInfo {
@@ -135,7 +137,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--color-bg-tertiary);
+  background-color: var(--color-border);
   transition: 0.2s;
   border-radius: 20px;
 }

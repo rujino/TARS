@@ -20,15 +20,15 @@
 
 /* 견고한 불투명 카드 바디 */
 .cardBody {
-  background-color: #121826;
+  background-color: #ffffff;
   border-radius: var(--radius-lg);
   padding: 10px 14px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border);
 }
 
 .veraBorder {
@@ -49,8 +49,8 @@
   height: 0;
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
-  border-right: 8px solid #121826;
-  filter: drop-shadow(-2px 0 2px rgba(0, 0, 0, 0.3));
+  border-right: 8px solid #ffffff;
+  filter: drop-shadow(-2px 0 2px rgba(15, 23, 42, 0.05));
 }
 
 /* 미우 우측 뾰족한 꼬리 (우측 캐릭터 머리~가슴 방향) */
@@ -63,8 +63,8 @@
   height: 0;
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
-  border-left: 8px solid #121826;
-  filter: drop-shadow(2px 0 2px rgba(0, 0, 0, 0.3));
+  border-left: 8px solid #ffffff;
+  filter: drop-shadow(2px 0 2px rgba(15, 23, 42, 0.05));
 }
 
 .headerRow {
@@ -94,9 +94,9 @@
   font-size: 10px;
   padding: 2px 6px;
   border-radius: var(--radius-xs);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text-subtle);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
   font-family: monospace;
 }
 
@@ -112,7 +112,7 @@
 .spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  border: 2px solid rgba(15, 23, 42, 0.1);
   border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;

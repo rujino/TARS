@@ -23,7 +23,6 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
 
   const imageUrl = CHARACTER_IMAGE_MAP[speaker][state] || CHARACTER_IMAGE_MAP[speaker].idle;
   const isVera = speaker === 'vera';
-  const glowColor = isVera ? 'rgba(99, 102, 241, 0.45)' : 'rgba(249, 115, 22, 0.45)';
 
   return (
     <div
@@ -35,9 +34,9 @@ export const CharacterSprite: React.FC<CharacterSpriteProps> = ({
         justifyContent: 'center',
         position: 'relative',
         transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-        filter: isActive ? `drop-shadow(0 0 14px ${glowColor})` : 'none',
-        transform: isActive ? 'scale(1.03)' : 'scale(0.97)',
-        opacity: isActive ? 1 : 0.75,
+        filter: 'none',
+        transform: isActive ? 'scale(1.02)' : 'scale(1.0)',
+        opacity: 1,
       }}
     >
       <img

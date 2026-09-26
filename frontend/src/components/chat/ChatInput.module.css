@@ -1,32 +1,38 @@
 .inputContainer {
-  padding: 10px 16px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  background-color: rgba(10, 14, 26, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 14px;
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   position: relative;
   z-index: 25;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.07), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.inputContainer:focus-within {
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 12px 32px -4px rgba(37, 99, 235, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
 }
 
 .inputWrapper {
   display: flex;
   align-items: flex-end;
   gap: var(--spacing-2);
-  background-color: #141a29;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 18px;
   padding: 8px 12px;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .inputWrapper:focus-within {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+  background-color: #ffffff;
+  border-color: var(--color-border);
 }
 
 .textarea {
@@ -41,7 +47,7 @@
   min-height: 24px;
   max-height: 140px;
   outline: none;
-  padding: 4px 2px;
+  padding: 4px 6px;
 }
 
 .textarea::placeholder {
@@ -53,59 +59,66 @@
   align-items: center;
   gap: var(--spacing-2);
   flex-shrink: 0;
+  padding-bottom: 2px;
 }
 
 .bargeInButton {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
   background-color: var(--color-danger);
   color: #ffffff;
   font-size: var(--font-size-xs);
   font-weight: 600;
   transition: all var(--transition-fast);
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
   animation: pulseButton 1.5s infinite ease-in-out;
 }
 
 .bargeInButton:hover {
   background-color: var(--color-danger-hover);
+  transform: translateY(-1px);
 }
 
 .sendButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
   background-color: var(--color-primary);
   color: #ffffff;
   transition: all var(--transition-fast);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
 }
 
 .sendButton:hover:not(:disabled) {
   background-color: var(--color-primary-hover);
+  transform: scale(1.04);
 }
 
 .sendButton:disabled {
-  background-color: var(--color-bg-tertiary);
+  background-color: var(--color-border);
   color: var(--color-text-subtle);
+  box-shadow: none;
   cursor: not-allowed;
+  transform: none;
 }
 
 .footerHint {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--color-text-subtle);
-  padding: 0 4px;
+  padding: 0 6px;
+  letter-spacing: -0.01em;
 }
 
 @keyframes pulseButton {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.02); }
+  50% { transform: scale(1.03); }
 }

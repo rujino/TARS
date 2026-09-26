@@ -18,5 +18,5 @@
 }
 
 .imageActive {
-  filter: drop-shadow(0 0 14px var(--character-glow, rgba(99, 102, 241, 0.4)));
+  filter: none;
 }

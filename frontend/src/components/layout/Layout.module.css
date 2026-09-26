@@ -1,9 +1,9 @@
-/* 전체 브라우저 화면을 덮는 앰비언트 다크 래퍼 */
+/* 전체 브라우저 화면을 덮는 스튜디오 외곽 앰비언트 라이트 래퍼 */
 .layoutWrapper {
   width: 100vw;
   height: 100vh;
   height: 100dvh;
-  background-color: #070a12;
+  background-color: var(--color-bg-base);
   display: flex;
   justify-content: center;
   align-items: stretch;
@@ -21,9 +21,9 @@
   background-color: var(--color-bg-primary);
   position: relative;
   overflow: hidden;
-  box-shadow: 0 0 60px rgba(0, 0, 0, 0.75), 0 0 1px rgba(255, 255, 255, 0.08);
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: var(--shadow-room);
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
   transition: max-width 0.3s ease;
 }
 
