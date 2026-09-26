@@ -10,6 +10,7 @@ const DATE_GROUPS = ['Today', 'Yesterday', 'Past 7 days', 'Past 30 days', 'Older
 
 export const Sidebar: React.FC = () => {
   const isSidebarOpen = useSessionStore((state) => state.isSidebarOpen);
+  const setSidebarOpen = useSessionStore((state) => state.setSidebarOpen);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setActiveSession = useSessionStore((state) => state.setActiveSession);
   const openModal = useUIStore((state) => state.openModal);
@@ -25,6 +26,12 @@ export const Sidebar: React.FC = () => {
       if (!proceed) return;
     }
     setActiveSession(null, null);
+    setSidebarOpen(false);
+  };
+
+  const handleSelectSession = (sessionId: string, title?: string | null) => {
+    setActiveSession(sessionId, title);
+    setSidebarOpen(false);
   };
 
   const handleDeleteAllSessions = async () => {
@@ -66,50 +73,71 @@ export const Sidebar: React.FC = () => {
   );
 
   return (
-    <aside
-      className={`${styles.sidebar} ${!isSidebarOpen ? styles.sidebarClosed : ''}`}
-      aria-label="대화 기록 사이드바"
-    >
-      <div className={styles.topAction}>
-        <button className={styles.newChatButton} onClick={handleNewChat}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          <span>새 대화 시작</span>
-        </button>
-      </div>
+    <>
+      {/* 1. Backdrop Overlay */}
+      <div
+        className={`${styles.backdrop} ${isSidebarOpen ? styles.backdropVisible : ''}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
 
-      <div className={styles.timelineContainer}>
-        {hasAnySessions ? (
-          DATE_GROUPS.map((groupName) => {
-            const items = sessionGroups[groupName];
-            if (!items || items.length === 0) return null;
+      {/* 2. Off-canvas Drawer Body */}
+      <aside
+        className={`${styles.sidebar} ${isSidebarOpen ? styles.sidebarOpen : ''}`}
+        aria-label="대화 기록 사이드바"
+      >
+        <div className={styles.topAction}>
+          <button className={styles.newChatButton} onClick={handleNewChat}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>새 대화 시작</span>
+          </button>
 
-            return (
-              <div key={groupName} className={styles.dateGroup}>
-                <div className={styles.groupLabel}>{groupName}</div>
-                {items.map((sess) => {
-                  const isActive = activeSessionId === sess.id;
-                  return (
-                    <div
-                      key={sess.id}
-                      className={`${styles.sessionItem} ${isActive ? styles.sessionItemActive : ''}`}
-                      onClick={() => setActiveSession(sess.id, sess.title)}
-                    >
-                      <div className={styles.sessionContent}>
-                        <span className={styles.sessionTitle}>
-                          {sess.title || '새 대화'}
-                        </span>
-                        <div className={styles.sessionMeta}>
-                          <span>{formatTime(sess.last_active_at)}</span>
-                          {sess.message_count > 0 && (
-                            <span className={styles.messageCountBadge}>
-                              {sess.message_count}
-                            </span>
-                          )}
+          <button
+            className={styles.closeButton}
+            onClick={() => setSidebarOpen(false)}
+            aria-label="사이드바 닫기"
+            title="사이드바 닫기"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className={styles.timelineContainer}>
+          {hasAnySessions ? (
+            DATE_GROUPS.map((groupName) => {
+              const items = sessionGroups[groupName];
+              if (!items || items.length === 0) return null;
+
+              return (
+                <div key={groupName} className={styles.dateGroup}>
+                  <div className={styles.groupLabel}>{groupName}</div>
+                  {items.map((sess) => {
+                    const isActive = activeSessionId === sess.id;
+                    return (
+                      <div
+                        key={sess.id}
+                        className={`${styles.sessionItem} ${isActive ? styles.sessionItemActive : ''}`}
+                        onClick={() => handleSelectSession(sess.id, sess.title)}
+                      >
+                        <div className={styles.sessionContent}>
+                          <span className={styles.sessionTitle}>
+                            {sess.title || '새 대화'}
+                          </span>
+                          <div className={styles.sessionMeta}>
+                            <span>{formatTime(sess.last_active_at)}</span>
+                            {sess.message_count > 0 && (
+                              <span className={styles.messageCountBadge}>
+                                {sess.message_count}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
                       <button
                         className={styles.deleteButton}
@@ -202,5 +230,6 @@ export const Sidebar: React.FC = () => {
         )}
       </div>
     </aside>
-  );
+  </>
+);
 };

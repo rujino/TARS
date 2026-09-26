@@ -1,26 +1,32 @@
 .inputContainer {
-  padding: var(--spacing-3) var(--spacing-6);
-  background-color: var(--color-bg-primary);
-  border-top: 1px solid var(--color-border-subtle);
+  padding: 10px 16px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  background-color: rgba(10, 14, 26, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
+  gap: 8px;
+  position: relative;
+  z-index: 25;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .inputWrapper {
   display: flex;
   align-items: flex-end;
   gap: var(--spacing-2);
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-2) var(--spacing-3);
+  background-color: #141a29;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 8px 12px;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .inputWrapper:focus-within {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-subtle);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
 }
 
 .textarea {

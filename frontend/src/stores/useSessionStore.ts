@@ -12,7 +12,7 @@ interface SessionState {
 export const useSessionStore = create<SessionState>((set) => ({
   activeSessionId: null,
   activeTitle: null,
-  isSidebarOpen: true,
+  isSidebarOpen: false,
   setActiveSession: (sessionId, title) =>
     set({
       activeSessionId: sessionId,

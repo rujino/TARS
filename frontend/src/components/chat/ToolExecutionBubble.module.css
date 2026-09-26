@@ -1,0 +1,143 @@
+.bubbleContainer {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
+  margin: var(--spacing-2) 0;
+  position: relative;
+  animation: fadeInBubble 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 10;
+}
+
+.alignLeft {
+  align-self: flex-start;
+  margin-left: 12px;
+}
+
+.alignRight {
+  align-self: flex-end;
+  margin-right: 12px;
+}
+
+/* 견고한 불투명 카드 바디 */
+.cardBody {
+  background-color: #121826;
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.veraBorder {
+  border-left: 3px solid var(--color-vera);
+}
+
+.miuBorder {
+  border-right: 3px solid var(--color-miu);
+}
+
+/* 베라 좌측 뾰족한 꼬리 (좌측 캐릭터 머리~가슴 방향) */
+.veraTail::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 14px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 8px solid #121826;
+  filter: drop-shadow(-2px 0 2px rgba(0, 0, 0, 0.3));
+}
+
+/* 미우 우측 뾰족한 꼬리 (우측 캐릭터 머리~가슴 방향) */
+.miuTail::after {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 14px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid #121826;
+  filter: drop-shadow(2px 0 2px rgba(0, 0, 0, 0.3));
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.speakerBadge {
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badgeVera {
+  color: var(--color-vera);
+}
+
+.badgeMiu {
+  color: var(--color-miu);
+}
+
+.toolBadge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-subtle);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: monospace;
+}
+
+.speechText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-main);
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.spinnerVera {
+  border-top-color: var(--color-vera);
+}
+
+.spinnerMiu {
+  border-top-color: var(--color-miu);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeInBubble {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

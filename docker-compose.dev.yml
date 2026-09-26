@@ -46,6 +46,26 @@ services:
     ports:
       - "3000:3000"
 
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: tars-dev-seaweedfs
+    restart: unless-stopped
+    command:
+      - "server"
+      - "-dir=/data"
+      - "-s3"
+      - "-s3.port=8333"
+      - "-s3.config=/etc/seaweedfs/seaweed_s3_config.json"
+      - "-volume.max=50"
+    ports:
+      - "8333:8333"  # S3 API Endpoint (FastAPI aioboto3 connection)
+      - "9333:9333"  # Master Web UI / API
+      - "8888:8888"  # Filer Web UI / Knowledge File Browser
+    volumes:
+      - dev_seaweedfs_data:/data
+      - ./configs/seaweedfs/seaweed_s3_config.json:/etc/seaweedfs/seaweed_s3_config.json:ro
+
 volumes:
   dev_postgres_data:
   dev_langfuse_db_data:
+  dev_seaweedfs_data:

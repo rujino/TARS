@@ -1,0 +1,20 @@
+{
+  "identities": [
+    {
+      "name": "tars-admin",
+      "credentials": [
+        {
+          "accessKey": "tars-admin-access-key",
+          "secretKey": "tars-admin-secret-key-at-least-16-chars"
+        }
+      ],
+      "actions": [
+        "Admin",
+        "Read",
+        "Write",
+        "List",
+        "Tagging"
+      ]
+    }
+  ]
+}

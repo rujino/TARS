@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from tars.api.routers.assets import router as assets_router
 from tars.api.routers.health import health_router
 from tars.domains.auth.router import router as auth_router
 from tars.domains.chat.router import router as chat_router
@@ -15,9 +16,11 @@ api_v1_router.include_router(persona_router)
 api_v1_router.include_router(chat_router)
 api_v1_router.include_router(tools_router)
 api_v1_router.include_router(proactive_router)
+api_v1_router.include_router(assets_router)
 
 __all__ = [
     "api_v1_router",
+    "assets_router",
     "auth_router",
     "chat_router",
     "health_router",

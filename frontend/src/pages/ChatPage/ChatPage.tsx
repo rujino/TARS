@@ -4,8 +4,11 @@ import { useSessionStore } from '@/stores/useSessionStore';
 import { useChatQuery } from '@/queries/useChatQuery';
 import { useAuthQuery } from '@/queries/useAuthQuery';
 import { useUIStore } from '@/stores/useUIStore';
+import { useCharacterStore } from '@/stores/useCharacterStore';
 import { tarsWsClient } from '@/websocket/client';
+import { CharacterStage } from '@/components/character/CharacterStage';
 import { ChatFeed, type StreamingMessageState } from '@/components/chat/ChatFeed';
+import { type ToolExecutionState } from '@/components/chat/ToolExecutionBubble';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { ChatInput } from '@/components/chat/ChatInput';
 import type { ChatMessageResponse } from '@/types/chat.types';
@@ -14,6 +17,10 @@ export const ChatPage: React.FC = () => {
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setActiveSession = useSessionStore((state) => state.setActiveSession);
   const openModal = useUIStore((state) => state.openModal);
+
+  const setCharacterState = useCharacterStore((state) => state.setCharacterState);
+  const setActiveSpeaker = useCharacterStore((state) => state.setActiveSpeaker);
+  const resetAllToIdle = useCharacterStore((state) => state.resetAllToIdle);
 
   const { user, isLoggedIn } = useAuthQuery();
   const {
@@ -41,6 +48,7 @@ export const ChatPage: React.FC = () => {
   const [prevSessionId, setPrevSessionId] = useState(activeSessionId);
   const [streamingMessages, setStreamingMessages] = useState<StreamingMessageState[]>([]);
   const [typingState, setTypingState] = useState<{ sender: string; label?: string } | null>(null);
+  const [toolExecutions, setToolExecutions] = useState<ToolExecutionState[]>([]);
   const [readReceipts, setReadReceipts] = useState<
     Record<string, { veraRead?: boolean; miuRead?: boolean; unreadCount?: number }>
   >({});
@@ -103,6 +111,10 @@ export const ChatPage: React.FC = () => {
     const unsubscribe = tarsWsClient.subscribe({
       onToken: ({ speaker, token }) => {
         const normalizedSpeaker = (speaker || 'vera').toLowerCase();
+        const activeKey = normalizedSpeaker === 'miu' ? 'miu' : 'vera';
+        setActiveSpeaker(activeKey);
+        setCharacterState(activeKey, 'speaking');
+
         setStreamingMessages((prev) => {
           const existingIndex = prev.findIndex(
             (m) => m.speaker.toLowerCase() === normalizedSpeaker
@@ -131,6 +143,8 @@ export const ChatPage: React.FC = () => {
       onTypingIndicator: ({ sender, status, label }) => {
         if (status === 'active') {
           setTypingState({ sender, label });
+          const target = (sender || 'miu').toLowerCase() === 'vera' ? 'vera' : 'miu';
+          setCharacterState(target, 'thinking');
         } else {
           setTypingState(null);
         }
@@ -167,6 +181,13 @@ export const ChatPage: React.FC = () => {
         setTypingState(null);
         setAppendedMessages([]);
         refetchSessionsRef.current?.();
+
+        // 1.2초 후 안정화되면 idle로 복귀
+        setTimeout(() => {
+          resetAllToIdle();
+          setToolExecutions([]);
+        }, 1200);
+
         void (async () => {
           try {
             const res = await refetchMessagesRef.current?.();
@@ -185,6 +206,42 @@ export const ChatPage: React.FC = () => {
         );
         setTypingState(null);
         console.info('[Stream Aborted]:', reason);
+
+        // Barge-in 끼어들기 시 놀람/당황 포즈로 즉시 전이
+        const currentActive = useCharacterStore.getState().activeSpeaker || 'vera';
+        setCharacterState(currentActive, 'interrupted');
+        setTimeout(() => {
+          resetAllToIdle();
+          setToolExecutions([]);
+        }, 1500);
+      },
+      onToolStart: ({ tool, call_id, speaker }) => {
+        const normalizedSpeaker = (speaker || 'vera').toLowerCase() === 'miu' ? 'miu' : 'vera';
+        setActiveSpeaker(normalizedSpeaker);
+        setCharacterState(normalizedSpeaker, 'tool_use');
+        setToolExecutions((prev) => [
+          ...prev,
+          {
+            tool,
+            speaker: normalizedSpeaker,
+            status: 'running',
+            callId: call_id,
+          },
+        ]);
+      },
+      onToolResult: ({ tool, call_id, status, error, speaker }) => {
+        const normalizedSpeaker = (speaker || 'vera').toLowerCase() === 'miu' ? 'miu' : 'vera';
+        setToolExecutions((prev) =>
+          prev.map((te) => {
+            if (te.callId === call_id || te.tool === tool) {
+              return {
+                ...te,
+                status: status === 'error' || error ? 'failed' : 'completed',
+              };
+            }
+            return te;
+          })
+        );
       },
       onError: (err) => {
         console.error('[WS Error Event]:', err);
@@ -202,8 +259,13 @@ export const ChatPage: React.FC = () => {
       return;
     }
 
+    // 사용자 발화 전송 직후 양쪽 메이드 생각/경청 상태 전환
+    setCharacterState('vera', 'thinking');
+    setCharacterState('miu', 'thinking');
+
     // Reset previous streaming bubble state before starting a new turn
     setStreamingMessages([]);
+    setToolExecutions([]);
 
     const messageId = `user-${Date.now()}`;
     const targetSessionId = activeSessionIdRef.current || undefined;
@@ -230,15 +292,35 @@ export const ChatPage: React.FC = () => {
 
   const handleBargeIn = () => {
     tarsWsClient.sendBargeIn(activeSessionIdRef.current || undefined);
+    const currentActive = useCharacterStore.getState().activeSpeaker || 'vera';
+    setCharacterState(currentActive, 'interrupted');
+    setTimeout(() => {
+      resetAllToIdle();
+      setToolExecutions([]);
+    }, 1500);
   };
 
   const handleTyping = () => {
     tarsWsClient.sendTyping(activeSessionIdRef.current || undefined, 'active');
   };
 
+  // E2E 검증용 브라우저 인터페이스 노출
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __tarsChatTest: unknown }).__tarsChatTest = {
+        setToolExecutions,
+        setStreamingMessages,
+        setAppendedMessages,
+      };
+    }
+  }, []);
+
   if (!isLoggedIn) {
     return (
       <div className={styles.pageContainer}>
+        {/* 로그인 대기 상태에서도 듀얼 전신 플레이스홀더 렌더링 */}
+        <CharacterStage />
+
         <div className={styles.unauthWarning}>
           <div style={{ fontSize: '2.5rem' }}>🔐</div>
           <h2 className={styles.unauthTitle}>로그인이 필요합니다</h2>
@@ -257,28 +339,34 @@ export const ChatPage: React.FC = () => {
 
   return (
     <div className={styles.pageContainer}>
+      {/* 3자 대면 듀얼 전신 캐릭터 스테이지 */}
+      <CharacterStage />
+
       <ChatFeed
         messages={allMessages}
         streamingMessages={streamingMessages}
+        toolExecutions={toolExecutions}
         readReceipts={readReceipts}
         userName={user?.username || '나'}
       />
 
-      <div className={styles.typingWrapper}>
-        {typingState && (
-          <TypingIndicator
-            sender={typingState.sender}
-            label={typingState.label}
-          />
-        )}
-      </div>
+      <div className={styles.bottomDock}>
+        <div className={styles.typingWrapper}>
+          {typingState && (
+            <TypingIndicator
+              sender={typingState.sender}
+              label={typingState.label}
+            />
+          )}
+        </div>
 
-      <ChatInput
-        onSendMessage={handleSendMessage}
-        onBargeIn={handleBargeIn}
-        onTyping={handleTyping}
-        isStreaming={isCurrentlyStreaming}
-      />
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          onBargeIn={handleBargeIn}
+          onTyping={handleTyping}
+          isStreaming={isCurrentlyStreaming}
+        />
+      </div>
     </div>
   );
 };

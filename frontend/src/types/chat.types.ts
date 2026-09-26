@@ -60,7 +60,9 @@ export interface WSMessageOut {
     | 'read_receipt'
     | 'typing_indicator'
     | 'typing_ack'
-    | 'stream_abort';
+    | 'stream_abort'
+    | 'tool_start'
+    | 'tool_result';
   session_id?: string;
   content?: string;
   delta?: string;
@@ -70,11 +72,15 @@ export interface WSMessageOut {
   reader?: 'vera' | 'miu' | string;
   unread_count?: number;
   sender?: 'vera' | 'miu' | string;
-  status?: 'active' | 'inactive';
+  status?: 'active' | 'inactive' | 'success' | 'error' | string;
   label?: string;
   speaker?: 'vera' | 'miu' | string;
   avatar?: string;
   turn_epoch?: number;
   turn_state?: string;
   reason?: string;
+  tool?: string;
+  call_id?: string;
+  args?: Record<string, unknown>;
+  result?: unknown;
 }

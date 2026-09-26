@@ -45,6 +45,10 @@ class Settings(BaseSettings):
         default="tars-okf",
         description="Target S3 bucket name for OKF knowledge storage",
     )
+    s3_assets_bucket_name: str = Field(
+        default="tars-assets",
+        description="Target S3 bucket name for character and media assets",
+    )
     s3_region: str = Field(
         default="us-east-1",
         description="S3 region name",

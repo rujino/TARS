@@ -159,6 +159,24 @@ export class TarsWebSocketClient {
             unread_count: msg.unread_count,
           });
           break;
+        case 'tool_start':
+          h.onToolStart?.({
+            tool: msg.tool || '',
+            call_id: msg.call_id,
+            args: msg.args,
+            speaker: msg.speaker || 'vera',
+          });
+          break;
+        case 'tool_result':
+          h.onToolResult?.({
+            tool: msg.tool || '',
+            call_id: msg.call_id,
+            status: msg.status || 'success',
+            result: msg.result,
+            error: msg.error,
+            speaker: msg.speaker || 'vera',
+          });
+          break;
         case 'error':
           h.onError?.(msg.error || msg.content || '서버 통신 오류가 발생했습니다.');
           break;

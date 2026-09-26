@@ -107,8 +107,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </div>
 
       <div className={styles.footerHint}>
-        <span>WebSocket 단일 실시간 채널 (/api/v1/chat/ws)</span>
-        <span>No TTS 정책 · 순수 텍스트/코드 블록 전용</span>
+        <span>WebSocket 실시간 채널 (/api/v1/chat/ws)</span>
+        <span>0ms Barge-in 지원 · Enter 전송</span>
       </div>
     </div>
   );

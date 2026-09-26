@@ -1,7 +1,9 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import styles from './ChatFeed.module.css';
 import type { ChatMessageResponse } from '@/types/chat.types';
 import { cleanSpeakerPrefix, splitMultiSpeakerMessage } from '@/utils/chat.utils';
+import { ChatBubble } from './ChatBubble';
+import { ToolExecutionBubble, type ToolExecutionState } from './ToolExecutionBubble';
 
 export interface StreamingMessageState {
   speaker: string;
@@ -13,30 +15,19 @@ export interface StreamingMessageState {
 interface ChatFeedProps {
   messages: ChatMessageResponse[];
   streamingMessages?: StreamingMessageState[] | null;
-  /** @deprecated Kept for backwards compatibility */
-  streamingMessage?: StreamingMessageState | null;
+  toolExecutions?: ToolExecutionState[];
   readReceipts?: Record<string, { veraRead?: boolean; miuRead?: boolean; unreadCount?: number }>;
   userName?: string;
 }
 
 export const ChatFeed: React.FC<ChatFeedProps> = ({
   messages,
-  streamingMessages,
-  streamingMessage,
+  streamingMessages = [],
+  toolExecutions = [],
   readReceipts = {},
   userName = '나',
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
-
-  const activeStreamingMessages: StreamingMessageState[] = useMemo(() => {
-    if (streamingMessages && streamingMessages.length > 0) {
-      return streamingMessages;
-    }
-    if (streamingMessage) {
-      return [streamingMessage];
-    }
-    return [];
-  }, [streamingMessages, streamingMessage]);
 
   // Split any multi-speaker combined messages (e.g. from server history)
   const processedMessages = useMemo(() => {
@@ -52,151 +43,98 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
     return result;
   }, [messages]);
 
-  const scrollToBottom = () => {
-    if (feedRef.current) {
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
-    }
-  };
+  const activeStreaming = useMemo(() => {
+    return (streamingMessages || []).filter(
+      (sm) => Boolean(sm.content && sm.content.trim()) || sm.isStreaming
+    );
+  }, [streamingMessages]);
 
+  // column-reverse 컨테이너는 scrollTop = 0이 최신 메시지(바닥) 위치
   useEffect(() => {
-    scrollToBottom();
-  }, [processedMessages, activeStreamingMessages]);
+    if (feedRef.current) {
+      feedRef.current.scrollTop = 0;
+    }
+  }, [processedMessages.length, activeStreaming.length, toolExecutions.length]);
+
+  const isEmpty =
+    processedMessages.length === 0 &&
+    activeStreaming.length === 0 &&
+    toolExecutions.length === 0;
 
   return (
     <div className={styles.feedContainer} ref={feedRef}>
-      {processedMessages.map((msg) => {
+      {/* 
+        column-reverse에서는 DOM의 앞쪽에 위치한 요소가 시각적으로 맨 아래(화면 50% 가슴 높이)에 맺힙니다.
+        따라서:
+        1. 최신 스트리밍 버블
+        2. 최신 도구 실행 버블
+        3. 과거 메시지들 (최신순 역정렬)
+        순으로 배치합니다.
+      */}
+
+      {/* 1. 실시간 스트리밍 버블들 (최신) */}
+      {activeStreaming.map((sm, index) => {
+        const rawSpeaker = (sm.speaker || 'vera').toLowerCase();
+        const speaker: 'vera' | 'miu' = rawSpeaker === 'miu' ? 'miu' : 'vera';
+        const displayContent = cleanSpeakerPrefix(sm.content, speaker);
+
+        return (
+          <ChatBubble
+            key={`streaming-${speaker}-${index}`}
+            speaker={speaker}
+            content={displayContent}
+            isStreaming={sm.isStreaming}
+            isAborted={sm.isAborted}
+          />
+        );
+      })}
+
+      {/* 2. 도구 실행 버블들 */}
+      {toolExecutions.map((toolExec, index) => (
+        <ToolExecutionBubble
+          key={`tool-${toolExec.callId || index}`}
+          execution={toolExec}
+        />
+      ))}
+
+      {/* 3. 누적 대화 메시지들 (최신이 먼저 오도록 reverse) */}
+      {[...processedMessages].reverse().map((msg) => {
         const isUser = msg.role === 'user';
-        const speaker = (msg.speaker || (isUser ? 'user' : 'vera')).toLowerCase();
+        const rawSpeaker = (msg.speaker || (isUser ? 'user' : 'vera')).toLowerCase();
+        const speaker: 'vera' | 'miu' | 'user' = isUser
+          ? 'user'
+          : rawSpeaker === 'miu'
+          ? 'miu'
+          : 'vera';
         const receipt = readReceipts[msg.id];
         const displayContent = isUser ? msg.content : cleanSpeakerPrefix(msg.content, speaker);
 
         return (
-          <div
+          <ChatBubble
             key={msg.id}
-            className={`${styles.messageRow} ${
-              isUser ? styles.messageRowUser : styles.messageRowAssistant
-            }`}
-          >
-            <div
-              className={`${styles.avatar} ${
-                isUser
-                  ? styles.avatarUser
-                  : speaker === 'miu'
-                  ? styles.avatarMiu
-                  : styles.avatarVera
-              }`}
-            >
-              {isUser ? userName.charAt(0).toUpperCase() : speaker === 'miu' ? '미우' : '베라'}
-            </div>
-
-            <div className={styles.bubbleWrapper}>
-              <div
-                className={`${styles.speakerName} ${
-                  speaker === 'miu'
-                    ? styles.speakerMiu
-                    : speaker === 'vera'
-                    ? styles.speakerVera
-                    : ''
-                }`}
-              >
-                <span>{isUser ? userName : speaker === 'miu' ? '🐾 미우' : '🏛️ 베라'}</span>
-              </div>
-
-              <div
-                className={`${styles.bubble} ${
-                  isUser ? styles.bubbleUser : styles.bubbleAssistant
-                }`}
-              >
-                {displayContent}
-              </div>
-
-              {isUser && (
-                <div className={styles.receiptRow}>
-                  {receipt ? (
-                    <>
-                      {receipt.veraRead && (
-                        <span className={`${styles.receiptTag} ${styles.receiptTagRead}`}>
-                          베라 읽음
-                        </span>
-                      )}
-                      {receipt.miuRead && (
-                        <span className={`${styles.receiptTag} ${styles.receiptTagRead}`}>
-                          미우 읽음
-                        </span>
-                      )}
-                      {typeof receipt.unreadCount === 'number' && receipt.unreadCount > 0 && (
-                        <span className={styles.receiptTag}>
-                          안읽음 {receipt.unreadCount}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span className={styles.receiptTag}>전송됨</span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+            speaker={speaker}
+            content={displayContent}
+            readReceipt={receipt}
+            userName={userName}
+          />
         );
       })}
 
-      {/* 실시간 스트리밍 버블들 (미우, 베라 등 다자간 동시/순차 발화 지원) */}
-      {activeStreamingMessages.map((sm, index) => {
-        if (!sm.content || !sm.content.trim()) return null;
-        const speaker = (sm.speaker || 'vera').toLowerCase();
-        const displayContent = cleanSpeakerPrefix(sm.content, speaker);
-        if (!displayContent && !sm.isStreaming) return null;
+      {/* 4. 최상단 스크롤 여유 공간 (column-reverse의 DOM 끝 = 시각적 최상단) */}
+      {!isEmpty && <div style={{ height: 36, minHeight: 36, flexShrink: 0 }} aria-hidden="true" />}
 
-        return (
-          <div
-            key={`streaming-${speaker}-${index}`}
-            className={`${styles.messageRow} ${styles.messageRowAssistant}`}
-          >
-            <div
-              className={`${styles.avatar} ${
-                speaker === 'miu' ? styles.avatarMiu : styles.avatarVera
-              }`}
-            >
-              {speaker === 'miu' ? '미우' : '베라'}
-            </div>
-
-            <div className={styles.bubbleWrapper}>
-              <div
-                className={`${styles.speakerName} ${
-                  speaker === 'miu' ? styles.speakerMiu : styles.speakerVera
-                }`}
-              >
-                <span>{speaker === 'miu' ? '🐾 미우' : '🏛️ 베라'}</span>
-              </div>
-
-              <div
-                className={`${styles.bubble} ${styles.bubbleAssistant} ${
-                  sm.isStreaming
-                    ? speaker === 'miu'
-                      ? styles.bubbleStreamingMiu
-                      : styles.bubbleStreamingVera
-                    : ''
-                }`}
-              >
-                {displayContent}
-                {sm.isStreaming && (
-                  <span
-                    className={`${styles.cursor} ${
-                      speaker === 'miu' ? styles.cursorMiu : styles.cursorVera
-                    }`}
-                  />
-                )}
-              </div>
-
-              {sm.isAborted && (
-                <div className={styles.abortedNotice}>
-                  <span>⛔ 0ms Barge-in (발화 중단됨)</span>
-                </div>
-              )}
-            </div>
+      {/* 5. 초기 대화 없을 때의 안내 카드 */}
+      {isEmpty && (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyIcon}>✨</div>
+          <div className={styles.emptyTitle}>TARS 메이드 룸에 오신 것을 환영합니다</div>
+          <div className={styles.emptyDesc}>
+            베라와 미우가 주인님의 말씀을 경청하고 있습니다.
+            <br />
+            아래 입력창에 메시지를 남겨보세요.
           </div>
-        );
-      })}
+        </div>
+      )}
     </div>
   );
 };

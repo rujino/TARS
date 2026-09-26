@@ -1,9 +1,56 @@
-.layout {
+/* 전체 브라우저 화면을 덮는 앰비언트 다크 래퍼 */
+.layoutWrapper {
+  width: 100vw;
   height: 100vh;
+  height: 100dvh;
+  background-color: #070a12;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+/* 중앙에 배치되는 컨테이너 (데스크탑 울트라 와이드 룸 max-width: 1480px) */
+.layout {
+  width: 100%;
+  max-width: 1480px;
+  height: 100%;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg-primary);
+  position: relative;
   overflow: hidden;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.75), 0 0 1px rgba(255, 255, 255, 0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  transition: max-width 0.3s ease;
+}
+
+@media (max-width: 1520px) {
+  .layout {
+    max-width: 1360px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .layout {
+    max-width: 1180px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    max-width: 960px;
+  }
+}
+
+@media (max-width: 768px) {
+  .layout {
+    max-width: 100%;
+    border-left: none;
+    border-right: none;
+  }
 }
 
 .bodyContainer {
@@ -11,6 +58,7 @@
   display: flex;
   overflow: hidden;
   position: relative;
+  height: calc(100% - 56px);
 }
 
 .main {
@@ -19,5 +67,6 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  position: relative;
   background-color: var(--color-bg-primary);
 }
